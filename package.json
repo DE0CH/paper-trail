@@ -1,5 +1,5 @@
 {
-  "name": "pdf-stack-reader",
+  "name": "paper-trail",
   "version": "0.2.0",
   "private": true,
   "description": "A PDF reader with a list of navigation history stacks: browser-style back/forward plus cmd+click forking.",
