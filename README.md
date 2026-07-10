@@ -18,7 +18,9 @@ you were actually reading. PDF Stack Reader records every jump you make
   opened with cmd+click, back still works there — and the new stack is saved
   in the sidebar's stack list. Switch between stacks freely; close them when
   done;
-- click any entry in the History panel to move the cursor there.
+- click any entry in the History panel to move the cursor there;
+- hover any internal link for ~⅓s to get a popup preview of its destination
+  without jumping at all.
 
 Entries are labelled from the text around the link ("Lemma 3.16", "(7.2)", ...)
 plus the destination page. History, zoom, and position are restored per
@@ -95,8 +97,10 @@ js/viewer.js            pdf.js rendering: lazy pages, text layer, links, zoom
 js/history.js           list of history stacks (data structure + panel UI)
 js/search.js            full-text search with precise highlight overlays
 js/store.js             localStorage state + IndexedDB recents/file handles
+js/preview.js           hover preview popup of link destinations
 js/main.js              wiring, outline, keyboard, open/drop/persistence
 server.js               dependency-free static server (binds 127.0.0.1 only)
+test/e2e.mjs            headless end-to-end tests (npm test, needs server up)
 desktop/                desktop-app wrapper scripts
 vendor/                 pinned pdf.js (pdfjs-dist 5.4.149)
 ```

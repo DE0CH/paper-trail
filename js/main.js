@@ -4,6 +4,7 @@ import { Viewer } from './viewer.js';
 import { NavStacks, renderStacksPanel, renderStackEntries } from './history.js';
 import { SearchController } from './search.js';
 import { Store, putRecent, getRecent, getRecents, ensureReadPermission } from './store.js';
+import { Preview } from './preview.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -58,7 +59,10 @@ let restoring = false; // suppress dirty-marking while restoring state
 
 const viewer = new Viewer(els.viewerContainer, els.viewer, {
   onLinkClick: handleLinkClick,
-  onLinkHover: () => {},
+  onLinkHover: (info, entering) => {
+    if (entering) preview.scheduleShow(info.dest, info.linkEl);
+    else preview.cancel();
+  },
   onPageChange: (n) => {
     if (document.activeElement !== els.pageInput) els.pageInput.value = String(n);
   },
@@ -80,6 +84,7 @@ hist.onChange = () => {
 };
 
 const search = new SearchController(viewer);
+const preview = new Preview(viewer, els.preview);
 
 // ---------- helpers ----------
 
@@ -376,6 +381,7 @@ function onStackClose(id) {
 
 let scrollTimer = 0;
 function onViewerScroll() {
+  preview.hide(); // don't leave a stale popup while scrolling
   clearTimeout(scrollTimer);
   scrollTimer = setTimeout(() => {
     if (!docOpen || viewer.isTrackingSuppressed()) return;
@@ -485,6 +491,7 @@ async function openData(data, name, { handle = null, progress = null, progressHa
     els.searchCount.textContent = '';
     els.welcome.classList.add('hidden');
 
+    preview.clear();
     restoring = true;
     try {
       search.reset();
