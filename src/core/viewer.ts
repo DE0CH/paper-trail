@@ -159,9 +159,31 @@ export class Viewer {
   }
 
   private sizeShell(p: PageRec): void {
-    p.el.style.width = `${Math.floor(p.vp1.width * this.scale)}px`;
-    p.el.style.height = `${Math.floor(p.vp1.height * this.scale)}px`;
+    // Size shells so the CSS box maps to an integer number of device
+    // pixels (backing / dpr); flooring here while the canvas backing store
+    // rounds separately would make the bitmap resample slightly (~2.001:1
+    // instead of 2:1) and every glyph goes soft.
+    const dpr = this.effectiveDpr(p);
+    const { cssW, cssH } = this.exactPageCss(p, dpr);
+    p.el.style.width = `${cssW}px`;
+    p.el.style.height = `${cssH}px`;
     p.el.style.setProperty('--scale-factor', String(this.scale));
+  }
+
+  /** Device pixel ratio used for rendering, after the canvas-area cap. */
+  private effectiveDpr(p: PageRec): number {
+    let dpr = window.devicePixelRatio || 1;
+    const w = p.vp1.width * this.scale;
+    const h = p.vp1.height * this.scale;
+    while (w * dpr * h * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
+    return dpr;
+  }
+
+  /** CSS size that corresponds exactly to the rounded backing store. */
+  private exactPageCss(p: PageRec, dpr: number): { cssW: number; cssH: number; backingW: number; backingH: number } {
+    const backingW = Math.round(p.vp1.width * this.scale * dpr);
+    const backingH = Math.round(p.vp1.height * this.scale * dpr);
+    return { cssW: backingW / dpr, cssH: backingH / dpr, backingW, backingH };
   }
 
   setScale(
@@ -317,18 +339,25 @@ export class Viewer {
     // 2 on retina displays; capping it makes text soft). Only the total
     // canvas area is capped (memory / browser limits) — desktop Chromium
     // handles very large canvases, 64M pixels stays well inside the limits.
-    let dpr = window.devicePixelRatio || 1;
-    while (vp.width * dpr * vp.height * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
+    const dpr = this.effectiveDpr(p);
+    const { cssW, cssH, backingW, backingH } = this.exactPageCss(p, dpr);
 
     const canvas = document.createElement('canvas');
-    canvas.width = Math.floor(vp.width * dpr);
-    canvas.height = Math.floor(vp.height * dpr);
+    canvas.width = backingW;
+    canvas.height = backingH;
+    // Explicit CSS size = backing / dpr, so the bitmap maps 1:1 onto device
+    // pixels with no resampling.
+    canvas.style.display = 'block';
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
     const ctx = canvas.getContext('2d', { alpha: false })!;
     await p.page.render({
       canvas,
       canvasContext: ctx,
       viewport: vp,
-      transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
+      // Exact backing/viewport ratio (differs from dpr in the last decimals
+      // because the backing store is rounded to integers).
+      transform: [backingW / vp.width, 0, 0, backingH / vp.height, 0, 0],
     }).promise;
     if (epoch !== this.epoch || scale !== this.scale) return;
 

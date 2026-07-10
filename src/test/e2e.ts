@@ -428,10 +428,16 @@ async function run(): Promise<void> {
     const sharpness = async () => retina.evaluate(() => {
       const c = document.querySelector<HTMLCanvasElement>('.page[data-page="1"] canvas')!;
       const r = c.getBoundingClientRect();
-      return { backing: c.width, css: r.width, ratio: c.width / r.width };
+      return {
+        backing: c.width,
+        css: r.width,
+        ratio: c.width / r.width,
+        // the bitmap must map exactly 1:1 onto device pixels
+        exact: Math.abs(c.width / parseFloat(c.style.width) - window.devicePixelRatio) < 1e-9,
+      };
     });
     let sh = await sharpness();
-    check('canvas renders at device resolution (fit zoom)', sh.ratio >= 1.9,
+    check('canvas renders at device resolution (fit zoom)', sh.ratio >= 1.9 && sh.exact,
       JSON.stringify(sh));
     await retina.evaluate(() => {
       (window as never as { __psr: { viewer: { setScale(s: number): void } } })
@@ -440,7 +446,7 @@ async function run(): Promise<void> {
     await retina.waitForTimeout(1200);
     await retina.waitForSelector('.page[data-page="1"] canvas', { timeout: 10000 });
     sh = await sharpness();
-    check('canvas stays at device resolution at high zoom', sh.ratio >= 1.9,
+    check('canvas stays at device resolution at high zoom', sh.ratio >= 1.9 && sh.exact,
       JSON.stringify(sh));
 
     // --- trackpad pinch (ctrl+wheel) re-renders at the new scale instead
@@ -468,7 +474,7 @@ async function run(): Promise<void> {
     await retina.waitForSelector('.page canvas', { timeout: 10000 });
     await retina.waitForTimeout(600);
     sh = await sharpness();
-    check('canvas is sharp after pinch zoom', sh.ratio >= 1.9, JSON.stringify(sh));
+    check('canvas is sharp after pinch zoom', sh.ratio >= 1.9 && sh.exact, JSON.stringify(sh));
     await retina.close();
   } finally {
     await browser.close();
