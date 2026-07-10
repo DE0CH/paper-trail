@@ -10,12 +10,13 @@
 <body>
 <header id="toolbar">
   <button id="btnSidebar" title="Toggle sidebar (t)">&#9776;</button>
-  <button id="btnOpen" title="Open a PDF file (o)">Open</button>
+  <button id="btnOpen" title="Open a PDF or reading-progress file (o)">Open</button>
+  <button id="btnSave" title="Save reading progress to a file (Cmd/Ctrl+S)" disabled>Save</button>
   <span id="docTitle"></span>
   <span class="spacer"></span>
 
-  <button id="btnBack" title="Back — up the history tree (Backspace / Alt+&larr;)" disabled>&larr;</button>
-  <button id="btnFwd" title="Forward — down the last branch (Shift+Backspace / Alt+&rarr;)" disabled>&rarr;</button>
+  <button id="btnBack" title="Back — pop up the stack (Backspace / Alt+&larr;)" disabled>&larr;</button>
+  <button id="btnFwd" title="Forward — down again (Shift+Backspace / Alt+&rarr;)" disabled>&rarr;</button>
   <span class="sep"></span>
 
   <input id="pageInput" type="text" inputmode="numeric" title="Go to page" disabled>
@@ -36,14 +37,22 @@
 
 <div id="main">
   <aside id="sidebar">
-    <div id="sideTabs">
-      <button data-tab="history" class="active">History</button>
-      <button data-tab="outline">Outline</button>
-      <span class="spacer"></span>
-      <button id="btnClearTree" title="Clear navigation history (all stacks)">clear</button>
+    <div id="stacksCol">
+      <div id="stacksHeader">Stacks</div>
+      <div id="stacksPanel" class="panel"></div>
     </div>
-    <div id="historyPanel" class="panel"></div>
-    <div id="outlinePanel" class="panel hidden"></div>
+    <div class="resizer" id="resizeStacks" title="Drag to resize"></div>
+    <div id="sideCol">
+      <div id="sideTabs">
+        <button data-tab="history" class="active">History</button>
+        <button data-tab="outline">Outline</button>
+        <span class="spacer"></span>
+        <button id="btnClearTree" title="Clear navigation history (all stacks)">clear</button>
+      </div>
+      <div id="historyPanel" class="panel"></div>
+      <div id="outlinePanel" class="panel hidden"></div>
+    </div>
+    <div class="resizer" id="resizeSidebar" title="Drag to resize"></div>
   </aside>
 
   <div id="viewerContainer" tabindex="0">
@@ -65,7 +74,7 @@
 
 <div id="preview" class="hidden"><canvas></canvas><div class="previewPage"></div></div>
 <div id="dropOverlay" class="hidden">Drop PDF to open</div>
-<input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
+<input type="file" id="fileInput" accept="application/pdf,.pdf,.json" hidden>
 
 <script type="module" src="js/main.js"></script>
 </body>

@@ -197,7 +197,7 @@ export class Viewer {
       const bot = top + p.el.offsetHeight;
       if (bot >= st - RENDER_MARGIN && top <= st + ch + RENDER_MARGIN) {
         this._ensureRendered(p);
-      } else if (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN) {
+      } else if (!p.pinned && (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN)) {
         this._destroyPage(p);
       }
     }
@@ -324,13 +324,26 @@ export class Viewer {
   }
 
   // Force a page to be rendered (without scrolling) and wait for text layer.
+  // The page is pinned briefly so the windowing logic doesn't destroy it
+  // while (or right after) the caller reads its DOM.
   async ensurePage(pageNumber) {
     const p = this.pages[pageNumber - 1];
     if (!p) return null;
-    const job = this._ensureRendered(p);
-    if (job) await job;
-    if (p.textReady) await p.textReady;
-    return p;
+    p.pinned = (p.pinned || 0) + 1;
+    try {
+      let job = this._ensureRendered(p);
+      if (job) await job;
+      if (p.textReady) await p.textReady;
+      if (!p.rendered) {
+        // Was destroyed by scrolling while rendering; retry once now pinned.
+        job = this._ensureRendered(p);
+        if (job) await job;
+        if (p.textReady) await p.textReady;
+      }
+      return p;
+    } finally {
+      setTimeout(() => { p.pinned = Math.max(0, (p.pinned || 1) - 1); }, 2000);
+    }
   }
 
   renderedPages() {

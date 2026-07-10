@@ -1,7 +1,7 @@
 // PDF Stack Reader — application wiring.
 
 import { Viewer } from './viewer.js';
-import { NavStacks, renderHistoryPanel } from './history.js';
+import { NavStacks, renderStacksPanel, renderStackEntries } from './history.js';
 import { SearchController } from './search.js';
 import { Store, putRecent, getRecents, ensureReadPermission } from './store.js';
 
@@ -25,6 +25,10 @@ const els = {
   btnSearchNext: $('btnSearchNext'),
   sidebar: $('sidebar'),
   sideTabs: $('sideTabs'),
+  stacksCol: $('stacksCol'),
+  stacksPanel: $('stacksPanel'),
+  resizeStacks: $('resizeStacks'),
+  resizeSidebar: $('resizeSidebar'),
   historyPanel: $('historyPanel'),
   outlinePanel: $('outlinePanel'),
   btnClearTree: $('btnClearTree'),
@@ -88,10 +92,16 @@ function updateNavButtons() {
 }
 
 function renderHistory() {
-  renderHistoryPanel(hist, els.historyPanel, {
-    onEntryClick: onHistEntryClick,
+  renderStacksPanel(hist, els.stacksPanel, {
     onStackClick: onStackSwitch,
     onStackClose: onStackClose,
+    onStackRename: (id, name) => {
+      hist.renameStack(id, name);
+      renderHistory(); // restore the row even if the name was rejected
+    },
+  });
+  renderStackEntries(hist, els.historyPanel, {
+    onEntryClick: onHistEntryClick,
   });
 }
 
@@ -528,6 +538,55 @@ window.addEventListener('drop', async (e) => {
   } catch { /* handle stays null */ }
   openFile(f, handle);
 });
+
+// ---------- panel resizing ----------
+
+const UI_KEY = 'psr:ui';
+function loadUI() {
+  try { return JSON.parse(localStorage.getItem(UI_KEY)) || {}; } catch { return {}; }
+}
+function saveUI(patch) {
+  try { localStorage.setItem(UI_KEY, JSON.stringify({ ...loadUI(), ...patch })); } catch { /* ignore */ }
+}
+
+function setPanelWidth(el, w) {
+  el.style.width = w + 'px';
+  el.style.minWidth = w + 'px';
+}
+
+function setupResizer(handleEl, targetEl, key, min, max) {
+  handleEl.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handleEl.setPointerCapture(e.pointerId);
+    handleEl.classList.add('dragging');
+    document.body.classList.add('resizing');
+    const startX = e.clientX;
+    const startW = targetEl.getBoundingClientRect().width;
+    const move = (ev) => {
+      setPanelWidth(targetEl, Math.min(max, Math.max(min, startW + ev.clientX - startX)));
+    };
+    const up = () => {
+      handleEl.removeEventListener('pointermove', move);
+      handleEl.removeEventListener('pointerup', up);
+      handleEl.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      saveUI({ [key]: Math.round(targetEl.getBoundingClientRect().width) });
+      if (docOpen && viewer.fitWidth) {
+        viewer.setScale(viewer.computeFitScale(), { fitWidth: true });
+      }
+    };
+    handleEl.addEventListener('pointermove', move);
+    handleEl.addEventListener('pointerup', up);
+  });
+}
+
+setupResizer(els.resizeStacks, els.stacksCol, 'stacksW', 90, 400);
+setupResizer(els.resizeSidebar, els.sidebar, 'sidebarW', 220, 800);
+{
+  const ui = loadUI();
+  if (ui.stacksW) setPanelWidth(els.stacksCol, ui.stacksW);
+  if (ui.sidebarW) setPanelWidth(els.sidebar, ui.sidebarW);
+}
 
 // refit on window resize
 let resizeTimer = 0;

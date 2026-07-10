@@ -23,13 +23,23 @@ export class NavStacks {
 
   reset(rootLabel = 'Start') {
     this._nextId = 1;
-    this.stacks = [this._mkStack('Main', [{ label: rootLabel, pos: { page: 1, yRatio: 0 } }], 0)];
+    this._nameCounter = 1;
+    this.stacks = [this._mkStack(null, [{ label: rootLabel, pos: { page: 1, yRatio: 0 } }], 0)];
     this.activeId = this.stacks[0].id;
     this._emit();
   }
 
   _mkStack(name, entries, index) {
+    if (!name) name = 'Untitled ' + this._nameCounter;
+    this._nameCounter++;
     return { id: this._nextId++, name, entries, index };
+  }
+
+  renameStack(id, name) {
+    const s = this.stacks.find((st) => st.id === id);
+    if (!s || !name || !name.trim()) return;
+    s.name = name.trim();
+    this._emit();
   }
 
   get active() {
@@ -64,7 +74,7 @@ export class NavStacks {
       .slice(0, s.index + 1)
       .map((e) => ({ label: e.label, pos: { ...e.pos } }));
     copy.push({ label, pos });
-    const ns = this._mkStack(label, copy, copy.length - 1);
+    const ns = this._mkStack(null, copy, copy.length - 1);
     this.stacks.push(ns);
     this.activeId = ns.id;
     this._emit();
@@ -122,6 +132,7 @@ export class NavStacks {
     return {
       v: 3,
       activeId: this.activeId,
+      nameCounter: this._nameCounter,
       stacks: this.stacks.map((s) => ({
         id: s.id, name: s.name, index: s.index,
         entries: s.entries.map((e) => ({ label: e.label, pos: e.pos })),
@@ -141,6 +152,7 @@ export class NavStacks {
         entries: s.entries.map((e) => ({ label: String(e.label), pos: e.pos })),
       }));
       this._nextId = Math.max(...this.stacks.map((s) => s.id)) + 1;
+      this._nameCounter = Math.max(data.nameCounter | 0, this.stacks.length + 1);
       this.activeId = this.stacks.some((s) => s.id === data.activeId)
         ? data.activeId
         : this.stacks[0].id;
@@ -156,40 +168,74 @@ export class NavStacks {
   }
 }
 
-// Render the stack list + the active stack's entries into a container.
-export function renderHistoryPanel(nav, container, { onEntryClick, onStackClick, onStackClose }) {
-  const frag = document.createDocumentFragment();
+// Render the list of stacks (first sidebar panel). Names are renamable by
+// double-clicking them.
+export function renderStacksPanel(nav, container, { onStackClick, onStackClose, onStackRename }) {
+  const list = document.createElement('div');
+  list.className = 'stackList';
+  for (const s of nav.stacks) {
+    const row = document.createElement('div');
+    row.className = 'stackRow' + (s.id === nav.activeId ? ' active' : '');
+    row.title = s.name + ' \u2014 double-click to rename';
 
-  if (nav.stacks.length > 1) {
-    const list = document.createElement('div');
-    list.className = 'stackList';
-    for (const s of nav.stacks) {
-      const row = document.createElement('div');
-      row.className = 'stackRow' + (s.id === nav.activeId ? ' active' : '');
-      row.title = s.name;
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = s.name;
+    name.addEventListener('dblclick', (ev) => {
+      ev.stopPropagation();
+      startRename();
+    });
 
-      const name = document.createElement('span');
-      name.className = 'name';
-      name.textContent = s.name;
-      const cnt = document.createElement('span');
-      cnt.className = 'cnt';
-      cnt.textContent = String(s.entries.length);
-      const x = document.createElement('button');
-      x.className = 'x';
-      x.textContent = '\u00d7';
-      x.title = 'Close this stack';
-      x.addEventListener('click', (ev) => {
+    const cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    cnt.textContent = String(s.entries.length);
+    const x = document.createElement('button');
+    x.className = 'x';
+    x.textContent = '\u00d7';
+    x.title = 'Close this stack';
+    x.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      onStackClose(s.id);
+    });
+
+    row.append(name, cnt, x);
+    row.addEventListener('click', () => onStackClick(s.id));
+    list.appendChild(row);
+
+    function startRename() {
+      const input = document.createElement('input');
+      input.className = 'rename';
+      input.value = s.name;
+      input.addEventListener('click', (ev) => ev.stopPropagation());
+      input.addEventListener('keydown', (ev) => {
         ev.stopPropagation();
-        onStackClose(s.id);
+        if (ev.key === 'Enter') commit();
+        else if (ev.key === 'Escape') cancel();
       });
-
-      row.append(name, cnt, x);
-      row.addEventListener('click', () => onStackClick(s.id));
-      list.appendChild(row);
+      input.addEventListener('blur', commit);
+      row.replaceChild(input, name);
+      input.focus();
+      input.select();
+      let done = false;
+      function commit() {
+        if (done) return;
+        done = true;
+        onStackRename(s.id, input.value);
+      }
+      function cancel() {
+        if (done) return;
+        done = true;
+        row.replaceChild(name, input);
+      }
     }
-    frag.appendChild(list);
   }
+  container.replaceChildren(list);
+  const act = container.querySelector('.stackRow.active');
+  if (act) act.scrollIntoView({ block: 'nearest' });
+}
 
+// Render the active stack's entries (second sidebar panel).
+export function renderStackEntries(nav, container, { onEntryClick }) {
   const s = nav.active;
   const ul = document.createElement('ul');
   ul.className = 'hist';
@@ -210,9 +256,7 @@ export function renderHistoryPanel(nav, container, { onEntryClick, onStackClick,
     li.appendChild(row);
     ul.appendChild(li);
   });
-  frag.appendChild(ul);
-
-  container.replaceChildren(frag);
+  container.replaceChildren(ul);
   const cur = container.querySelector('.histItem.current');
   if (cur) cur.scrollIntoView({ block: 'nearest' });
 }

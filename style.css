@@ -74,14 +74,44 @@ html, body {
 #main { display: flex; height: calc(100% - 40px); }
 
 #sidebar {
-  width: 300px;
-  min-width: 300px;
+  width: 440px;
+  min-width: 440px;
   background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: row;
+}
+#sidebar.hidden { display: none; }
+#stacksCol {
+  width: 150px;
+  min-width: 150px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
 }
-#sidebar.hidden { display: none; }
+#stacksHeader {
+  color: var(--fg-dim);
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+#sideCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.resizer {
+  flex: none;
+  width: 5px;
+  margin: 0 -2px;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+}
+.resizer:hover, .resizer.dragging { background: rgba(79, 140, 255, 0.35); }
+body.resizing { user-select: none; cursor: col-resize; }
+#stacksCol { position: relative; }
 #sideTabs {
   display: flex;
   align-items: center;
@@ -103,11 +133,6 @@ html, body {
 .panel.hidden { display: none; }
 
 /* ---------- history: stack list + active stack ---------- */
-.stackList {
-  margin: 0 0 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-}
 .stackRow {
   display: flex;
   align-items: center;
@@ -143,6 +168,17 @@ html, body {
   cursor: pointer;
 }
 .stackRow .x:hover { background: #45474e; color: var(--fg); }
+.stackRow input.rename {
+  flex: 1;
+  min-width: 0;
+  background: #131417;
+  color: var(--fg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font: inherit;
+  outline: none;
+}
 
 .hist {
   list-style: none;
