@@ -1,8 +1,0 @@
-# Only sources are needed; Vercel runs `npm run build` itself.
-dist-electron
-dist
-dist-web
-build-node
-docs
-sample
-.github
