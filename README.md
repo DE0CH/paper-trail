@@ -60,19 +60,25 @@ or `?file=<path under this folder>`.
 
 ## Running as a desktop app
 
+The full desktop shell (Electron) has native menus — File (Open, Save
+Progress), Edit, View (zoom, sidebar, fullscreen), History (Back/Forward),
+Window — and turns the unsaved-progress warning into a native dialog:
+
 ```sh
-./desktop/launch.sh
+npm install        # once, pulls electron as a dev dependency
+npm run desktop
 ```
 
-starts the server and opens the app in a Chromium app window (Edge, Chrome,
-Chromium, or Brave — whichever is installed) with no browser UI. The server
-shuts down when the window closes. The web app remains a plain web app; the
-wrapper is just presentation.
+The shell just serves the unchanged web app on an ephemeral localhost port;
+menu items dispatch to the same in-app functions, and the web app keeps
+working in any normal browser.
 
-To get a double-clickable macOS app:
+There is also a dependency-free lightweight wrapper (Chromium `--app` mode,
+no menus):
 
 ```sh
-./desktop/make-app.sh   # creates dist/PDF Stack Reader.app
+./desktop/launch.sh
+./desktop/make-app.sh   # creates dist/PDF Stack Reader.app (double-clickable)
 ```
 
 ## Keyboard shortcuts

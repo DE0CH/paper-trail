@@ -23,7 +23,7 @@ const MIME = {
   '.map': 'application/json',
 };
 
-const server = http.createServer((req, res) => {
+const handler = (req, res) => {
   // Reject non-local Host headers (defense against DNS rebinding).
   const host = String(req.headers.host || '').replace(/:\d+$/, '');
   if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) {
@@ -54,8 +54,20 @@ const server = http.createServer((req, res) => {
     });
     res.end(data);
   });
-});
+};
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`PDF Stack Reader running at http://127.0.0.1:${PORT}`);
-});
+// Start the server. port 0 picks a free ephemeral port (used by the
+// Electron shell); returns the http.Server.
+function start(port) {
+  const server = http.createServer(handler);
+  server.listen(port, '127.0.0.1', () => {
+    console.log(`PDF Stack Reader running at http://127.0.0.1:${server.address().port}`);
+  });
+  return server;
+}
+
+if (require.main === module) {
+  start(PORT);
+}
+
+module.exports = { start };

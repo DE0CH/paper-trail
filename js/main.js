@@ -907,6 +907,30 @@ if (fileParam) {
   })();
 }
 
+// Native menu actions when running inside the Electron desktop shell.
+if (window.psrDesktop && window.psrDesktop.onMenu) {
+  window.psrDesktop.onMenu((action) => {
+    switch (action) {
+      case 'open': pickFile(); break;
+      case 'save':
+        saveProgress().catch((e) => toast('Save failed: ' + (e && e.message ? e.message : e)));
+        break;
+      case 'back': goBack(); break;
+      case 'forward': goForward(); break;
+      case 'zoom-in': viewer.setScale(viewer.scale * 1.15); break;
+      case 'zoom-out': viewer.setScale(viewer.scale / 1.15); break;
+      case 'fit': viewer.setScale(viewer.computeFitScale(), { fitWidth: true }); break;
+      case 'find': els.searchInput.focus(); els.searchInput.select(); break;
+      case 'toggle-sidebar': els.sidebar.classList.toggle('hidden'); break;
+      case 'clear-history': els.btnClearTree.click(); break;
+      case 'help':
+        toast('Backspace: back \u00b7 Shift+Backspace: forward \u00b7 Cmd+click link: fork \u00b7 /: search \u00b7 Cmd+S: save progress', 6000);
+        break;
+      default: break;
+    }
+  });
+}
+
 // Expose internals for debugging / automated tests.
 window.__psr = {
   viewer, hist, search, jumpVia, goBack, goForward,
