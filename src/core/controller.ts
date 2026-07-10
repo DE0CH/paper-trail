@@ -67,6 +67,9 @@ export class Controller {
   private fileSaveTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private scrollTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private toastTimer: ReturnType<typeof setTimeout> | 0 = 0;
+  private pinchTimer: ReturnType<typeof setTimeout> | 0 = 0;
+  private pinchTarget: number | null = null;
+  private pinchAnchor: { x: number; y: number } | null = null;
 
   private listeners = new Set<() => void>();
   private snapshot: Snapshot | null = null;
@@ -101,6 +104,26 @@ export class Controller {
       this.scheduleSave();
       this.notify();
     };
+
+    // Trackpad pinch (and ctrl+wheel) zooms the document by re-rendering at
+    // the new scale, anchored at the cursor — instead of the browser's
+    // pixel-magnifying visual zoom.
+    container.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if (!this.docOpen) return;
+      const base = this.pinchTarget ?? this.viewer.scale;
+      this.pinchTarget = Math.min(Math.max(base * Math.exp(-e.deltaY * 0.01), 0.25), 5);
+      this.pinchAnchor = { x: e.clientX, y: e.clientY };
+      if (!this.pinchTimer) {
+        this.pinchTimer = setTimeout(() => {
+          this.pinchTimer = 0;
+          if (this.pinchTarget == null || !this.pinchAnchor) return;
+          this.viewer.setScale(this.pinchTarget, { anchor: this.pinchAnchor });
+          this.pinchTarget = null;
+        }, 120);
+      }
+    }, { passive: false });
 
     window.addEventListener('beforeunload', (e) => {
       // Warn about unsaved reading progress. When bound to a progress file

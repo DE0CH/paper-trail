@@ -164,14 +164,22 @@ export class Viewer {
     p.el.style.setProperty('--scale-factor', String(this.scale));
   }
 
-  setScale(scale: number, { fitWidth = false } = {}): void {
+  setScale(
+    scale: number,
+    { fitWidth = false, anchor }: { fitWidth?: boolean; anchor?: { x: number; y: number } } = {},
+  ): void {
     scale = Math.min(Math.max(scale, 0.25), 5);
     if (!this.pages.length) {
       this.scale = scale;
       this.fitWidth = fitWidth;
       return;
     }
-    const pos = this.currentPosition();
+    const ratio = scale / this.scale;
+    const st = this.container.scrollTop;
+    const sl = this.container.scrollLeft;
+    const rect = this.container.getBoundingClientRect();
+    const pos = anchor ? null : this.currentPosition();
+
     this.scale = scale;
     this.fitWidth = fitWidth;
     this.viewerEl.style.setProperty('--scale-factor', String(scale));
@@ -179,7 +187,17 @@ export class Viewer {
       this.destroyPage(p);
       this.sizeShell(p);
     }
-    this.scrollTo(pos);
+    if (anchor) {
+      // Pinch/ctrl+wheel zoom: keep the document point under the cursor
+      // (approximately) stationary.
+      const cy = anchor.y - rect.top;
+      const cx = anchor.x - rect.left;
+      this.suppress();
+      this.container.scrollTop = (st + cy) * ratio - cy;
+      this.container.scrollLeft = (sl + cx) * ratio - cx;
+    } else if (pos) {
+      this.scrollTo(pos);
+    }
     this.updateVisible();
     this.cb.onScaleChange?.(scale);
   }
@@ -295,10 +313,11 @@ export class Viewer {
     const epoch = this.epoch;
     const scale = this.scale;
     const vp = p.page.getViewport({ scale });
-    let dpr = Math.min(window.devicePixelRatio || 1, 2);
-    // Cap canvas area (memory / browser limits). Desktop Chromium handles
-    // very large canvases; 64M pixels keeps retina rendering sharp even at
-    // high zoom while staying well inside the limits.
+    // Render at the full device pixel ratio (browser zoom raises it beyond
+    // 2 on retina displays; capping it makes text soft). Only the total
+    // canvas area is capped (memory / browser limits) — desktop Chromium
+    // handles very large canvases, 64M pixels stays well inside the limits.
+    let dpr = window.devicePixelRatio || 1;
     while (vp.width * dpr * vp.height * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
 
     const canvas = document.createElement('canvas');
