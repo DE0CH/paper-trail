@@ -24,6 +24,25 @@ Entries are labelled from the text around the link ("Lemma 3.16", "(7.2)", ...)
 plus the destination page. History, zoom, and position are restored per
 document when you reopen it.
 
+## Reading-progress files
+
+Your full reading state (all stacks, cursor, zoom, exact position) can be
+saved to a JSON file at a location and name you choose (`Save` button or
+`Cmd/Ctrl+S`; suggested name `<pdf>.psr.json`). The file stores a relative
+reference to the PDF, so keeping the pair side by side makes it portable.
+
+- **Open a plain PDF**: the tab warns about unsaved reading progress when
+  you close it. Once you save to a file, the session is bound to it.
+- **Open a progress file** (Open button, drag & drop, or
+  `?file=path/to/x.psr.json`): the PDF is located automatically (a
+  previously granted file handle, the relative path when served over HTTP,
+  or one picker prompt), the state is restored, and from then on progress
+  **auto-saves continuously** to that file — so closing the tab never warns
+  unless a save is still pending or failed.
+
+Saving/auto-saving to files uses the File System Access API and needs a
+Chromium-based browser; everything else works anywhere.
+
 ## Running as a web app
 
 Requires Node (any recent version). No dependencies, no build step
@@ -64,6 +83,7 @@ To get a double-clickable macOS app:
 | `/` or `Cmd/Ctrl+F` | Focus search |
 | `Enter` / `Shift+Enter` | Next / previous match |
 | `+` / `-` / `0` | Zoom in / out / fit width |
+| `Cmd/Ctrl+S` | Save reading progress (save-as when unbound) |
 | `t` | Toggle sidebar |
 | `o` | Open file |
 

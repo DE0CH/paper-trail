@@ -3,13 +3,14 @@
 import { Viewer } from './viewer.js';
 import { NavStacks, renderStacksPanel, renderStackEntries } from './history.js';
 import { SearchController } from './search.js';
-import { Store, putRecent, getRecents, ensureReadPermission } from './store.js';
+import { Store, putRecent, getRecent, getRecents, ensureReadPermission } from './store.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
   toolbar: $('toolbar'),
   btnSidebar: $('btnSidebar'),
   btnOpen: $('btnOpen'),
+  btnSave: $('btnSave'),
   docTitle: $('docTitle'),
   btnBack: $('btnBack'),
   btnFwd: $('btnFwd'),
@@ -45,7 +46,13 @@ const els = {
 let docOpen = false;
 let currentName = '';
 let currentFp = null;
+let currentSize = 0;
 let searchEntry = null; // history entry reused while stepping through matches
+
+// Reading-progress session: bound file handle + dirty tracking.
+const session = { handle: null, dirty: false, saving: false };
+let fileSaveTimer = 0;
+let restoring = false; // suppress dirty-marking while restoring state
 
 // ---------- core objects ----------
 
@@ -59,7 +66,10 @@ const viewer = new Viewer(els.viewerContainer, els.viewer, {
   onPageRendered: (p, n) => {
     if (search.query) search.highlightPage(p, n);
   },
-  onScaleChange: updateZoomLabel,
+  onScaleChange: () => {
+    updateZoomLabel();
+    scheduleSave();
+  },
 });
 
 const hist = new NavStacks(null);
@@ -127,23 +137,134 @@ function serializeState() {
 }
 
 function scheduleSave() {
-  if (!docOpen || !currentFp) return;
+  if (!docOpen) return;
+  markDirty();
+  if (!currentFp) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     Store.saveDoc(currentFp, serializeState());
   }, 800);
 }
 
-// Flush state when the tab is hidden or closing.
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && docOpen && currentFp) {
-    Store.saveDoc(currentFp, serializeState());
+// ---------- reading-progress session files ----------
+
+function markDirty() {
+  if (restoring || !docOpen) return;
+  if (!session.dirty) {
+    session.dirty = true;
+    updateSaveUI();
+  }
+  if (session.handle) {
+    // Bound to a progress file: auto-save continuously (debounced).
+    clearTimeout(fileSaveTimer);
+    fileSaveTimer = setTimeout(() => {
+      writeProgress().catch((e) => console.warn('auto-save failed', e));
+    }, 1500);
+  }
+}
+
+function updateSaveUI() {
+  const b = els.btnSave;
+  if (!docOpen) {
+    b.disabled = true;
+    b.textContent = 'Save';
+    return;
+  }
+  b.disabled = false;
+  b.textContent = session.saving
+    ? 'Saving\u2026'
+    : session.dirty
+      ? 'Save \u2022'
+      : (session.handle ? 'Saved' : 'Save');
+  b.title = session.handle
+    ? 'Reading progress auto-saves to ' + (session.handle.name || 'file') + ' (Cmd/Ctrl+S to save now)'
+    : 'Save reading progress to a file (Cmd/Ctrl+S)';
+}
+
+const PROGRESS_TYPE = 'pdf-stack-reader-progress';
+
+function progressFileObject() {
+  return {
+    type: PROGRESS_TYPE,
+    v: 1,
+    savedAt: Date.now(),
+    pdf: {
+      name: currentName,
+      // Path of the PDF relative to the progress file. The browser cannot
+      // see real paths, so this assumes the two files live side by side
+      // (which also makes the pair portable as a unit).
+      relPath: currentName,
+      fingerprint: currentFp,
+      size: currentSize,
+    },
+    state: serializeState(),
+  };
+}
+
+async function writeProgress() {
+  if (!session.handle || session.saving || !docOpen) return;
+  session.saving = true;
+  updateSaveUI();
+  try {
+    const w = await session.handle.createWritable();
+    await w.write(JSON.stringify(progressFileObject(), null, 1));
+    await w.close();
+    session.dirty = false;
+  } finally {
+    session.saving = false;
+    updateSaveUI();
+  }
+}
+
+async function saveProgress() {
+  if (!docOpen) return;
+  if (!session.handle) {
+    if (!window.showSaveFilePicker) {
+      toast('Saving progress files requires a Chromium-based browser');
+      return;
+    }
+    let handle;
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: currentName.replace(/\.pdf$/i, '') + '.psr.json',
+        types: [{
+          description: 'Reading progress',
+          accept: { 'application/json': ['.json'] },
+        }],
+      });
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      throw e;
+    }
+    session.handle = handle;
+    if (currentFp) {
+      putRecent({ fp: currentFp, name: currentName, ts: Date.now(), progressHandle: handle });
+    }
+  }
+  await writeProgress();
+  toast('Progress saved');
+}
+
+// Warn about unsaved reading progress when closing the tab. When bound to
+// a progress file this only triggers if an auto-save hasn't landed yet.
+window.addEventListener('beforeunload', (e) => {
+  if (docOpen && session.dirty) {
+    e.preventDefault();
+    e.returnValue = '';
   }
 });
 
-function restoreState() {
-  if (!currentFp) return false;
-  const d = Store.loadDoc(currentFp);
+// Flush state when the tab is hidden or closing.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && docOpen) {
+    if (currentFp) Store.saveDoc(currentFp, serializeState());
+    if (session.handle && session.dirty) {
+      writeProgress().catch(() => { /* dirty flag stays honest */ });
+    }
+  }
+});
+
+function restoreStateFrom(d) {
   if (!d || d.v !== 1) return false;
   if (typeof d.scale === 'number') {
     viewer.setScale(d.scale, { fitWidth: !!d.fitWidth });
@@ -152,6 +273,10 @@ function restoreState() {
   const pos = (hist.current && hist.current.pos) || d.pos;
   if (pos) viewer.scrollTo(pos);
   return true;
+}
+
+function restoreState() {
+  return currentFp ? restoreStateFrom(Store.loadDoc(currentFp)) : false;
 }
 
 // ---------- recent files ----------
@@ -337,14 +462,17 @@ async function buildOutline() {
 
 // ---------- opening documents ----------
 
-async function openData(data, name, { handle = null } = {}) {
+async function openData(data, name, { handle = null, progress = null, progressHandle = null } = {}) {
   toast('Loading \u201c' + name + '\u201d\u2026', 1500);
+  // Read the size before pdf.js transfers (detaches) the buffer to its worker.
+  const size = (data && data.byteLength) || 0;
   try {
     const doc = await viewer.open({ data });
     if (!doc) return;
     docOpen = true;
     currentName = name;
     currentFp = (doc.fingerprints && doc.fingerprints[0]) || null;
+    currentSize = size;
     searchEntry = null;
 
     els.docTitle.textContent = name;
@@ -357,14 +485,38 @@ async function openData(data, name, { handle = null } = {}) {
     els.searchCount.textContent = '';
     els.welcome.classList.add('hidden');
 
-    search.reset();
-    hist.reset();
-    updateZoomLabel();
-    buildOutline();
-    restoreState();
+    restoring = true;
+    try {
+      search.reset();
+      hist.reset();
+      updateZoomLabel();
+      buildOutline();
+      if (progress && progress.state) {
+        restoreStateFrom(progress.state);
+      } else {
+        restoreState();
+      }
+    } finally {
+      restoring = false;
+    }
+
+    session.handle = progressHandle || null;
+    session.dirty = false;
+    session.saving = false;
+    clearTimeout(fileSaveTimer);
+    updateSaveUI();
+    if (progress && progress.pdf && progress.pdf.fingerprint
+        && currentFp && progress.pdf.fingerprint !== currentFp) {
+      toast('Note: this PDF differs from the one the progress file was saved with', 4500);
+    }
+
     els.viewerContainer.focus();
     if (currentFp) {
-      putRecent({ fp: currentFp, name, ts: Date.now(), handle: handle || undefined });
+      putRecent({
+        fp: currentFp, name, ts: Date.now(),
+        handle: handle || undefined,
+        progressHandle: progressHandle || undefined,
+      });
     }
   } catch (e) {
     console.error(e);
@@ -372,19 +524,82 @@ async function openData(data, name, { handle = null } = {}) {
   }
 }
 
+function isProgressName(name) {
+  return /\.(json|psr)$/i.test(name || '');
+}
+
+function validProgress(json) {
+  return json && json.type === PROGRESS_TYPE && json.pdf && json.state;
+}
+
 async function openFile(file, handle = null) {
   if (!file) return;
+  if (isProgressName(file.name)) {
+    await openProgressFile(file, handle);
+    return;
+  }
   const buf = await file.arrayBuffer();
   await openData(new Uint8Array(buf), file.name, { handle });
 }
+
+// Open a reading-progress file: locate its PDF (stored handle from a
+// previous session, else ask), restore the saved state, and bind the
+// progress handle for continuous auto-save.
+async function openProgressFile(file, progressHandle = null) {
+  let json = null;
+  try { json = JSON.parse(await file.text()); } catch { /* fallthrough */ }
+  if (!validProgress(json)) {
+    toast('Not a PDF Stack Reader progress file');
+    return;
+  }
+  let pdfFile = null;
+  let pdfHandle = null;
+  const rec = json.pdf.fingerprint ? await getRecent(json.pdf.fingerprint) : null;
+  if (rec && rec.handle && await ensureReadPermission(rec.handle)) {
+    try {
+      pdfFile = await rec.handle.getFile();
+      pdfHandle = rec.handle;
+    } catch (e) {
+      console.warn('stored PDF handle no longer valid', e);
+    }
+  }
+  if (!pdfFile) {
+    toast('Select the PDF: ' + json.pdf.name, 4000);
+    if (!window.showOpenFilePicker) {
+      pendingProgress = { json, progressHandle };
+      els.fileInput.value = '';
+      els.fileInput.click();
+      return;
+    }
+    try {
+      const opts = {
+        types: [{ description: 'PDF documents', accept: { 'application/pdf': ['.pdf'] } }],
+      };
+      if (progressHandle) opts.startIn = progressHandle; // open in the same folder
+      const [h] = await window.showOpenFilePicker(opts);
+      pdfFile = await h.getFile();
+      pdfHandle = h;
+    } catch (e) {
+      if (e && e.name !== 'AbortError') console.warn(e);
+      return;
+    }
+  }
+  const buf = new Uint8Array(await pdfFile.arrayBuffer());
+  await openData(buf, pdfFile.name, { handle: pdfHandle, progress: json, progressHandle });
+}
+
+let pendingProgress = null; // progress json waiting for a PDF via <input> fallback
 
 async function pickFile() {
   if (window.showOpenFilePicker) {
     try {
       const [handle] = await window.showOpenFilePicker({
         types: [{
-          description: 'PDF documents',
-          accept: { 'application/pdf': ['.pdf'] },
+          description: 'PDF or reading progress',
+          accept: {
+            'application/pdf': ['.pdf'],
+            'application/json': ['.json'],
+          },
         }],
         excludeAcceptAllOption: false,
       });
@@ -403,7 +618,22 @@ async function pickFile() {
 
 els.btnOpen.addEventListener('click', pickFile);
 els.btnWelcomeOpen.addEventListener('click', pickFile);
-els.fileInput.addEventListener('change', () => openFile(els.fileInput.files[0]));
+els.btnSave.addEventListener('click', () => {
+  saveProgress().catch((e) => toast('Save failed: ' + (e && e.message ? e.message : e)));
+});
+els.fileInput.addEventListener('change', async () => {
+  const f = els.fileInput.files[0];
+  if (!f) return;
+  if (pendingProgress && /\.pdf$/i.test(f.name)) {
+    const pp = pendingProgress;
+    pendingProgress = null;
+    const buf = new Uint8Array(await f.arrayBuffer());
+    await openData(buf, f.name, { progress: pp.json, progressHandle: pp.progressHandle });
+    return;
+  }
+  pendingProgress = null;
+  openFile(f);
+});
 
 els.btnBack.addEventListener('click', goBack);
 els.btnFwd.addEventListener('click', goForward);
@@ -465,6 +695,11 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     els.searchInput.focus();
     els.searchInput.select();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+    e.preventDefault();
+    saveProgress().catch((err) => toast('Save failed: ' + (err && err.message ? err.message : err)));
     return;
   }
   const tag = e.target && e.target.tagName;
@@ -608,14 +843,36 @@ renderRecents();
 const params = new URLSearchParams(location.search);
 const fileParam = params.get('file');
 if (fileParam) {
-  fetch(fileParam)
-    .then((r) => {
+  (async () => {
+    try {
+      const r = await fetch(fileParam);
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.arrayBuffer();
-    })
-    .then((b) => openData(new Uint8Array(b), fileParam.split('/').pop()))
-    .catch((e) => toast('Could not load ' + fileParam + ' (' + e.message + ')'));
+      if (isProgressName(fileParam)) {
+        // Progress file served over HTTP: resolve the PDF via its relative
+        // path next to the progress file.
+        const json = await r.json();
+        if (!validProgress(json)) throw new Error('not a progress file');
+        const pdfUrl = new URL(
+          json.pdf.relPath || json.pdf.name,
+          new URL(fileParam, location.href),
+        );
+        const pr = await fetch(pdfUrl);
+        if (!pr.ok) throw new Error('PDF not found at ' + pdfUrl.pathname);
+        const buf = new Uint8Array(await pr.arrayBuffer());
+        // No writable handle over HTTP: session stays unbound (dirty flow).
+        await openData(buf, decodeURIComponent(pdfUrl.pathname.split('/').pop()), { progress: json });
+      } else {
+        const buf = new Uint8Array(await r.arrayBuffer());
+        await openData(buf, decodeURIComponent(fileParam.split('/').pop()));
+      }
+    } catch (e) {
+      toast('Could not load ' + fileParam + ' (' + e.message + ')');
+    }
+  })();
 }
 
 // Expose internals for debugging / automated tests.
-window.__psr = { viewer, hist, search, jumpVia, goBack, goForward };
+window.__psr = {
+  viewer, hist, search, jumpVia, goBack, goForward,
+  session, saveProgress, writeProgress, progressFileObject,
+};
