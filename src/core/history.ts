@@ -14,24 +14,70 @@
 
 import type { HistEntry, HistStack, Pos, SerializedStacks } from './types';
 
+const UNDO_LIMIT = 50;
+
 export class NavStacks {
   onChange: ((nav: NavStacks) => void) | null;
   stacks: HistStack[] = [];
   activeId = 0;
   private nextId = 1;
   private nameCounter = 1;
+  // Undo/redo of structural mutations (push/overwrite, fork, close, rename,
+  // clear). Deliberately fragile, like everywhere else: in-memory only
+  // (gone after save/reopen), and any new action clears the redo side.
+  private undoStack: SerializedStacks[] = [];
+  private redoStack: SerializedStacks[] = [];
 
   constructor(onChange: ((nav: NavStacks) => void) | null = null) {
     this.onChange = onChange;
     this.reset();
   }
 
+  /** Fresh state for a newly opened document. Clears undo/redo. */
   reset(rootLabel = 'Start'): void {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.init(rootLabel);
+    this.emit();
+  }
+
+  /** "Clear history" as a user action: undoable. */
+  clearAll(rootLabel = 'Start'): void {
+    this.recordUndo();
+    this.init(rootLabel);
+    this.emit();
+  }
+
+  private init(rootLabel: string): void {
     this.nextId = 1;
     this.nameCounter = 1;
     this.stacks = [this.mkStack(null, [{ label: rootLabel, pos: { page: 1, yRatio: 0 } }], 0)];
     this.activeId = this.stacks[0].id;
-    this.emit();
+  }
+
+  private recordUndo(): void {
+    this.undoStack.push(this.serialize());
+    if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
+    this.redoStack = [];
+  }
+
+  canUndo(): boolean { return this.undoStack.length > 0; }
+  canRedo(): boolean { return this.redoStack.length > 0; }
+
+  undo(): boolean {
+    const prev = this.undoStack.pop();
+    if (!prev) return false;
+    this.redoStack.push(this.serialize());
+    this.load(prev);
+    return true;
+  }
+
+  redo(): boolean {
+    const next = this.redoStack.pop();
+    if (!next) return false;
+    this.undoStack.push(this.serialize());
+    this.load(next);
+    return true;
   }
 
   private mkStack(name: string | null, entries: HistEntry[], index: number): HistStack {
@@ -42,7 +88,8 @@ export class NavStacks {
 
   renameStack(id: number, name: string): void {
     const s = this.stacks.find((st) => st.id === id);
-    if (!s || !name.trim()) return;
+    if (!s || !name.trim() || s.name === name.trim()) return;
+    this.recordUndo();
     s.name = name.trim();
     this.emit();
   }
@@ -63,6 +110,7 @@ export class NavStacks {
 
   /** A jump: overwrite the forward tail of the active stack, push, move cursor. */
   visit(entry: HistEntry): HistEntry {
+    this.recordUndo();
     const s = this.active;
     s.entries = s.entries.slice(0, s.index + 1);
     s.entries.push(entry);
@@ -76,6 +124,7 @@ export class NavStacks {
    * push the new entry there, and make it active.
    */
   fork(entry: HistEntry): HistEntry {
+    this.recordUndo();
     const s = this.active;
     const copy = s.entries
       .slice(0, s.index + 1)
@@ -126,6 +175,7 @@ export class NavStacks {
     if (this.stacks.length <= 1) return false;
     const i = this.stacks.findIndex((s) => s.id === id);
     if (i === -1) return false;
+    this.recordUndo();
     const wasActive = this.activeId === id;
     this.stacks.splice(i, 1);
     if (wasActive) this.activeId = this.stacks[Math.max(0, i - 1)].id;

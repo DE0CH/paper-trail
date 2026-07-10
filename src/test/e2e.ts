@@ -204,6 +204,42 @@ async function run(): Promise<void> {
       w.sidebar <= w.win - 250, JSON.stringify(w));
     await dragHandle('#resizeSidebar', 440);
 
+    // --- undo/redo of history mutations ---
+    const stU = await page.evaluate(async () => {
+      const psr = (window as never as { __psr: PsrUndoHooks }).__psr;
+      const out: Record<string, unknown> = {};
+      // Overwrite scenario: mid-stack, jump somewhere -> tail overwritten.
+      psr.hist.jumpTo(0);
+      const tailBefore = psr.hist.active.entries.map((e) => e.label);
+      psr.jumpVia({ page: 5, yRatio: 0 }, 'overwriter');
+      out.afterOverwrite = psr.hist.active.entries.map((e) => e.label);
+      psr.controller.undoHist();
+      out.afterUndo = psr.hist.active.entries.map((e) => e.label);
+      out.tailRestored =
+        JSON.stringify(out.afterUndo) === JSON.stringify(tailBefore);
+      psr.controller.redoHist();
+      out.afterRedo = psr.hist.active.entries.map((e) => e.label);
+      // Close-stack scenario + redo cleared by a new action.
+      const stackCount = psr.hist.stacks.length;
+      psr.hist.closeStack(psr.hist.stacks[psr.hist.stacks.length - 1].id);
+      out.closed = psr.hist.stacks.length === stackCount - 1;
+      psr.controller.undoHist();
+      out.closeUndone = psr.hist.stacks.length === stackCount;
+      out.canRedoBefore = psr.hist.canRedo();
+      psr.jumpVia({ page: 2, yRatio: 0 }, 'redo-killer');
+      out.redoClearedByNewAction = !psr.hist.canRedo();
+      return out;
+    });
+    check('undo restores overwritten forward tail', stU.tailRestored === true,
+      JSON.stringify({ before: stU.afterUndo, after: stU.afterOverwrite }));
+    check('redo reapplies the overwrite',
+      Array.isArray(stU.afterRedo)
+        && (stU.afterRedo as string[]).at(-1) === 'overwriter');
+    check('undo restores a closed stack',
+      stU.closed === true && stU.closeUndone === true);
+    check('redo is cleared by a new action',
+      stU.canRedoBefore === true && stU.redoClearedByNewAction === true);
+
     // --- progress session: dirty flag + fake-handle save ---
     const st4 = await page.evaluate(async () => {
       const psr = (window as never as { __psr: PsrHooks }).__psr;
@@ -282,12 +318,18 @@ async function run(): Promise<void> {
   process.exit(failed.length ? 1 : 0);
 }
 
+interface PsrUndoHooks extends PsrHooks {
+  controller: { undoHist(): void; redoHist(): void };
+}
+
 // Shape of the window.__psr test hooks (see core/controller.ts).
 interface PsrHooks {
   hist: {
     active: { name: string; index: number; entries: Array<{ label: string; pos: { page: number; yRatio: number } }> };
-    stacks: Array<{ name: string; index: number; entries: Array<{ label: string }> }>;
+    stacks: Array<{ id: number; name: string; index: number; entries: Array<{ label: string }> }>;
     jumpTo(i: number): unknown;
+    closeStack(id: number): boolean;
+    canRedo(): boolean;
   };
   viewer: {
     currentPosition(): { page: number; yRatio: number };

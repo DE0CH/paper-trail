@@ -67,6 +67,7 @@ export interface RecentEntry {
 
 export type MenuAction =
   | 'open' | 'save' | 'back' | 'forward'
+  | 'undo' | 'redo'
   | 'zoom-in' | 'zoom-out' | 'fit' | 'find'
   | 'toggle-sidebar' | 'clear-history' | 'help';
 

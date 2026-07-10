@@ -24,6 +24,8 @@ export interface Snapshot {
   zoomPercent: number;
   canBack: boolean;
   canForward: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   stacks: HistStack[];
   activeStackId: number;
   activeIndex: number;
@@ -151,6 +153,8 @@ export class Controller {
         zoomPercent: this.viewer ? Math.round(this.viewer.scale * 100) : 100,
         canBack: this.hist.canBack(),
         canForward: this.hist.canForward(),
+        canUndo: this.hist.canUndo(),
+        canRedo: this.hist.canRedo(),
         stacks: this.hist.stacks.map((s) => ({
           ...s,
           entries: s.entries.map((e) => ({ label: e.label, pos: { ...e.pos } })),
@@ -396,9 +400,20 @@ export class Controller {
 
   clearHistory(): void {
     if (!this.docOpen) return;
-    this.hist.reset();
+    this.hist.clearAll();
     this.hist.updateCurrentPos(this.viewer.currentPosition());
     this.notify();
+  }
+
+  /** Undo the last history mutation (overwrite, fork, close, rename, clear). */
+  undoHist(): void {
+    if (!this.hist.undo()) return;
+    if (this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
+  }
+
+  redoHist(): void {
+    if (!this.hist.redo()) return;
+    if (this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
   }
 
   gotoPage(n: number): void {

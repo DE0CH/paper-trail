@@ -59,6 +59,12 @@ export default function App() {
       }
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        // Text inputs keep their native undo (early return above).
+        e.preventDefault();
+        if (e.shiftKey) controller.redoHist(); else controller.undoHist();
+        return;
+      }
       if (e.metaKey || e.ctrlKey) return;
       switch (e.key) {
         case 'Backspace':
@@ -95,6 +101,19 @@ export default function App() {
         case 'save': controller.saveProgressSafe(); break;
         case 'back': controller.goBack(); break;
         case 'forward': controller.goForward(); break;
+        case 'undo':
+        case 'redo': {
+          // In text fields the menu item falls back to text-editing undo.
+          const el = document.activeElement as HTMLElement | null;
+          if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+            document.execCommand(action);
+          } else if (action === 'undo') {
+            controller.undoHist();
+          } else {
+            controller.redoHist();
+          }
+          break;
+        }
         case 'zoom-in': controller.zoomIn(); break;
         case 'zoom-out': controller.zoomOut(); break;
         case 'fit': controller.fitWidth(); break;

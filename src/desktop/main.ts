@@ -63,7 +63,11 @@ function buildMenu(): void {
     {
       label: 'Edit',
       submenu: [
-        { role: 'undo' }, { role: 'redo' },
+        // Custom undo/redo: undoes history changes (overwrites, forks,
+        // closed stacks, renames); in text fields the web app falls back
+        // to normal text-editing undo.
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send('undo') },
+        { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => send('redo') },
         { type: 'separator' },
         { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
         { type: 'separator' },

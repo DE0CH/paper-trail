@@ -18,6 +18,10 @@ you were actually reading. PDF Stack Reader records every jump you make
   opened with cmd+click, back still works there — and the new stack is saved
   in the sidebar's stack list (renamable, closable, switchable);
 - click any entry in the History panel to move the cursor there;
+- **undo/redo** (`Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z`) reverts history
+  *mutations*: an overwritten forward tail, a fork, a closed or renamed
+  stack, a cleared history. Deliberately fragile like ordinary undo:
+  in-memory only (gone after reopening), and any new action clears redo;
 - hover an internal link for ~⅓s to get a page-width popup preview of its
   destination, aligned with the PDF; move the cursor into it to scroll it,
   and drag its bottom edge to resize.
@@ -100,6 +104,7 @@ progress-file save/restore round trips.
 | --- | --- |
 | `Backspace` / `Alt+←` | Back (pop up the active stack) |
 | `Shift+Backspace` / `Alt+→` | Forward (down again) |
+| `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` | Undo / redo history changes |
 | `Cmd/Ctrl+click` or middle-click on a link | Fork history into a new stack |
 | `/` or `Cmd/Ctrl+F` | Focus search |
 | `Enter` / `Shift+Enter` | Next / previous match |

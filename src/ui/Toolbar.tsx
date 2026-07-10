@@ -44,6 +44,13 @@ export default function Toolbar({
       <span className="text-dim max-w-55 overflow-hidden text-ellipsis ml-1">{snap.docTitle}</span>
       <span className="flex-1" />
 
+      <button id="btnUndo" className={btn} disabled={!snap.canUndo}
+        title="Undo the last history change (Cmd/Ctrl+Z)"
+        onClick={() => controller.undoHist()}>&#8630;</button>
+      <button id="btnRedo" className={btn} disabled={!snap.canRedo}
+        title="Redo (Cmd/Ctrl+Shift+Z)"
+        onClick={() => controller.redoHist()}>&#8631;</button>
+      {sep}
       <button id="btnBack" className={btn} disabled={!snap.canBack}
         title="Back — pop up the stack (Backspace / Alt+←)"
         onClick={() => controller.goBack()}>&larr;</button>
