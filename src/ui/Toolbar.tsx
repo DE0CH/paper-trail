@@ -26,13 +26,17 @@ export default function Toolbar({
     if (!pageFocused.current) setPageText(snap.docOpen ? String(snap.currentPage) : '');
   }, [snap.currentPage, snap.docOpen]);
 
-  const saveLabel = snap.save === 'saving'
+  // Fixed label + a dot in a reserved slot: the button never changes width,
+  // so neighbors don't jump as the save state changes.
+  const saveTitle = snap.save === 'saving'
     ? 'Saving\u2026'
     : snap.save === 'dirty'
-      ? 'Save session \u2022'
+      ? (snap.saveBound
+        ? 'Unsaved changes — auto-save is pending (Cmd/Ctrl+S to save now)'
+        : 'Unsaved changes — save your reading session to a file (Cmd/Ctrl+S)')
       : snap.saveBound
-        ? 'Session saved'
-        : 'Save session';
+        ? 'Session saved — changes auto-save (Cmd/Ctrl+S to save now)'
+        : 'Save your reading session to a file (Cmd/Ctrl+S)';
 
   return (
     <header id="toolbar" className="flex items-center gap-1.5 h-10 px-2.5 bg-toolbar border-b border-borderapp select-none overflow-hidden whitespace-nowrap">
@@ -44,12 +48,18 @@ export default function Toolbar({
         onClick={onToggleNav}
       >&#9707;</button>
       <button className={btn} title="Open a PDF or reading-progress file (o)" onClick={() => void controller.pickFile()}>Open</button>
-      <button id="btnSave" className={btn} disabled={!snap.docOpen}
-        title={snap.saveBound
-          ? 'Reading session auto-saves (Cmd/Ctrl+S to save now)'
-          : 'Save your reading session to a file (Cmd/Ctrl+S)'}
+      <button id="btnSave" className={`${btn} inline-flex items-center`} disabled={!snap.docOpen}
+        title={saveTitle}
         onClick={() => controller.saveProgressSafe()}>
-        {saveLabel}
+        Save session
+        <span className="inline-flex w-2.5 justify-center ml-1 flex-none">
+          {snap.save === 'dirty' && (
+            <span id="saveDirtyDot" className="w-1.5 h-1.5 rounded-full bg-white" />
+          )}
+          {snap.save === 'saving' && (
+            <span className="w-1.5 h-1.5 rounded-full bg-dim animate-pulse" />
+          )}
+        </span>
       </button>
       <button id="btnLoadSession" className={btn}
         title="Load a reading session file (replaces your current reading history and position)"

@@ -381,6 +381,29 @@ async function run(): Promise<void> {
       capProbe.undos === 50 && capProbe.len === capProbe.base + 5,
       JSON.stringify(capProbe));
 
+    // --- save button: fixed width, dot indicator for unsaved changes ---
+    await page.waitForTimeout(900); // let pending scroll-settle timers fire
+    await page.evaluate(() => {
+      const psr = (window as never as {
+        __psr: PsrHooks & { controller: { dismissMismatch(): void } };
+      }).__psr;
+      psr.session.dirty = false;
+      psr.controller.dismissMismatch(); // also forces a re-render
+    });
+    await page.waitForTimeout(150);
+    const wClean = (await page.locator('#btnSave').boundingBox())!.width;
+    const dotClean = await page.locator('#saveDirtyDot').count();
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr
+        .jumpVia({ page: 4, yRatio: 0 }, 'dirty probe');
+    });
+    await page.waitForTimeout(250);
+    const wDirty = (await page.locator('#btnSave').boundingBox())!.width;
+    const dotDirty = await page.locator('#saveDirtyDot').count();
+    check('unsaved-changes dot appears without shifting the toolbar',
+      dotClean === 0 && dotDirty === 1 && Math.abs(wClean - wDirty) < 0.5,
+      JSON.stringify({ wClean, wDirty, dotClean, dotDirty }));
+
     // --- progress session: dirty flag + fake-handle save ---
     const st4 = await page.evaluate(async () => {
       const psr = (window as never as { __psr: PsrHooks }).__psr;
