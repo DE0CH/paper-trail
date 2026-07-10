@@ -108,6 +108,16 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Desktop shell integration: inset traffic lights and OS file opens
+  // (Open With…, Dock-icon drops, recent documents, File > Open).
+  useEffect(() => {
+    if (!window.ptDesktop) return;
+    if (window.ptDesktop.platform === 'darwin') document.body.classList.add('desktopMac');
+    window.ptDesktop.onOpenFile(({ name, data }) => {
+      void controller.openFile(new File([data], name));
+    });
+  }, []);
+
   // Native menu actions when running inside the Electron desktop shell.
   useEffect(() => {
     // If a text field has focus, type the character there and report true.

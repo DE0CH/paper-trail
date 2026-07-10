@@ -81,6 +81,19 @@
           ]
         }
       ]
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "role": "Viewer",
+        "mimeType": "application/pdf"
+      },
+      {
+        "ext": "ptl",
+        "name": "Paper Trail Reading Session",
+        "role": "Editor"
+      }
+    ]
   }
 }

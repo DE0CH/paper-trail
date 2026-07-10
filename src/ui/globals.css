@@ -133,3 +133,17 @@ body.resizing {
   user-select: none;
   cursor: col-resize;
 }
+
+/* ------------------------------------------------------------------ */
+/* macOS desktop shell: traffic lights sit inside the toolbar row      */
+/* (titleBarStyle hiddenInset). The toolbar doubles as the window drag */
+/* region; its controls opt back out.                                  */
+/* ------------------------------------------------------------------ */
+
+body.desktopMac #toolbar {
+  padding-left: 84px; /* room for the inset traffic lights */
+  -webkit-app-region: drag;
+}
+body.desktopMac #toolbar :is(button, input) {
+  -webkit-app-region: no-drag;
+}

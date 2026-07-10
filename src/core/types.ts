@@ -86,7 +86,9 @@ declare global {
       types?: Array<{ description?: string; accept: Record<string, string[]> }>;
     }) => Promise<FileSystemFileHandle>;
     ptDesktop?: {
+      platform: string; // process.platform of the shell ('darwin', 'win32', ...)
       onMenu: (cb: (action: MenuAction) => void) => void;
+      onOpenFile: (cb: (file: { name: string; data: ArrayBuffer }) => void) => void;
     };
     __pt?: unknown;
   }
