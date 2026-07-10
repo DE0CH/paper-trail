@@ -86,7 +86,7 @@ async function run(): Promise<void> {
     await page.goto(BASE + '/?file=sample/WStarCats.pdf');
     await page.waitForSelector(LINK, { timeout: 20000 });
     await page.evaluate(() => {
-      Object.keys(localStorage).filter((k) => k.startsWith('psr:doc:'))
+      Object.keys(localStorage).filter((k) => k.startsWith('pt:doc:'))
         .forEach((k) => localStorage.removeItem(k));
     });
     // build a plausible reading state: a trail + a branch
@@ -106,22 +106,22 @@ async function run(): Promise<void> {
 
     // hover preview screenshot
     await page.evaluate(() => {
-      const psr = (window as never as {
-        __psr: { hist: { jumpTo(i: number): unknown; switchStack(id: number): unknown; stacks: Array<{ id: number }> } };
-      }).__psr;
-      psr.hist.switchStack(psr.hist.stacks[0].id);
-      psr.hist.jumpTo(0);
+      const pt = (window as never as {
+        __pt: { hist: { jumpTo(i: number): unknown; switchStack(id: number): unknown; stacks: Array<{ id: number }> } };
+      }).__pt;
+      pt.hist.switchStack(pt.hist.stacks[0].id);
+      pt.hist.jumpTo(0);
     });
     await page.evaluate(() => {
-      (window as never as { __psr: { viewer: { scrollTo(p: unknown): void } } })
-        .__psr.viewer.scrollTo({ page: 1, yRatio: 0 });
+      (window as never as { __pt: { viewer: { scrollTo(p: unknown): void } } })
+        .__pt.viewer.scrollTo({ page: 1, yRatio: 0 });
     });
     await page.waitForSelector(LINK, { timeout: 10000 });
     await page.locator(LINK).nth(3).hover();
     await page.waitForSelector('#preview:not(.hidden)', { timeout: 5000 });
     await page.waitForTimeout(500);
     await page.screenshot({ path: path.join(OUT, 'preview.png') });
-    await page.evaluate(() => { (window as never as { __psr: { session: { dirty: boolean } } }).__psr.session.dirty = false; });
+    await page.evaluate(() => { (window as never as { __pt: { session: { dirty: boolean } } }).__pt.session.dirty = false; });
     await page.close();
   }
 
@@ -147,7 +147,7 @@ async function run(): Promise<void> {
     await page.goto(BASE + '/?file=sample/WStarCats.pdf');
     await page.waitForSelector(LINK, { timeout: 20000 });
     await page.evaluate(() => {
-      Object.keys(localStorage).filter((k) => k.startsWith('psr:doc:'))
+      Object.keys(localStorage).filter((k) => k.startsWith('pt:doc:'))
         .forEach((k) => localStorage.removeItem(k));
     });
     await page.mouse.move(640, 400);
@@ -157,22 +157,35 @@ async function run(): Promise<void> {
     // viewer (middle band, real width) — so every hop in the recording
     // follows an actual dependency in the paper. Polls, because link
     // annotations render shortly after a jump.
-    const findLinkInView = () => page.evaluate(() => {
+    // Find a reference link in view whose DESTINATION page hasn't been
+    // visited yet — so every hop in the chain goes somewhere new (links
+    // expose data-dest-page once their destination is resolved).
+    const avoidPages: number[] = [];
+    const findLinkInView = () => page.evaluate((avoid) => {
+      const pt = (window as never as {
+        __pt: { hist: { active: { entries: Array<{ pos: { page: number } }> } } };
+      }).__pt;
+      const visited = new Set([
+        ...pt.hist.active.entries.map((e) => e.pos.page),
+        ...avoid,
+      ]);
       const cont = document.getElementById('viewerContainer')!.getBoundingClientRect();
       const links = [...document.querySelectorAll<HTMLElement>('.pdfLink:not(.external)')];
       for (const el of links) {
+        const dest = Number(el.dataset.destPage ?? NaN);
+        if (!Number.isFinite(dest) || visited.has(dest)) continue;
         const r = el.getBoundingClientRect();
         if (r.width < 14 || r.height < 8) continue;
         if (r.top > cont.top + 90 && r.bottom < cont.bottom - 140
             && r.left > cont.left + 40 && r.right < cont.right - 40) {
-          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2, dest };
         }
       }
       return null;
-    });
+    }, avoidPages);
     // Like a reader scanning for the next reference: wait for annotations,
-    // and scroll down gradually until a link is in view.
-    const visibleLink = async (): Promise<{ x: number; y: number } | null> => {
+    // and scroll down gradually until a suitable link is in view.
+    const visibleLink = async (): Promise<{ x: number; y: number; dest: number } | null> => {
       for (let attempt = 0; attempt < 10; attempt++) {
         for (let tries = 0; tries < 4; tries++) {
           const found = await findLinkInView();
@@ -184,6 +197,23 @@ async function run(): Promise<void> {
       }
       return null;
     };
+    // The label of the entry that a click just pushed must be new; if it
+    // duplicates an earlier one, undo the hop and avoid that destination.
+    const lastLabelIsFresh = () => page.evaluate(() => {
+      const pt = (window as never as {
+        __pt: {
+          hist: { active: { entries: Array<{ label: string }> } };
+          controller: { undoHist(): void };
+        };
+      }).__pt;
+      const labels = pt.hist.active.entries.map((e) => e.label);
+      const last = labels[labels.length - 1];
+      if (labels.slice(0, -1).includes(last)) {
+        pt.controller.undoHist();
+        return false;
+      }
+      return true;
+    });
 
     // 1. hover the first reference -> destination preview appears
     const link = (await page.locator(LINK).nth(3).boundingBox())!;
@@ -193,7 +223,8 @@ async function run(): Promise<void> {
     //    dependency chain, four levels deep
     await page.mouse.down(); await page.mouse.up();
     await page.waitForTimeout(1300);
-    for (let depth = 0; depth < 3; depth++) {
+    let hops = 0;
+    for (let attempts = 0; hops < 3 && attempts < 8; attempts++) {
       // read on a little before chasing the next reference, so successive
       // hops target different results
       await page.mouse.wheel(0, 460);
@@ -204,6 +235,12 @@ async function run(): Promise<void> {
       await page.waitForTimeout(500);
       await page.mouse.down(); await page.mouse.up();
       await page.waitForTimeout(1250);
+      if (await lastLabelIsFresh()) {
+        hops++;
+      } else {
+        avoidPages.push(target.dest); // undone; don't pick this one again
+        await page.waitForTimeout(600);
+      }
     }
     // 3. pop back one level (exact position restore)
     await page.keyboard.press('Backspace');
@@ -238,21 +275,46 @@ async function run(): Promise<void> {
     await glide(stacks.x + 60, stacks.y + 40, 500);
     await page.waitForTimeout(1000);
 
-    await page.evaluate(() => { (window as never as { __psr: { session: { dirty: boolean } } }).__psr.session.dirty = false; });
+    // ---- verify the recording actually shows what it claims: watching it
+    // back by eye misses content mistakes, so assert them instead ----
+    const outcome = await page.evaluate(() => {
+      const pt = (window as never as {
+        __pt: {
+          hist: { stacks: Array<{ entries: Array<{ label: string }> }> };
+          session: { dirty: boolean };
+        };
+      }).__pt;
+      pt.session.dirty = false;
+      const deepest = [...pt.hist.stacks].sort(
+        (a, b) => b.entries.length - a.entries.length,
+      )[0];
+      return {
+        stacks: pt.hist.stacks.length,
+        deepestLen: deepest.entries.length,
+        distinctLabels: new Set(deepest.entries.map((e) => e.label)).size,
+      };
+    });
+    if (outcome.stacks < 2 || outcome.deepestLen < 5 || outcome.distinctLabels < 5) {
+      throw new Error('recording did not demonstrate the features: '
+        + JSON.stringify(outcome));
+    }
+    console.log('recording verified:', JSON.stringify(outcome));
+
     await page.close();
     const video = await ctx.close().then(() => fs.readdirSync(REC).find((f) => f.endsWith('.webm')));
     if (!video) throw new Error('no video produced');
 
-    // webm -> gif (palette pass for quality, modest size)
+    // webm -> mp4 (h264, streamable)
     const webm = path.join(REC, video);
-    const gif = path.join(OUT, 'demo.gif');
+    const mp4 = path.join(OUT, 'demo.mp4');
     execFileSync('ffmpeg', [
       '-y', '-i', webm,
-      '-vf', 'fps=10,scale=880:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4',
-      gif,
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23',
+      '-movflags', '+faststart', '-an',
+      mp4,
     ], { stdio: 'ignore' });
     fs.rmSync(REC, { recursive: true, force: true });
-    console.log('wrote', gif, `${Math.round(fs.statSync(gif).size / 1024)}KB`);
+    console.log('wrote', mp4, `${Math.round(fs.statSync(mp4).size / 1024)}KB`);
   }
 
   await browser.close();

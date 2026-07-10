@@ -1,9 +1,9 @@
 // Electron desktop shell for Paper Trail.
 //
-// The built web app (dist-web) is served over a custom `psr://` protocol
+// The built web app (dist-web) is served over a custom `paper-trail://` protocol
 // straight from disk. Native application menus send actions over IPC; the
 // web app maps them onto its existing functions when it detects the shell
-// (window.psrDesktop), and keeps working as a plain web app in any browser
+// (window.ptDesktop), and keeps working as a plain web app in any browser
 // otherwise.
 //
 // Run:   npm run desktop
@@ -17,7 +17,7 @@ import { MIME } from '../node/server';
 const SMOKE = process.argv.includes('--smoke');
 // build-node/desktop -> project root
 const WEB_ROOT = path.resolve(__dirname, '..', '..', 'dist-web');
-const SCHEME = 'psr';
+const SCHEME = 'paper-trail';
 
 app.setName('Paper Trail');
 
@@ -33,7 +33,7 @@ protocol.registerSchemesAsPrivileged([{
 let win: BrowserWindow | null = null;
 
 function send(action: string): void {
-  if (win && !win.isDestroyed()) win.webContents.send('psr-menu', action);
+  if (win && !win.isDestroyed()) win.webContents.send('pt-menu', action);
 }
 
 function buildMenu(): void {
@@ -177,7 +177,7 @@ void app.whenReady().then(() => {
     win.webContents.on('did-finish-load', () => {
       win!.webContents
         .executeJavaScript(
-          'JSON.stringify({ title: document.title, shell: !!window.psrDesktop, fsAccess: !!window.showSaveFilePicker, secure: window.isSecureContext })',
+          'JSON.stringify({ title: document.title, shell: !!window.ptDesktop, fsAccess: !!window.showSaveFilePicker, secure: window.isSecureContext })',
         )
         .then((probe: string) => {
           console.log('SMOKE', probe);

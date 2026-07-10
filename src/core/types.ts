@@ -85,10 +85,10 @@ declare global {
       suggestedName?: string;
       types?: Array<{ description?: string; accept: Record<string, string[]> }>;
     }) => Promise<FileSystemFileHandle>;
-    psrDesktop?: {
+    ptDesktop?: {
       onMenu: (cb: (action: MenuAction) => void) => void;
     };
-    __psr?: unknown;
+    __pt?: unknown;
   }
 
   interface FileSystemHandle {

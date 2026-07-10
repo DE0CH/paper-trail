@@ -36,9 +36,9 @@ async function run(): Promise<void> {
     await page.goto(BASE + '/');
     await page.evaluate(() => {
       Object.keys(localStorage)
-        .filter((k) => k.startsWith('psr:'))
+        .filter((k) => k.startsWith('pt:'))
         .forEach((k) => localStorage.removeItem(k));
-      indexedDB.deleteDatabase('psr');
+      indexedDB.deleteDatabase('paper-trail');
     });
 
     await page.goto(BASE + '/?file=sample/WStarCats.pdf');
@@ -49,11 +49,11 @@ async function run(): Promise<void> {
     await page.locator(LINK_SEL).nth(3).click();
     await page.waitForTimeout(600);
     const st1 = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        entries: psr.hist.active.entries.map((e) => e.label),
-        index: psr.hist.active.index,
-        page: psr.viewer.currentPosition().page,
+        entries: pt.hist.active.entries.map((e) => e.label),
+        index: pt.hist.active.index,
+        page: pt.viewer.currentPosition().page,
       };
     });
     check('link click pushes entry', st1.entries.length === 2 && st1.index === 1,
@@ -63,15 +63,15 @@ async function run(): Promise<void> {
 
     // --- back restores exact position, preserves forward tail ---
     const posBefore = await page.evaluate(() =>
-      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries[0].pos);
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries[0].pos);
     await page.keyboard.press('Backspace');
     await page.waitForTimeout(400);
     const st2 = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        index: psr.hist.active.index,
-        n: psr.hist.active.entries.length,
-        pos: psr.viewer.currentPosition(),
+        index: pt.hist.active.index,
+        n: pt.hist.active.entries.length,
+        pos: pt.viewer.currentPosition(),
       };
     });
     check('back pops the cursor, stack preserved', st2.index === 0 && st2.n === 2);
@@ -83,7 +83,7 @@ async function run(): Promise<void> {
     await page.keyboard.press('Shift+Backspace');
     await page.waitForTimeout(400);
     const idx = await page.evaluate(() =>
-      (window as never as { __psr: PsrHooks }).__psr.hist.active.index);
+      (window as never as { __pt: PtHooks }).__pt.hist.active.index);
     check('forward descends again', idx === 1);
 
     // --- cmd+click forks the whole history into a new stack ---
@@ -93,11 +93,11 @@ async function run(): Promise<void> {
     await page.locator(LINK_SEL).nth(0).click({ modifiers: ['Meta'] });
     await page.waitForTimeout(600);
     const st3 = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        stacks: psr.hist.stacks.map((s) => ({ name: s.name, n: s.entries.length, idx: s.index })),
-        active: psr.hist.active.name,
-        entries: psr.hist.active.entries.map((e) => e.label),
+        stacks: pt.hist.stacks.map((s) => ({ name: s.name, n: s.entries.length, idx: s.index })),
+        active: pt.hist.active.name,
+        entries: pt.hist.active.entries.map((e) => e.label),
       };
     });
     check('meta+click forks into a new stack',
@@ -113,9 +113,9 @@ async function run(): Promise<void> {
 
     // --- hover preview ---
     await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
-      psr.hist.jumpTo(0);
-      psr.viewer.scrollTo({ page: 1, yRatio: 0 });
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      pt.hist.jumpTo(0);
+      pt.viewer.scrollTo({ page: 1, yRatio: 0 });
     });
     await page.waitForSelector(LINK_SEL, { timeout: 10000 });
     await page.locator(LINK_SEL).nth(3).hover();
@@ -224,7 +224,7 @@ async function run(): Promise<void> {
     await page.keyboard.press('Enter');
     await page.waitForTimeout(200);
     const renamed = await page.evaluate(() =>
-      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries[0].label);
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries[0].label);
     check('history entries are renamable (trimmed)', renamed === 'my renamed entry', renamed);
 
     // --- nav panel: outline + page thumbnails, closable ---
@@ -236,17 +236,17 @@ async function run(): Promise<void> {
     await page.waitForSelector('#thumbList [data-thumb-page="1"] canvas', { timeout: 15000 });
     check('page thumbnails render lazily', true);
     const before = await page.evaluate(() => {
-      const h = (window as never as { __psr: PsrHooks }).__psr.hist.active;
+      const h = (window as never as { __pt: PtHooks }).__pt.hist.active;
       return { index: h.index };
     });
     await page.locator('#thumbList .thumb').nth(2).click();
     await page.waitForTimeout(400);
     const afterThumb = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        page: psr.viewer.currentPosition().page,
-        n: psr.hist.active.entries.length,
-        label: psr.hist.active.entries[psr.hist.active.index].label,
+        page: pt.viewer.currentPosition().page,
+        n: pt.hist.active.entries.length,
+        label: pt.hist.active.entries[pt.hist.active.index].label,
       };
     });
     // A jump truncates above the cursor, so the new length is cursor+2.
@@ -261,7 +261,7 @@ async function run(): Promise<void> {
 
     // --- text selection: emulate a person dragging across a line ---
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.viewer.scrollTo({ page: 1, yRatio: 0 });
+      (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 1, yRatio: 0 });
     });
     await page.waitForSelector('.page[data-page="1"] .textLayer span', { timeout: 10000 });
     const p1box = (await page.locator('.page[data-page="1"]').boundingBox())!;
@@ -279,18 +279,18 @@ async function run(): Promise<void> {
     // format (names/labels are free text) ---
     const weird = 'entry 3 0.5 tricky | "quo\'tes" \\ § 数学 🙂 <b>tag</b>';
     await page.evaluate((w) => {
-      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
-      const activeId = psr.hist.stacks.find((s) => s.name === psr.hist.active.name);
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const activeId = pt.hist.stacks.find((s) => s.name === pt.hist.active.name);
       void activeId;
       // rename the ACTIVE stack and its first entry
-      const active = psr.hist.stacks.find((s) => s.entries === psr.hist.active.entries)!;
-      psr.hist.renameStack(active.id, w);
-      psr.hist.renameEntry(0, w + ' as a label\nwith newline');
+      const active = pt.hist.stacks.find((s) => s.entries === pt.hist.active.entries)!;
+      pt.hist.renameStack(active.id, w);
+      pt.hist.renameEntry(0, w + ' as a label\nwith newline');
     }, weird);
     await page.waitForTimeout(300); // let React render
     const weirdRes = await page.evaluate((w) => {
-      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
-      const parsed = psr.parseProgressText(psr.progressText());
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const parsed = pt.parseProgressText(pt.progressText());
       const stack = parsed?.state.hist.stacks.find((s) => s.name === w);
       const uiNames = [...document.querySelectorAll('#stacksPanel .stackRow .name')]
         .map((el) => el.textContent);
@@ -309,28 +309,28 @@ async function run(): Promise<void> {
 
     // --- undo/redo of history mutations ---
     const stU = await page.evaluate(async () => {
-      const psr = (window as never as { __psr: PsrUndoHooks }).__psr;
+      const pt = (window as never as { __pt: PtUndoHooks }).__pt;
       const out: Record<string, unknown> = {};
       // Overwrite scenario: mid-stack, jump somewhere -> tail overwritten.
-      psr.hist.jumpTo(0);
-      const tailBefore = psr.hist.active.entries.map((e) => e.label);
-      psr.jumpVia({ page: 5, yRatio: 0 }, 'overwriter');
-      out.afterOverwrite = psr.hist.active.entries.map((e) => e.label);
-      psr.controller.undoHist();
-      out.afterUndo = psr.hist.active.entries.map((e) => e.label);
+      pt.hist.jumpTo(0);
+      const tailBefore = pt.hist.active.entries.map((e) => e.label);
+      pt.jumpVia({ page: 5, yRatio: 0 }, 'overwriter');
+      out.afterOverwrite = pt.hist.active.entries.map((e) => e.label);
+      pt.controller.undoHist();
+      out.afterUndo = pt.hist.active.entries.map((e) => e.label);
       out.tailRestored =
         JSON.stringify(out.afterUndo) === JSON.stringify(tailBefore);
-      psr.controller.redoHist();
-      out.afterRedo = psr.hist.active.entries.map((e) => e.label);
+      pt.controller.redoHist();
+      out.afterRedo = pt.hist.active.entries.map((e) => e.label);
       // Close-stack scenario + redo cleared by a new action.
-      const stackCount = psr.hist.stacks.length;
-      psr.hist.closeStack(psr.hist.stacks[psr.hist.stacks.length - 1].id);
-      out.closed = psr.hist.stacks.length === stackCount - 1;
-      psr.controller.undoHist();
-      out.closeUndone = psr.hist.stacks.length === stackCount;
-      out.canRedoBefore = psr.hist.canRedo();
-      psr.jumpVia({ page: 2, yRatio: 0 }, 'redo-killer');
-      out.redoClearedByNewAction = !psr.hist.canRedo();
+      const stackCount = pt.hist.stacks.length;
+      pt.hist.closeStack(pt.hist.stacks[pt.hist.stacks.length - 1].id);
+      out.closed = pt.hist.stacks.length === stackCount - 1;
+      pt.controller.undoHist();
+      out.closeUndone = pt.hist.stacks.length === stackCount;
+      out.canRedoBefore = pt.hist.canRedo();
+      pt.jumpVia({ page: 2, yRatio: 0 }, 'redo-killer');
+      out.redoClearedByNewAction = !pt.hist.canRedo();
       return out;
     });
     check('undo restores overwritten forward tail', stU.tailRestored === true,
@@ -345,23 +345,23 @@ async function run(): Promise<void> {
 
     // --- undo depth is capped at 50; the oldest snapshot is dropped ---
     const capProbe = await page.evaluate(() => {
-      const psr = (window as never as {
-        __psr: PsrUndoHooks & { controller: { clearHistory(): void } };
-      }).__psr;
-      psr.controller.clearHistory(); // fresh single-entry stack (undoable itself)
-      const base = psr.hist.active.entries.length; // 1 ("Start")
+      const pt = (window as never as {
+        __pt: PtUndoHooks & { controller: { clearHistory(): void } };
+      }).__pt;
+      pt.controller.clearHistory(); // fresh single-entry stack (undoable itself)
+      const base = pt.hist.active.entries.length; // 1 ("Start")
       for (let i = 0; i < 55; i++) {
-        psr.jumpVia({ page: 1 + (i % 5), yRatio: 0 }, `fill ${i}`);
+        pt.jumpVia({ page: 1 + (i % 5), yRatio: 0 }, `fill ${i}`);
       }
       let undos = 0;
       while (undos < 200) {
-        psr.controller.undoHist();
+        pt.controller.undoHist();
         undos++;
-        if (!(psr.hist as never as { canUndo(): boolean }).canUndo()) break;
+        if (!(pt.hist as never as { canUndo(): boolean }).canUndo()) break;
       }
-      const res = { base, undos, len: psr.hist.active.entries.length };
+      const res = { base, undos, len: pt.hist.active.entries.length };
       // restore a two-stack state for the checks further down
-      (psr.jumpVia as (p: unknown, l: string, f?: boolean) => void)(
+      (pt.jumpVia as (p: unknown, l: string, f?: boolean) => void)(
         { page: 2, yRatio: 0 }, 'branch', true,
       );
       return res;
@@ -375,17 +375,17 @@ async function run(): Promise<void> {
     // --- save button: fixed width, dot indicator for unsaved changes ---
     await page.waitForTimeout(900); // let pending scroll-settle timers fire
     await page.evaluate(() => {
-      const psr = (window as never as {
-        __psr: PsrHooks & { controller: { dismissMismatch(): void } };
-      }).__psr;
-      psr.session.dirty = false;
-      psr.controller.dismissMismatch(); // also forces a re-render
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { dismissMismatch(): void } };
+      }).__pt;
+      pt.session.dirty = false;
+      pt.controller.dismissMismatch(); // also forces a re-render
     });
     await page.waitForTimeout(150);
     const wClean = (await page.locator('#btnSave').boundingBox())!.width;
     const dotClean = await page.locator('#saveDirtyDot').count();
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr
+      (window as never as { __pt: PtHooks }).__pt
         .jumpVia({ page: 4, yRatio: 0 }, 'dirty probe');
     });
     await page.waitForTimeout(250);
@@ -397,18 +397,18 @@ async function run(): Promise<void> {
 
     // --- progress session: dirty flag + fake-handle save ---
     const st4 = await page.evaluate(async () => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       const out: {
         dirtyAfterJump: boolean | null;
         dirtyAfterSave: boolean | null;
         savedJson: { type: string; name: string; size: number; stacks: number } | null;
       } = { dirtyAfterJump: null, dirtyAfterSave: null, savedJson: null };
-      psr.jumpVia({ page: 3, yRatio: 0 }, 'probe');
+      pt.jumpVia({ page: 3, yRatio: 0 }, 'probe');
       await new Promise((r) => setTimeout(r, 100));
-      out.dirtyAfterJump = psr.session.dirty;
+      out.dirtyAfterJump = pt.session.dirty;
       let captured = '';
-      psr.session.handle = {
-        name: 't.trail',
+      pt.session.handle = {
+        name: 't.ptl',
         createWritable: async () => {
           let data = '';
           return {
@@ -417,8 +417,8 @@ async function run(): Promise<void> {
           };
         },
       } as never;
-      await psr.writeProgress();
-      out.dirtyAfterSave = psr.session.dirty;
+      await pt.writeProgress();
+      out.dirtyAfterSave = pt.session.dirty;
       const lines = captured.split('\n');
       const get = (k: string) =>
         (lines.find((l) => l.startsWith(k + ' ')) ?? '').slice(k.length + 1);
@@ -428,8 +428,8 @@ async function run(): Promise<void> {
         size: parseInt(get('pdf.size'), 10),
         stacks: lines.filter((l) => l.startsWith('stack ')).length,
       };
-      psr.session.handle = null;
-      psr.session.dirty = false;
+      pt.session.handle = null;
+      pt.session.dirty = false;
       return out;
     });
     check('jump marks session dirty', st4.dirtyAfterJump === true);
@@ -437,23 +437,23 @@ async function run(): Promise<void> {
     // --- auto-save never triggers a permission prompt: without silent
     // write permission the timer skips (stays dirty); with it, it saves ---
     const autoSave = await page.evaluate(async () => {
-      const psr = (window as never as { __psr: PsrHooks & { jumpVia(p: unknown, l: string): void } }).__psr;
+      const pt = (window as never as { __pt: PtHooks & { jumpVia(p: unknown, l: string): void } }).__pt;
       let writes = 0;
       let permission = 'prompt';
-      psr.session.handle = {
-        name: 'perm.trail',
+      pt.session.handle = {
+        name: 'perm.ptl',
         queryPermission: async () => permission,
         createWritable: async () => ({ write: async () => { writes++; }, close: async () => {} }),
       } as never;
-      psr.jumpVia({ page: 2, yRatio: 0 }, 'auto probe 1');
+      pt.jumpVia({ page: 2, yRatio: 0 }, 'auto probe 1');
       await new Promise((r) => setTimeout(r, 2200)); // past the 1.5s debounce
-      const skipped = { writes, dirty: psr.session.dirty };
+      const skipped = { writes, dirty: pt.session.dirty };
       permission = 'granted';
-      psr.jumpVia({ page: 3, yRatio: 0 }, 'auto probe 2');
+      pt.jumpVia({ page: 3, yRatio: 0 }, 'auto probe 2');
       await new Promise((r) => setTimeout(r, 2200));
-      const saved = { writes, dirty: psr.session.dirty };
-      psr.session.handle = null;
-      psr.session.dirty = false;
+      const saved = { writes, dirty: pt.session.dirty };
+      pt.session.handle = null;
+      pt.session.dirty = false;
       return { skipped, saved };
     });
     check('auto-save skips (stays dirty) when a prompt would be needed',
@@ -469,8 +469,8 @@ async function run(): Promise<void> {
         && st4.savedJson!.stacks === 2,
       JSON.stringify(st4.savedJson));
     const noIds = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
-      const text = psr.progressText();
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const text = pt.progressText();
       return {
         stackLinesPlainNames: text.split('\n')
           .filter((l) => l.startsWith('stack '))
@@ -482,42 +482,42 @@ async function run(): Promise<void> {
       noIds.stackLinesPlainNames && /^active \d+$/.test(noIds.activeLine ?? ''),
       JSON.stringify(noIds));
 
-    // --- progress file round trip over HTTP (?file=…psr.json) ---
+    // --- progress file round trip over HTTP (?file=…pt.json) ---
     await page.evaluate(() => {
       Object.keys(localStorage)
-        .filter((k) => k.startsWith('psr:doc:'))
+        .filter((k) => k.startsWith('pt:doc:'))
         .forEach((k) => localStorage.removeItem(k));
-      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
-    await page.goto(BASE + '/?file=sample/WStarCats.trail');
+    await page.goto(BASE + '/?file=sample/WStarCats.ptl');
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForTimeout(800);
     const st5 = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        stack: psr.hist.active.name,
-        labels: psr.hist.active.entries.map((e) => e.label),
-        pos: psr.viewer.currentPosition(),
-        bound: !!psr.session.handle,
+        stack: pt.hist.active.name,
+        labels: pt.hist.active.entries.map((e) => e.label),
+        pos: pt.viewer.currentPosition(),
+        bound: !!pt.session.handle,
       };
     });
     check('progress file restores stack and position',
       st5.stack === 'RoundTrip' && st5.pos.page === 17 && !st5.bound, JSON.stringify(st5));
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
 
     // --- cross-directory round trip: relPath ../WStarCats.pdf resolves
     // relative to the progress file's own location ---
-    await page.goto(BASE + '/?file=sample/sub/WStarCats-sub.trail');
+    await page.goto(BASE + '/?file=sample/sub/WStarCats-sub.ptl');
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForTimeout(600);
     const sub = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        stacks: psr.hist.stacks.map((s) => s.name),
-        active: psr.hist.active.name,
-        page: psr.viewer.currentPosition().page,
+        stacks: pt.hist.stacks.map((s) => s.name),
+        active: pt.hist.active.name,
+        page: pt.viewer.currentPosition().page,
       };
     });
     check('cross-directory relPath resolves against the progress file',
@@ -525,11 +525,11 @@ async function run(): Promise<void> {
         && sub.stacks.join('|') === 'Main line|SubDir',
       JSON.stringify(sub));
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
 
     // --- corrupt progress file degrades to a clear error ---
-    await page.goto(BASE + '/?file=sample/corrupt.trail');
+    await page.goto(BASE + '/?file=sample/corrupt.ptl');
     await page.waitForSelector('#toast', { timeout: 10000 });
     const corruptToast = await page.evaluate(() =>
       document.getElementById('toast')?.textContent ?? '');
@@ -538,7 +538,7 @@ async function run(): Promise<void> {
 
     // --- missing PDF: session is kept pending; opening the PDF manually
     // restores it ---
-    await page.goto(BASE + '/?file=sample/sub/missing-pdf.trail');
+    await page.goto(BASE + '/?file=sample/sub/missing-pdf.ptl');
     await page.waitForSelector('#toast', { timeout: 10000 });
     const missToast = await page.evaluate(() =>
       document.getElementById('toast')?.textContent ?? '');
@@ -547,16 +547,16 @@ async function run(): Promise<void> {
     // The sidebar previews the loaded session while waiting for the PDF,
     // and clicking around must be inert (no anchor corruption).
     const preview = await page.evaluate(() => {
-      const psr = (window as never as {
-        __psr: PsrHooks & { controller: { histEntryClick(i: number): void } };
-      }).__psr;
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { histEntryClick(i: number): void } };
+      }).__pt;
       const stackNames = [...document.querySelectorAll('#stacksPanel .stackRow .name')]
         .map((el) => el.textContent);
       const entryLabels = [...document.querySelectorAll('#historyPanel .histItem .lbl')]
         .map((el) => el.textContent);
-      const before = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
-      psr.controller.histEntryClick(0); // must be a no-op without a PDF
-      const after = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
+      const before = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
+      pt.controller.histEntryClick(0); // must be a no-op without a PDF
+      const after = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
       return { stackNames, entryLabels, inert: before === after };
     });
     check('pending session previews its trails in the sidebar',
@@ -565,20 +565,20 @@ async function run(): Promise<void> {
       JSON.stringify(preview));
     check('preview clicks are inert and do not corrupt anchors', preview.inert);
     await page.evaluate(async () => {
-      const psr = (window as never as {
-        __psr: { controller: { openFile(f: File): Promise<void> } };
-      }).__psr;
+      const pt = (window as never as {
+        __pt: { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
       const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
-      await psr.controller.openFile(new File([bytes], 'WStarCats.pdf'));
+      await pt.controller.openFile(new File([bytes], 'WStarCats.pdf'));
     });
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForTimeout(600);
     const recovered = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        stack: psr.hist.active.name,
-        label: psr.hist.active.entries[psr.hist.active.index]?.label,
-        page: psr.viewer.currentPosition().page,
+        stack: pt.hist.active.name,
+        label: pt.hist.active.entries[pt.hist.active.index]?.label,
+        page: pt.viewer.currentPosition().page,
       };
     });
     check('manually opening the PDF restores the pending session',
@@ -587,17 +587,17 @@ async function run(): Promise<void> {
         && recovered.page === 12,
       JSON.stringify(recovered));
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
 
     // --- mismatching PDF: banner + adopt + out-of-range positions clamp ---
-    await page.goto(BASE + '/?file=sample/sub/mismatch.trail');
+    await page.goto(BASE + '/?file=sample/sub/mismatch.ptl');
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForSelector('#mismatchBanner', { timeout: 5000 });
     const mm = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const pt = (window as never as { __pt: PtHooks }).__pt;
       return {
-        page: psr.viewer.currentPosition().page,
+        page: pt.viewer.currentPosition().page,
         bannerText: document.getElementById('mismatchBanner')?.textContent ?? '',
       };
     });
@@ -610,14 +610,14 @@ async function run(): Promise<void> {
       (await page.locator('#mismatchBanner').count()) === 0);
     // reload -> banner reappears (dismiss is once per occurrence); adopt fixes it
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
-    await page.goto(BASE + '/?file=sample/sub/mismatch.trail');
+    await page.goto(BASE + '/?file=sample/sub/mismatch.ptl');
     await page.waitForSelector('#mismatchBanner', { timeout: 20000 });
     await page.click('#btnAdoptPdf');
     const adopted = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
-      const text = psr.progressText();
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const text = pt.progressText();
       return {
         bannerGone: !document.getElementById('mismatchBanner'),
         nameLine: text.split('\n').find((l) => l.startsWith('pdf.name ')),
@@ -630,81 +630,81 @@ async function run(): Promise<void> {
 
     // --- loading a session into an already open PDF asks for confirmation ---
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
     await page.goto(BASE + '/?file=sample/WStarCats.pdf');
     await page.waitForSelector(LINK_SEL, { timeout: 20000 });
     await page.evaluate(async () => {
-      const psr = (window as never as {
-        __psr: PsrHooks & { controller: { openFile(f: File): Promise<void> } };
-      }).__psr;
-      psr.jumpVia({ page: 3, yRatio: 0 }, 'existing history');
-      const text = await (await fetch('/sample/WStarCats.trail')).text();
-      await psr.controller.openFile(new File([text], 'WStarCats.trail'));
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
+      pt.jumpVia({ page: 3, yRatio: 0 }, 'existing history');
+      const text = await (await fetch('/sample/WStarCats.ptl')).text();
+      await pt.controller.openFile(new File([text], 'WStarCats.ptl'));
     });
     await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
     check('loading a session over existing history asks first', true);
     await page.click('#btnSessionCancel');
     const cancelled = await page.evaluate(() =>
-      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries.at(-1)?.label);
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries.at(-1)?.label);
     check('cancel keeps the current history', cancelled === 'existing history', String(cancelled));
     await page.evaluate(async () => {
-      const psr = (window as never as {
-        __psr: PsrHooks & { controller: { openFile(f: File): Promise<void> } };
-      }).__psr;
-      const text = await (await fetch('/sample/WStarCats.trail')).text();
-      await psr.controller.openFile(new File([text], 'WStarCats.trail'));
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
+      const text = await (await fetch('/sample/WStarCats.ptl')).text();
+      await pt.controller.openFile(new File([text], 'WStarCats.ptl'));
     });
     await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
     await page.click('#btnSessionReplace');
     await page.waitForTimeout(400);
     const replaced = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
-      return { stack: psr.hist.active.name, page: psr.viewer.currentPosition().page };
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { stack: pt.hist.active.name, page: pt.viewer.currentPosition().page };
     });
     check('replace applies the loaded session',
       replaced.stack === 'RoundTrip' && replaced.page === 17, JSON.stringify(replaced));
 
     // --- re-anchor an entry to the current position ---
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.viewer.scrollTo({ page: 5, yRatio: 0.3 });
+      (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 5, yRatio: 0.3 });
     });
     await page.waitForTimeout(700);
     await page.locator('#historyPanel .histItem').first().hover();
     await page.locator('#historyPanel .histItem .setPos').first().click({ force: true });
     await page.waitForTimeout(200);
     const anchored = await page.evaluate(() =>
-      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries[0].pos);
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries[0].pos);
     check('entry can be re-anchored to the current position',
       anchored.page === 5 && Math.abs(anchored.yRatio - 0.3) < 0.02,
       JSON.stringify(anchored));
 
     // --- manually mark the current position onto the trail ---
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.viewer.scrollTo({ page: 7, yRatio: 0.6 });
+      (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 7, yRatio: 0.6 });
     });
     await page.waitForTimeout(700);
     const markBefore = await page.evaluate(() =>
-      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries.length);
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries.length);
     await page.click('#viewerContainer'); // focus outside inputs
     await page.keyboard.press('m');
     await page.waitForTimeout(300);
     const marked = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
-      const cur = psr.hist.active.entries[psr.hist.active.index];
-      return { n: psr.hist.active.entries.length, label: cur.label, pos: cur.pos };
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const cur = pt.hist.active.entries[pt.hist.active.index];
+      return { n: pt.hist.active.entries.length, label: cur.label, pos: cur.pos };
     });
     check('"m" marks the current position as a trail entry',
       marked.label === 'Marked p.7' && marked.pos.page === 7
         && Math.abs(marked.pos.yRatio - 0.6) < 0.05,
       JSON.stringify({ markBefore, marked }));
     const stacksBeforeMarkFork = await page.evaluate(() =>
-      (window as never as { __psr: PsrHooks }).__psr.hist.stacks.length);
+      (window as never as { __pt: PtHooks }).__pt.hist.stacks.length);
     await page.click('#btnMark', { modifiers: ['Meta'] });
     await page.waitForTimeout(300);
     const markFork = await page.evaluate(() => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
-      return { stacks: psr.hist.stacks.length };
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { stacks: pt.hist.stacks.length };
     });
     check('cmd+click on + branches the mark into a new trail',
       markFork.stacks === stacksBeforeMarkFork + 1,
@@ -712,30 +712,30 @@ async function run(): Promise<void> {
 
     // --- scrolling must NOT move entry anchors (explicit actions only) ---
     const scrollProbe = await page.evaluate(async () => {
-      const psr = (window as never as { __psr: PsrHooks }).__psr;
-      const before = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
-      psr.viewer.scrollTo({ page: 20, yRatio: 0.5 });
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const before = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
+      pt.viewer.scrollTo({ page: 20, yRatio: 0.5 });
       await new Promise((r) => setTimeout(r, 900)); // past the settle debounce
-      const after = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
+      const after = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
       return { same: before === after };
     });
     check('scrolling does not move history entry anchors', scrollProbe.same);
 
     // --- replace the PDF while keeping the reading state ---
     const rep = await page.evaluate(async () => {
-      const psr = (window as never as {
-        __psr: PsrFormatHooks & {
+      const pt = (window as never as {
+        __pt: PtFormatHooks & {
           controller: { replaceWithFile(f: File): Promise<void> };
         };
-      }).__psr;
-      const before = psr.hist.active.entries.map((e) => e.label);
+      }).__pt;
+      const before = pt.hist.active.entries.map((e) => e.label);
       const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
-      await psr.controller.replaceWithFile(new File([bytes], 'RevisedCopy.pdf'));
+      await pt.controller.replaceWithFile(new File([bytes], 'RevisedCopy.pdf'));
       await new Promise((r) => setTimeout(r, 800));
       return {
         before,
-        after: psr.hist.active.entries.map((e) => e.label),
-        nameLine: psr.progressText().split('\n').find((l) => l.startsWith('pdf.name ')),
+        after: pt.hist.active.entries.map((e) => e.label),
+        nameLine: pt.progressText().split('\n').find((l) => l.startsWith('pdf.name ')),
         banner: !!document.getElementById('mismatchBanner'),
       };
     });
@@ -747,20 +747,20 @@ async function run(): Promise<void> {
 
     // --- replacing the PDF is undoable (and redoable) ---
     const repUndo = await page.evaluate(async () => {
-      const psr = (window as never as {
-        __psr: PsrFormatHooks & {
+      const pt = (window as never as {
+        __pt: PtFormatHooks & {
           controller: { undoHist(): void; redoHist(): void };
           hist: { active: { entries: Array<{ label: string }> } };
         };
-      }).__psr;
-      const historyBefore = psr.hist.active.entries.map((e) => e.label);
-      psr.controller.undoHist();
+      }).__pt;
+      const historyBefore = pt.hist.active.entries.map((e) => e.label);
+      pt.controller.undoHist();
       await new Promise((r) => setTimeout(r, 1200));
       const afterUndo = {
         title: document.title,
-        history: psr.hist.active.entries.map((e) => e.label),
+        history: pt.hist.active.entries.map((e) => e.label),
       };
-      psr.controller.redoHist();
+      pt.controller.redoHist();
       await new Promise((r) => setTimeout(r, 1200));
       const afterRedo = { title: document.title };
       return { historyBefore, afterUndo, afterRedo };
@@ -773,7 +773,7 @@ async function run(): Promise<void> {
       repUndo.afterRedo.title.startsWith('RevisedCopy.pdf'),
       JSON.stringify(repUndo.afterRedo));
     await page.evaluate(() => {
-      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
     // --- rendering sharpness on a retina display (deviceScaleFactor 2) ---
     const retina = await browser.newPage({
@@ -807,8 +807,8 @@ async function run(): Promise<void> {
     check('canvas renders at device resolution (fit zoom)', sh.ratio >= 1.9 && sh.exact,
       JSON.stringify(sh));
     await retina.evaluate(() => {
-      (window as never as { __psr: { viewer: { setScale(s: number): void } } })
-        .__psr.viewer.setScale(2.5);
+      (window as never as { __pt: { viewer: { setScale(s: number): void } } })
+        .__pt.viewer.setScale(2.5);
     });
     await retina.waitForTimeout(1200);
     await retina.waitForSelector('.page[data-page="1"] canvas', { timeout: 10000 });
@@ -819,12 +819,12 @@ async function run(): Promise<void> {
     // --- trackpad pinch (ctrl+wheel): smooth CSS feedback during the
     // gesture, crisp re-render on commit, never a blank page ---
     const pinch = await retina.evaluate(async () => {
-      const psr = (window as never as {
-        __psr: { viewer: { scale: number; setScale(s: number, o?: unknown): void } };
-      }).__psr;
-      psr.viewer.setScale(1.2);
+      const pt = (window as never as {
+        __pt: { viewer: { scale: number; setScale(s: number, o?: unknown): void } };
+      }).__pt;
+      pt.viewer.setScale(1.2);
       await new Promise((r) => setTimeout(r, 400));
-      const before = psr.viewer.scale;
+      const before = pt.viewer.scale;
       const target = document.getElementById('viewerContainer')!;
       const viewerEl = document.getElementById('viewer')!;
       let liveTransform = '';
@@ -840,10 +840,10 @@ async function run(): Promise<void> {
       await new Promise((r) => setTimeout(r, 500)); // commit fires
       const committed = viewerEl.style.transform === '';
       // placeholder canvas must exist immediately after a scale change
-      psr.viewer.setScale(psr.viewer.scale * 1.3);
+      pt.viewer.setScale(pt.viewer.scale * 1.3);
       const placeholder = !!document.querySelector('.page[data-page="1"] canvas');
       await new Promise((r) => setTimeout(r, 800));
-      return { before, after: psr.viewer.scale, midGesture, committed, placeholder };
+      return { before, after: pt.viewer.scale, midGesture, committed, placeholder };
     });
     check('pinch gives instant visual feedback and commits a re-render',
       pinch.after > pinch.before * 1.5 && pinch.midGesture && pinch.committed,
@@ -855,17 +855,17 @@ async function run(): Promise<void> {
     // constant inter-page gaps + approximate anchor math caused an
     // ~800px jump deep in the document) ---
     const jump = await retina.evaluate(async () => {
-      const psr = (window as never as {
-        __psr: {
+      const pt = (window as never as {
+        __pt: {
           viewer: {
             scale: number;
             setScale(s: number, o?: unknown): void;
             scrollTo(p: { page: number; yRatio: number }): void;
           };
         };
-      }).__psr;
-      psr.viewer.setScale(1.2);
-      psr.viewer.scrollTo({ page: 20, yRatio: 0.4 });
+      }).__pt;
+      pt.viewer.setScale(1.2);
+      pt.viewer.scrollTo({ page: 20, yRatio: 0.4 });
       await new Promise((r) => setTimeout(r, 900));
       const target = document.getElementById('viewerContainer')!;
       const landmark = () =>
@@ -898,19 +898,19 @@ async function run(): Promise<void> {
   process.exit(failed.length ? 1 : 0);
 }
 
-interface PsrUndoHooks extends PsrHooks {
+interface PtUndoHooks extends PtHooks {
   controller: { undoHist(): void; redoHist(): void };
 }
 
-interface PsrFormatHooks extends PsrHooks {
+interface PtFormatHooks extends PtHooks {
   progressText(): string;
   parseProgressText(t: string): {
     state: { hist: { stacks: Array<{ name: string; entries: Array<{ label: string }> }> } };
   } | null;
 }
 
-// Shape of the window.__psr test hooks (see core/controller.ts).
-interface PsrHooks {
+// Shape of the window.__pt test hooks (see core/controller.ts).
+interface PtHooks {
   hist: {
     active: { name: string; index: number; entries: Array<{ label: string; pos: { page: number; yRatio: number } }> };
     stacks: Array<{ id: number; name: string; index: number; entries: Array<{ label: string }> }>;

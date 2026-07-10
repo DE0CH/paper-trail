@@ -107,11 +107,23 @@ async function run(): Promise<void> {
   text(21, 'which is compatible with direct sums in the following sense.', 72, H - 92, 11);
 
   // links sprinkled through the document so the demo's dependency chain
-  // always finds a next reference
-  for (const [pg, dest] of [[21, 24], [22, 26], [24, 28], [26, 30], [28, 12], [15, 21], [30, 5]] as Array<[number, number]>) {
+  // always finds a next reference — each with a DIFFERENT label, so the
+  // chain shows varied, plausible dependencies
+  const chain: Array<[number, number, string, string]> = [
+    [21, 24, 'Lemma', '5.3'],
+    [22, 26, 'Proposition', '6.2'],
+    [23, 28, 'Theorem', '2.8'],
+    [25, 30, 'Corollary', '7.1'],
+    [27, 12, 'Definition', '3.5'],
+    [29, 33, 'Remark', '8.4'],
+    [15, 21, 'Example', '4.9'],
+    [30, 5, 'Equation', '12'],
+  ];
+  for (const [pg, dest, kind, num] of chain) {
     const sy = H - 260;
-    text(pg, 'See also Lemma 5.3 for the corresponding statement.', 72, sy, 12);
-    link(pg, 72 + wpt('See also Lemma '), sy - 2, wpt('5.3'), 14, dest, H - 60);
+    const prefix = `See also ${kind} `;
+    text(pg, `${prefix}${num} for the corresponding statement.`, 72, sy, 12);
+    link(pg, 72 + wpt(prefix), sy - 2, wpt(num), 14, dest, H - 60);
   }
 
   // ---- exactly four occurrences of "equivariant" ----

@@ -1,0 +1,16 @@
+paper-trail-session v1
+saved 2026-07-10T03:00:00.000Z
+pdf.name SomeOtherPaper.pdf
+pdf.relPath ../WStarCats.pdf
+pdf.fingerprint deadbeefdeadbeefdeadbeefdeadbeef
+pdf.size 123456
+view.scale 1.1
+view.fitWidth false
+view.page 999
+view.yRatio 0.5
+active 0
+
+stack Mismatched
+cursor 1
+entry 1 0 Start
+entry 999 0.5 Somewhere past the end

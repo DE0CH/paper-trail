@@ -27,7 +27,7 @@
 import type { HistStack, ProgressFile } from './types';
 
 export const PROGRESS_HEADER = 'paper-trail-session v1';
-export const PROGRESS_EXT = '.trail';
+export const PROGRESS_EXT = '.ptl';
 
 const line = (s: string) => s.replace(/[\r\n]+/g, ' ').trimEnd();
 

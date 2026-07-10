@@ -27,7 +27,7 @@ src/core/                    framework-agnostic app core:
 src/ui/                      React components; subscribe to the controller
                              snapshot via useSyncExternalStore
 src/node/server.ts           static server for browser use (127.0.0.1 only)
-src/desktop/                 Electron shell: psr:// protocol, native menus,
+src/desktop/                 Electron shell: paper-trail:// protocol, native menus,
                              minimal contextBridge (menu actions only)
 src/test/e2e.ts              end-to-end suite        (npm test)
 src/test/perf.ts             performance profiler    (npm run perf)
@@ -46,7 +46,7 @@ npm run dev        # Vite dev server (hot reload) on :5173
 npm run build      # typecheck web (noEmit) + vite build → dist-web
                    # + tsc → build-node (server, electron, tests)
 npm start          # serve dist-web at http://127.0.0.1:8377
-npm run desktop    # Electron shell (loads dist-web over psr://)
+npm run desktop    # Electron shell (loads dist-web over paper-trail://)
 
 npm test           # e2e suite — needs `npm start` running
 npm run perf       # performance profile + limit search
@@ -58,10 +58,10 @@ session. It emulates a user: clicking PDF links, dragging dividers and
 text selections, pinch (ctrl+wheel) bursts, keyboard shortcuts — and
 asserts outcomes down to device-pixel-exact canvas geometry and
 pinch-release position deltas. Keep element ids/classes (`#stacksPanel`,
-`.pdfLink`, `.searchHl`, ...) and the `window.__psr` hooks stable; tests
+`.pdfLink`, `.searchHl`, ...) and the `window.__pt` hooks stable; tests
 depend on them.
 
-## Session file format (`.trail`)
+## Session file format (`.ptl`)
 
 Line-oriented plain text, one logical fact per line, free text always
 last on the line (no escaping; newlines are flattened on save). Designed

@@ -1,0 +1,21 @@
+paper-trail-session v1
+saved 2026-07-10T03:00:00.000Z
+pdf.name WStarCats.pdf
+pdf.relPath ../WStarCats.pdf
+pdf.fingerprint -
+pdf.size 547247
+view.scale 1.1
+view.fitWidth false
+view.page 9
+view.yRatio 0.25
+active 1
+
+stack Main line
+cursor 0
+entry 1 0 Start
+entry 4 0.5 Section 2
+
+stack SubDir
+cursor 1
+entry 1 0 Start
+entry 9 0.25 Theorem A

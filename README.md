@@ -9,7 +9,10 @@ jump on a **reading trail**, so you can always pop back to the exact spot
 you left, branch off side explorations, and save the whole thing to a
 file you can come back to (or keep in git next to the paper).
 
-![Following references, popping back, branching into a new trail, and marking a spot](docs/media/demo.gif)
+**[▶ Watch the demo](docs/media/demo.mp4)** — following references, popping
+back, jumping around the history, and branching into a new trail:
+
+[![Demo video](docs/media/main.png)](docs/media/demo.mp4)
 
 <p align="center">
   <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after branching with cmd+click">
@@ -22,7 +25,7 @@ file you can come back to (or keep in git next to the paper).
   (a Chromium-based browser — Chrome, Edge, Brave — is needed for saving
   session files)
 - **Or download the desktop app** (native menus, works offline):
-  grab the `.dmg` (macOS, universal) or installer (Windows) from the
+  grab the `.dmg` (macOS) or installer (Windows) from the
   [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
   The builds are currently unsigned — on macOS, right-click → Open the
   first time.
@@ -59,7 +62,7 @@ resize by dragging their edges — each keeps its own width.
 ## Saving your place: reading sessions
 
 **Save session** (`Cmd/Ctrl+S`) writes everything — all trails, position,
-zoom — to a small plain-text file (`<pdf>.trail`) wherever you choose. It
+zoom — to a small plain-text file (`<pdf>.ptl`) wherever you choose. It
 diffs cleanly, so versioning it in git alongside the paper works well.
 
 - Open the PDF first and use **Load session…**, or open the session file
@@ -69,8 +72,7 @@ diffs cleanly, so versioning it in git alongside the paper works well.
   button means unsaved changes, and closing warns if anything is unsaved.
 - Opened a different PDF than the session was saved with? A banner says
   so; **Use this PDF** adopts it. Got a revised version of the paper?
-  **⇄ Replace PDF** swaps the file and keeps your whole reading history
-  (undoable).
+  **⇄ Replace PDF** swaps the file and keeps your whole reading history.
 
 ## Keyboard shortcuts
 

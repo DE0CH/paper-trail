@@ -3,8 +3,8 @@
 
 import type { RecentEntry, SerializedState } from './types';
 
-const LS_PREFIX = 'psr:doc:';
-const UI_KEY = 'psr:ui';
+const LS_PREFIX = 'pt:doc:';
+const UI_KEY = 'pt:ui';
 
 export const Store = {
   saveDoc(fp: string, data: SerializedState): void {
@@ -49,7 +49,7 @@ export function saveUI(patch: UiPrefs): void {
 
 // ---------- IndexedDB (recents + file handles) ----------
 
-const DB_NAME = 'psr';
+const DB_NAME = 'paper-trail';
 const DB_VERSION = 1;
 const RECENTS = 'recents';
 

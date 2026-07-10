@@ -470,6 +470,10 @@ export class Viewer {
         });
         el.addEventListener('mouseenter', () => this.cb.onLinkHover?.(info, true));
         el.addEventListener('mouseleave', () => this.cb.onLinkHover?.(info, false));
+        // expose the destination page (used by tooling/tests)
+        void this.resolveDest(a.dest).then((pos) => {
+          if (pos && el.isConnected) el.dataset.destPage = String(pos.page);
+        });
       } else {
         continue;
       }

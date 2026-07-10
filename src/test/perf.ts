@@ -39,7 +39,7 @@ interface Metrics {
 async function measure(page: Page, stacks: number, perStack: number): Promise<Metrics> {
   return page.evaluate(async (cfg) => {
     interface Entry { label: string; pos: { page: number; yRatio: number } }
-    interface Psr {
+    interface Pt {
       hist: {
         load(d: unknown): boolean;
         serialize(): unknown;
@@ -49,7 +49,7 @@ async function measure(page: Page, stacks: number, perStack: number): Promise<Me
       controller: { undoHist(): void; redoHist(): void };
       jumpVia(pos: { page: number; yRatio: number }, label: string): void;
     }
-    const psr = (window as never as { __psr: Psr }).__psr;
+    const pt = (window as never as { __pt: Pt }).__pt;
     const raf = () => new Promise((r) => requestAnimationFrame(r));
 
     // Seed the state in one load() (a single emit).
@@ -64,7 +64,7 @@ async function measure(page: Page, stacks: number, perStack: number): Promise<Me
       }
       seeded.push({ id: s + 1, name: `Stack ${s}`, index: entries.length - 1, entries });
     }
-    psr.hist.load({ v: 3, activeId: 1, nameCounter: cfg.stacks + 1, stacks: seeded });
+    pt.hist.load({ v: 3, activeId: 1, nameCounter: cfg.stacks + 1, stacks: seeded });
     await raf();
 
     const timed = (fn: () => void): number => {
@@ -75,16 +75,16 @@ async function measure(page: Page, stacks: number, perStack: number): Promise<Me
 
     // (a) one undo snapshot: serialize() is exactly what recordUndo copies
     let serialize = 0;
-    for (let i = 0; i < 10; i++) serialize += timed(() => psr.hist.serialize());
+    for (let i = 0; i < 10; i++) serialize += timed(() => pt.hist.serialize());
     serialize /= 10;
 
     // (b) localStorage persistence of the same state (the app catches
     // quota errors; ~5MB states exceed the browser quota)
-    const json = JSON.stringify(psr.hist.serialize());
+    const json = JSON.stringify(pt.hist.serialize());
     let persist = -1;
     try {
-      persist = timed(() => localStorage.setItem('psr:perf-probe', json));
-      localStorage.removeItem('psr:perf-probe');
+      persist = timed(() => localStorage.setItem('pt:perf-probe', json));
+      localStorage.removeItem('pt:perf-probe');
     } catch { /* quota exceeded */ }
 
     // (c) full user-visible operations, averaged (includes React render,
@@ -93,7 +93,7 @@ async function measure(page: Page, stacks: number, perStack: number): Promise<Me
     let visit = 0;
     for (let i = 0; i < OPS; i++) {
       const t0 = performance.now();
-      psr.jumpVia({ page: 2 + (i % 3), yRatio: 0.5 }, `perf probe ${i}`);
+      pt.jumpVia({ page: 2 + (i % 3), yRatio: 0.5 }, `perf probe ${i}`);
       await raf();
       visit += performance.now() - t0;
     }
@@ -102,7 +102,7 @@ async function measure(page: Page, stacks: number, perStack: number): Promise<Me
     let undo = 0;
     for (let i = 0; i < OPS; i++) {
       const t0 = performance.now();
-      psr.controller.undoHist();
+      pt.controller.undoHist();
       await raf();
       undo += performance.now() - t0;
     }
@@ -111,13 +111,13 @@ async function measure(page: Page, stacks: number, perStack: number): Promise<Me
     let redo = 0;
     for (let i = 0; i < OPS; i++) {
       const t0 = performance.now();
-      psr.controller.redoHist();
+      pt.controller.redoHist();
       await raf();
       redo += performance.now() - t0;
     }
     redo /= OPS;
 
-    const fork = timed(() => psr.hist.fork({ label: 'fork probe', pos: { page: 1, yRatio: 0 } }));
+    const fork = timed(() => pt.hist.fork({ label: 'fork probe', pos: { page: 1, yRatio: 0 } }));
 
     return {
       totalEntries: cfg.stacks * cfg.perStack,
@@ -145,10 +145,10 @@ async function measureUndoHeap(page: Page): Promise<number> {
   };
   const before = await gcAndUsage();
   await page.evaluate(() => {
-    interface Psr { hist: { visit(e: unknown): unknown } }
-    const psr = (window as never as { __psr: Psr }).__psr;
+    interface Pt { hist: { visit(e: unknown): unknown } }
+    const pt = (window as never as { __pt: Pt }).__pt;
     for (let i = 0; i < 50; i++) {
-      psr.hist.visit({ label: `fill ${i}`, pos: { page: 1, yRatio: 0 } });
+      pt.hist.visit({ label: `fill ${i}`, pos: { page: 1, yRatio: 0 } });
     }
   });
   const after = await gcAndUsage();
@@ -162,16 +162,16 @@ async function cpuProfile(page: Page): Promise<string[]> {
   await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
   await cdp.send('Profiler.start');
   await page.evaluate(async () => {
-    interface Psr {
+    interface Pt {
       controller: { undoHist(): void; redoHist(): void };
       jumpVia(pos: { page: number; yRatio: number }, label: string): void;
     }
-    const psr = (window as never as { __psr: Psr }).__psr;
+    const pt = (window as never as { __pt: Pt }).__pt;
     const raf = () => new Promise((r) => requestAnimationFrame(r));
     for (let i = 0; i < 20; i++) {
-      psr.jumpVia({ page: 2, yRatio: 0.5 }, `profiled ${i}`);
+      pt.jumpVia({ page: 2, yRatio: 0.5 }, `profiled ${i}`);
       await raf();
-      psr.controller.undoHist();
+      pt.controller.undoHist();
       await raf();
     }
   });
@@ -231,7 +231,7 @@ async function run(): Promise<void> {
       await page.goto(BASE + '/');
       await page.evaluate(() => {
         Object.keys(localStorage)
-          .filter((k) => k.startsWith('psr:'))
+          .filter((k) => k.startsWith('pt:'))
           .forEach((k) => localStorage.removeItem(k));
       });
       await page.goto(BASE + '/?file=sample/WStarCats.pdf');
@@ -278,8 +278,8 @@ async function run(): Promise<void> {
           stacks: [{ id: 1, name: 'x', index: 0, entries: Array.from({ length: n }, entry) }],
         });
         try {
-          localStorage.setItem('psr:quota-probe', s);
-          localStorage.removeItem('psr:quota-probe');
+          localStorage.setItem('pt:quota-probe', s);
+          localStorage.removeItem('pt:quota-probe');
           return true;
         } catch {
           return false;
@@ -299,22 +299,22 @@ async function run(): Promise<void> {
     let softAt = 0;
     for (const n of [2_000, 5_000, 10_000, 20_000, 40_000, 80_000]) {
       const ms = await page.evaluate(async (count) => {
-        interface Psr {
+        interface Pt {
           hist: { load(d: unknown): boolean };
           jumpVia(pos: { page: number; yRatio: number }, label: string): void;
         }
-        const psr = (window as never as { __psr: Psr }).__psr;
+        const pt = (window as never as { __pt: Pt }).__pt;
         const entries = Array.from({ length: count }, (_, i) => ({
           label: `Lemma ${i} probe entry with a plausible label`,
           pos: { page: 1 + (i % 40), yRatio: (i % 100) / 100 },
         }));
-        psr.hist.load({
+        pt.hist.load({
           v: 3, activeId: 1, nameCounter: 2,
           stacks: [{ id: 1, name: 'big', index: count - 1, entries }],
         });
         await new Promise((r) => requestAnimationFrame(r));
         const t0 = performance.now();
-        psr.jumpVia({ page: 2, yRatio: 0.5 }, 'probe');
+        pt.jumpVia({ page: 2, yRatio: 0.5 }, 'probe');
         await new Promise((r) => requestAnimationFrame(r));
         return performance.now() - t0;
       }, n);

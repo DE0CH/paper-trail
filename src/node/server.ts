@@ -18,7 +18,7 @@ export const MIME: Record<string, string> = {
   '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json',
-  '.trail': 'text/plain; charset=utf-8',
+  '.ptl': 'text/plain; charset=utf-8',
   '.pdf': 'application/pdf',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',

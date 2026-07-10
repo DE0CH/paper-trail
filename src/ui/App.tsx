@@ -108,7 +108,7 @@ export default function App() {
 
   // Native menu actions when running inside the Electron desktop shell.
   useEffect(() => {
-    window.psrDesktop?.onMenu((action) => {
+    window.ptDesktop?.onMenu((action) => {
       switch (action) {
         case 'open': void controller.pickFile(); break;
         case 'save': controller.saveProgressSafe(); break;

@@ -3,8 +3,8 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-contextBridge.exposeInMainWorld('psrDesktop', {
+contextBridge.exposeInMainWorld('ptDesktop', {
   onMenu: (cb: (action: string) => void) => {
-    ipcRenderer.on('psr-menu', (_event, action: string) => cb(action));
+    ipcRenderer.on('pt-menu', (_event, action: string) => cb(action));
   },
 });
