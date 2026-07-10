@@ -25,6 +25,9 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
+
+      - name: Generate the test-fixture PDF
+        run: node build-node/test/fixture.js
       - name: Run e2e suite against the built app
         shell: bash
         run: |
@@ -62,6 +65,9 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+      - name: Generate the test-fixture PDF
+        run: node build-node/test/fixture.js
 
       - name: Run e2e suite against the built app
         shell: bash

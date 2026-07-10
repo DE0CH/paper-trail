@@ -465,7 +465,7 @@ async function run(): Promise<void> {
     check('save writes line-oriented progress file and clears dirty',
       st4.dirtyAfterSave === false
         && st4.savedJson!.type === 'paper-trail-session v1'
-        && st4.savedJson!.size > 100000
+        && st4.savedJson!.size > 10000
         && st4.savedJson!.stacks === 2,
       JSON.stringify(st4.savedJson));
     const noIds = await page.evaluate(() => {

@@ -14,7 +14,8 @@
     "media": "node build-node/test/media.js",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never",
-    "icons": "node build-node/test/icons.js"
+    "icons": "node build-node/test/icons.js",
+    "pretest": "node build-node/test/fixture.js"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",
