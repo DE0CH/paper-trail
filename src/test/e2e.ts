@@ -684,8 +684,8 @@ async function run(): Promise<void> {
     check('canvas stays at device resolution at high zoom', sh.ratio >= 1.9 && sh.exact,
       JSON.stringify(sh));
 
-    // --- trackpad pinch (ctrl+wheel) re-renders at the new scale instead
-    // of magnifying pixels ---
+    // --- trackpad pinch (ctrl+wheel): smooth CSS feedback during the
+    // gesture, crisp re-render on commit, never a blank page ---
     const pinch = await retina.evaluate(async () => {
       const psr = (window as never as {
         __psr: { viewer: { scale: number; setScale(s: number, o?: unknown): void } };
@@ -694,18 +694,30 @@ async function run(): Promise<void> {
       await new Promise((r) => setTimeout(r, 400));
       const before = psr.viewer.scale;
       const target = document.getElementById('viewerContainer')!;
+      const viewerEl = document.getElementById('viewer')!;
+      let liveTransform = '';
       for (let i = 0; i < 5; i++) {
         target.dispatchEvent(new WheelEvent('wheel', {
           ctrlKey: true, deltaY: -40, clientX: 700, clientY: 450,
           bubbles: true, cancelable: true,
         }));
+        liveTransform = viewerEl.style.transform; // instant feedback?
         await new Promise((r) => setTimeout(r, 40));
       }
+      const midGesture = /scale\(/.test(liveTransform);
+      await new Promise((r) => setTimeout(r, 500)); // commit fires
+      const committed = viewerEl.style.transform === '';
+      // placeholder canvas must exist immediately after a scale change
+      psr.viewer.setScale(psr.viewer.scale * 1.3);
+      const placeholder = !!document.querySelector('.page[data-page="1"] canvas');
       await new Promise((r) => setTimeout(r, 800));
-      return { before, after: psr.viewer.scale };
+      return { before, after: psr.viewer.scale, midGesture, committed, placeholder };
     });
-    check('pinch (ctrl+wheel) zooms by re-rendering',
-      pinch.after > pinch.before * 1.5, JSON.stringify(pinch));
+    check('pinch gives instant visual feedback and commits a re-render',
+      pinch.after > pinch.before * 1.5 && pinch.midGesture && pinch.committed,
+      JSON.stringify(pinch));
+    check('scale changes keep a placeholder canvas (no blank flash)',
+      pinch.placeholder === true);
     await retina.waitForSelector('.page canvas', { timeout: 10000 });
     await retina.waitForTimeout(600);
     sh = await sharpness();

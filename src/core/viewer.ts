@@ -207,7 +207,7 @@ export class Viewer {
     this.fitWidth = fitWidth;
     this.viewerEl.style.setProperty('--scale-factor', String(scale));
     for (const p of this.pages) {
-      this.destroyPage(p);
+      this.markStale(p); // keep the old canvas stretched until the new render
       this.sizeShell(p);
     }
     if (anchor) {
@@ -463,6 +463,52 @@ export class Viewer {
     p.textLayerDiv = null;
     p.annotDiv = null;
     p.textReady = null;
+  }
+
+  /**
+   * Invalidate a page for re-rendering but keep its old canvas stretched to
+   * the new size as a placeholder (temporarily blurry instead of blank), so
+   * zooming never flashes white. The fresh render replaces it atomically.
+   */
+  private markStale(p: PageRec): void {
+    if (!p.rendered) return;
+    p.rendered = false;
+    p.renderedScale = 0;
+    p.textLayerDiv?.remove(); // absolute px positions don't rescale
+    p.annotDiv?.remove();
+    p.textLayerDiv = null;
+    p.annotDiv = null;
+    p.textReady = null;
+    p.el.querySelectorAll('.searchHl').forEach((e) => e.remove());
+    if (p.canvas) {
+      const dpr = this.effectiveDpr(p);
+      const { cssW, cssH } = this.exactPageCss(p, dpr);
+      p.canvas.style.width = `${cssW}px`;
+      p.canvas.style.height = `${cssH}px`;
+    }
+  }
+
+  // ----- smooth (visual) zoom: cheap CSS transform during the gesture,
+  // crisp re-render on commit -----
+
+  beginVisualZoom(): void {
+    this.viewerEl.style.transformOrigin = '0 0';
+    this.viewerEl.style.willChange = 'transform';
+  }
+
+  /** Scale the already-rendered content by k, keeping `anchor` stationary. */
+  applyVisualZoom(k: number, anchor: { x: number; y: number }): void {
+    const rect = this.container.getBoundingClientRect();
+    const cx = this.container.scrollLeft + (anchor.x - rect.left);
+    const cy = this.container.scrollTop + (anchor.y - rect.top);
+    this.viewerEl.style.transform =
+      `translate(${cx * (1 - k)}px, ${cy * (1 - k)}px) scale(${k})`;
+  }
+
+  commitVisualZoom(targetScale: number, anchor: { x: number; y: number }): void {
+    this.viewerEl.style.transform = '';
+    this.viewerEl.style.willChange = '';
+    this.setScale(targetScale, { anchor });
   }
 
   /**

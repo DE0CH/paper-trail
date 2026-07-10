@@ -79,7 +79,8 @@ export class Controller {
   private scrollTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private toastTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private pinchTimer: ReturnType<typeof setTimeout> | 0 = 0;
-  private pinchTarget: number | null = null;
+  private pinchStartScale: number | null = null;
+  private pinchFactor = 1;
   private pinchAnchor: { x: number; y: number } | null = null;
 
   private listeners = new Set<() => void>();
@@ -116,24 +117,35 @@ export class Controller {
       this.notify();
     };
 
-    // Trackpad pinch (and ctrl+wheel) zooms the document by re-rendering at
-    // the new scale, anchored at the cursor — instead of the browser's
-    // pixel-magnifying visual zoom.
+    // Trackpad pinch (and ctrl+wheel) zooms the document smoothly: every
+    // event updates a cheap CSS transform on the already-rendered pages
+    // (instant feedback, anchored at the cursor); when the gesture pauses,
+    // the target scale is re-rendered crisply — with the old canvases kept
+    // as stretched placeholders, so nothing ever flashes blank.
     container.addEventListener('wheel', (e) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
       if (!this.docOpen) return;
-      const base = this.pinchTarget ?? this.viewer.scale;
-      this.pinchTarget = Math.min(Math.max(base * Math.exp(-e.deltaY * 0.01), 0.25), 5);
       this.pinchAnchor = { x: e.clientX, y: e.clientY };
-      if (!this.pinchTimer) {
-        this.pinchTimer = setTimeout(() => {
-          this.pinchTimer = 0;
-          if (this.pinchTarget == null || !this.pinchAnchor) return;
-          this.viewer.setScale(this.pinchTarget, { anchor: this.pinchAnchor });
-          this.pinchTarget = null;
-        }, 120);
+      if (this.pinchStartScale == null) {
+        this.pinchStartScale = this.viewer.scale;
+        this.pinchFactor = 1;
+        this.viewer.beginVisualZoom();
       }
+      const start = this.pinchStartScale;
+      this.pinchFactor = Math.min(
+        Math.max(this.pinchFactor * Math.exp(-e.deltaY * 0.01), 0.25 / start),
+        5 / start,
+      );
+      this.viewer.applyVisualZoom(this.pinchFactor, this.pinchAnchor);
+      clearTimeout(this.pinchTimer);
+      this.pinchTimer = setTimeout(() => {
+        this.pinchTimer = 0;
+        if (this.pinchStartScale == null || !this.pinchAnchor) return;
+        const target = this.pinchStartScale * this.pinchFactor;
+        this.pinchStartScale = null;
+        this.viewer.commitVisualZoom(target, this.pinchAnchor);
+      }, 180);
     }, { passive: false });
 
     window.addEventListener('beforeunload', (e) => {
