@@ -529,6 +529,24 @@ export class Controller {
   }
 
   /**
+   * Start a brand-new reading session for the open PDF: fresh history
+   * (undoable, like Clear History) and detached from any session file —
+   * saving prompts for a new .ptl, exactly like a freshly opened PDF.
+   * The previous session file on disk is left untouched.
+   */
+  newSession(): void {
+    if (!this.docOpen) return;
+    clearTimeout(this.fileSaveTimer); // no auto-save into the old file
+    this.hist.clearAll();
+    this.hist.updateCurrentPos(this.viewer.currentPosition());
+    this.session.handle = null;
+    this.session.dirty = true; // unsaved until the user picks a new file
+    this.mismatch_ = null;
+    this.showToast('New session \u2014 Save session writes a new file');
+    this.notify();
+  }
+
+  /**
    * Undo the last history mutation (overwrite, fork, close, rename, clear)
    * — or, when the most recent action was a PDF replacement, undo that.
    */

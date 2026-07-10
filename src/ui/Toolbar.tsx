@@ -72,6 +72,11 @@ export default function Toolbar({
         onClick={() => void controller.requestLoadSession()}>
         Load session&hellip;
       </button>
+      <button id="btnNewSession" className={btn} disabled={!snap.docOpen}
+        title="Start a fresh reading session for this PDF — your current session file stays untouched"
+        onClick={() => controller.newSession()}>
+        New session
+      </button>
       <span className="text-dim max-w-55 overflow-hidden text-ellipsis ml-1">{snap.docTitle}</span>
       {snap.docOpen && (
         <button
