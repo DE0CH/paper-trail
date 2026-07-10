@@ -47,8 +47,10 @@
       "dist-web/**"
     ],
     "mac": {
-      "identity": null,
       "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "notarize": true,
       "target": [
         {
           "target": "zip",

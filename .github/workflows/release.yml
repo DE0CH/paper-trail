@@ -95,8 +95,51 @@ jobs:
           done
           node build-node/test/e2e.js
 
-      - name: Package (unsigned)
+      # Signing/notarization secrets — ALL REQUIRED; the job fails rather
+      # than ship an unsigned build:
+      #   MAC_CERT_P12        base64 of the Developer ID Application .p12
+      #   MAC_CERT_PASSWORD   password of that .p12
+      #   APPLE_API_KEY_P8    App Store Connect API key (.p8 contents)
+      #   APPLE_API_KEY_ID    its Key ID
+      #   APPLE_API_ISSUER    its Issuer ID
+      # (Under act, pass them with --secret-file.)
+      - name: Require signing secrets and set up notarization key
+        env:
+          CERT: ${{ secrets.MAC_CERT_P12 }}
+          CERT_PW: ${{ secrets.MAC_CERT_PASSWORD }}
+          P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          missing=""
+          [ -z "$CERT" ] && missing="$missing MAC_CERT_P12"
+          [ -z "$CERT_PW" ] && missing="$missing MAC_CERT_PASSWORD"
+          [ -z "$P8" ] && missing="$missing APPLE_API_KEY_P8"
+          [ -z "$KEY_ID" ] && missing="$missing APPLE_API_KEY_ID"
+          [ -z "$ISSUER" ] && missing="$missing APPLE_API_ISSUER"
+          if [ -n "$missing" ]; then
+            echo "::error::missing signing secrets:$missing — refusing to build an unsigned release"
+            exit 1
+          fi
+          KEY_DIR="$RUNNER_TEMP/apple-keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$P8" > "$KEY_DIR/AuthKey.p8"
+          echo "APPLE_API_KEY=$KEY_DIR/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_ID=$KEY_ID" >> "$GITHUB_ENV"
+          echo "APPLE_API_ISSUER=$ISSUER" >> "$GITHUB_ENV"
+
+      - name: Package (signed + notarized)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         run: npx electron-builder --mac --publish never
+
+      - name: Verify signature and notarization
+        run: |
+          APP=$(find dist-electron -maxdepth 3 -name "Paper Trail.app" | head -1)
+          codesign --verify --deep --strict "$APP"
+          codesign -dv "$APP" 2>&1 | grep "Authority=Developer ID Application"
+          spctl -a -t exec -vv "$APP"
 
       - name: Smoke-test the packaged app
         run: |
