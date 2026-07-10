@@ -132,21 +132,39 @@ async function run(): Promise<void> {
   text(16, 'Providing an equivariant map d1 -> d2 is equivalent to a transformation.', 72, H - 300, 11);
   text(29, 'The construction is manifestly equivariant in both variables.', 72, H - 300, 11);
 
-  // ---- outline (7 entries) ----
-  const titles: Array<[string, number]> = [
-    ['Introduction', 0], ['Hilbert spaces and algebras', 2],
-    ['W-categories: basics', 4], ['The inner product', 8],
-    ['Positive cones', 15], ['Small W-categories', 21], ['Tensor categories', 28],
+  // ---- outline (7 top-level entries, two of them with subsections — the
+  // collapsible-outline tests depend on this shape) ----
+  const titles: Array<[string, number, Array<[string, number]>]> = [
+    ['Introduction', 0, []],
+    ['Hilbert spaces and algebras', 2, []],
+    ['W-categories: basics', 4, []],
+    ['The inner product', 8, [['Definition and examples', 9], ['Functoriality', 12]]],
+    ['Positive cones', 15, []],
+    ['Small W-categories', 21, [['Generators', 24]]],
+    ['Tensor categories', 28, []],
   ];
   const outlinesRef = doc.context.nextRef();
   const itemRefs = titles.map(() => doc.context.nextRef());
-  titles.forEach(([title, pageIdx], i) => {
+  titles.forEach(([title, pageIdx, kids], i) => {
+    const kidRefs = kids.map(() => doc.context.nextRef());
+    kids.forEach(([kTitle, kPage], k) => {
+      doc.context.assign(kidRefs[k], doc.context.obj({
+        Title: PDFString.of(kTitle),
+        Parent: itemRefs[i],
+        Dest: [pages[kPage].ref, 'XYZ', null, H, null],
+        ...(k > 0 ? { Prev: kidRefs[k - 1] } : {}),
+        ...(k < kidRefs.length - 1 ? { Next: kidRefs[k + 1] } : {}),
+      }));
+    });
     doc.context.assign(itemRefs[i], doc.context.obj({
       Title: PDFString.of(title),
       Parent: outlinesRef,
       Dest: [pages[pageIdx].ref, 'XYZ', null, H, null],
       ...(i > 0 ? { Prev: itemRefs[i - 1] } : {}),
       ...(i < titles.length - 1 ? { Next: itemRefs[i + 1] } : {}),
+      ...(kidRefs.length
+        ? { First: kidRefs[0], Last: kidRefs[kidRefs.length - 1], Count: kidRefs.length }
+        : {}),
     }));
   });
   doc.context.assign(outlinesRef, doc.context.obj({

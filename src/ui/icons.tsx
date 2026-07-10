@@ -62,6 +62,11 @@ export const IconClose = ({ size = 12 }: { size?: number }) => (
 export const IconPrev = () => <Svg size={14} d={['m18 15-6-6-6 6']} />;
 export const IconNext = () => <Svg size={14} d={['m6 9 6 6 6-6']} />;
 
+/** Expand/collapse chevron (rotate with CSS for the open state). */
+export const IconChevron = ({ size = 10 }: { size?: number }) => (
+  <Svg size={size} d={['m9 18 6-6-6-6']} />
+);
+
 /** Rename (pencil). */
 export const IconEdit = ({ size = 11 }: { size?: number }) => (
   <Svg size={size} d={[

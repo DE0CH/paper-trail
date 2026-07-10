@@ -1,27 +1,47 @@
 // Leftmost closable panel: document outline and page thumbnails.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { controller, type Snapshot } from '../core/controller';
 import type { OutlineNode } from '../core/types';
-import { IconClose } from './icons';
+import { IconChevron, IconClose } from './icons';
 
 export type NavTab = 'outline' | 'pages';
+
+function OutlineItem({ n }: { n: OutlineNode }) {
+  const [open, setOpen] = useState(true);
+  const hasKids = n.children.length > 0;
+  return (
+    <li>
+      <div
+        className="outlineItem flex items-center px-1.5 py-0.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
+        title={n.title}
+        onClick={(e) => void controller.outlineJump(n, e.metaKey || e.ctrlKey)}
+      >
+        {hasKids ? (
+          <button
+            className={`outlineToggle flex-none inline-flex items-center justify-center w-4 h-4 -ml-1 mr-0.5 rounded text-dim hover:text-fgapp hover:bg-[#45474e] cursor-pointer transition-transform ${open ? 'rotate-90' : ''}`}
+            title={open ? 'Collapse section' : 'Expand section'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+          >
+            <IconChevron />
+          </button>
+        ) : (
+          <span className="w-4 mr-0.5 -ml-1 flex-none" />
+        )}
+        <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{n.title}</span>
+      </div>
+      {hasKids && open && <OutlineTree nodes={n.children} />}
+    </li>
+  );
+}
 
 function OutlineTree({ nodes }: { nodes: OutlineNode[] }) {
   return (
     <ul className="outlineTree list-none m-0 pl-3">
-      {nodes.map((n, i) => (
-        <li key={i}>
-          <div
-            className="outlineItem px-1.5 py-0.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp overflow-hidden text-ellipsis whitespace-nowrap"
-            title={n.title}
-            onClick={(e) => void controller.outlineJump(n, e.metaKey || e.ctrlKey)}
-          >
-            {n.title}
-          </div>
-          {n.children.length > 0 && <OutlineTree nodes={n.children} />}
-        </li>
-      ))}
+      {nodes.map((n, i) => <OutlineItem key={i} n={n} />)}
     </ul>
   );
 }

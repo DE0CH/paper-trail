@@ -264,6 +264,26 @@ async function run(): Promise<void> {
     check('nav panel is visible by default', navVisible === 1);
     const outlineItems = await page.locator('#navCol .outlineItem').count();
     check('outline lives in the nav panel', outlineItems > 3, `${outlineItems} items`);
+
+    // --- collapsible outline: chevrons only on sections with children ---
+    const toggles = await page.locator('#navCol .outlineToggle').count();
+    check('outline shows toggles exactly on sections with subsections',
+      toggles === 2 && outlineItems === 10, `${toggles} toggles, ${outlineItems} items`);
+    await page.locator('#navCol .outlineToggle').first().click();
+    const afterCollapse = await page.locator('#navCol .outlineItem').count();
+    check('collapsing a section hides its subsections',
+      afterCollapse === outlineItems - 2, `${afterCollapse} items`);
+    // the collapsed section still jumps when its own row is clicked
+    await page.locator('#navCol .outlineItem', { hasText: 'The inner product' }).click();
+    await page.waitForTimeout(400);
+    const outlineJumpPage = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.viewer.currentPosition().page);
+    check('collapsed section row still navigates', outlineJumpPage === 9,
+      `page ${outlineJumpPage}`);
+    await page.locator('#navCol .outlineToggle').first().click();
+    const afterExpand = await page.locator('#navCol .outlineItem').count();
+    check('expanding restores the subsections', afterExpand === outlineItems,
+      `${afterExpand} items`);
     await page.click('#navCol button:has-text("Pages")');
     await page.waitForSelector('#thumbList [data-thumb-page="1"] canvas', { timeout: 15000 });
     check('page thumbnails render lazily', true);
