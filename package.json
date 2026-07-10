@@ -10,7 +10,8 @@
     "start": "node build-node/node/server.js",
     "desktop": "electron build-node/desktop/main.js",
     "test": "node build-node/test/e2e.js",
-    "perf": "node build-node/test/perf.js"
+    "perf": "node build-node/test/perf.js",
+    "media": "node build-node/test/media.js"
   },
   "dependencies": {
     "pdfjs-dist": "^6.1.200",

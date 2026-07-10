@@ -9,6 +9,13 @@ jump on a **reading trail**, so you can always pop back to the exact spot
 you left, branch off side explorations, and save the whole thing to a
 file you can come back to (or keep in git next to the paper).
 
+![Following references, popping back, branching into a new trail, and marking a spot](docs/media/demo.gif)
+
+<p align="center">
+  <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after branching with cmd+click">
+  <img src="docs/media/preview.png" width="49%" alt="Hovering a reference previews its destination at page width">
+</p>
+
 ## Quick start
 
 You need [Node.js](https://nodejs.org). The desktop app works out of the
