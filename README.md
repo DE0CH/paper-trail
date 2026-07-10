@@ -127,6 +127,30 @@ desktop/launch.py            build-if-needed + serve + open browser
 desktop/make_app.py          generate the macOS .app bundle
 ```
 
+## Performance (undo/redo snapshots)
+
+Undo is implemented the simplest possible way: every structural mutation
+deep-copies the entire state (all stacks) onto a bounded (50) undo stack.
+`npm run perf` measures whether that holds up (headless, real app,
+DevTools-protocol CPU profile + GC-fenced heap):
+
+| scenario | entries | state | snapshot | visit | undo | undo-stack heap |
+| --- | --- | --- | --- | --- | --- | --- |
+| realistic (5×50) | 250 | 22 KB | 0.01 ms | 1 frame | 1 frame | 0.4 MB |
+| heavy reader (20×200) | 4 000 | 355 KB | 0.03 ms | 1 frame | 1 frame | 3.8 MB |
+| many stacks (200×50) | 10 000 | 0.9 MB | 0.14 ms | 1 frame | 1 frame | 9 MB |
+| deep stacks (10×2000) | 20 000 | 1.8 MB | 0.23 ms | ~1.5 frames | 1 frame | 20 MB |
+| absurd (20×5000) | 100 000 | 9 MB | 0.57 ms | ~3 frames | ~2 frames | 91 MB |
+
+("1 frame" = completes within a single 60 Hz frame.) The CPU profile of the
+worst case shows the time goes to DOM/React rendering of the huge history
+list and `scrollIntoView` — the snapshot copy itself never exceeds 0.6 ms
+and does not appear among the top functions. Conclusion: the naive
+full-copy undo is the right data structure; no cleverness warranted at any
+plausible reading workload. Known absurd-scale edges: states beyond ~5 MB
+exceed the localStorage quota (persistence is skipped gracefully) and the
+unvirtualized history list is the first thing to actually slow down.
+
 ## Notes / limitations
 
 - Search matches cannot span line breaks (page text is the raw extraction

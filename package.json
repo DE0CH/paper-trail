@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json && vite build && tsc -p tsconfig.node.json",
     "start": "node build-node/node/server.js",
     "desktop": "electron build-node/desktop/main.js",
-    "test": "node build-node/test/e2e.js"
+    "test": "node build-node/test/e2e.js",
+    "perf": "node build-node/test/perf.js"
   },
   "dependencies": {
     "pdfjs-dist": "^6.1.200",
