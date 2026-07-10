@@ -524,6 +524,26 @@ async function run(): Promise<void> {
       document.getElementById('toast')?.textContent ?? '');
     check('missing PDF asks the user for it',
       /open the PDF manually/i.test(missToast), missToast);
+    // The sidebar previews the loaded session while waiting for the PDF,
+    // and clicking around must be inert (no anchor corruption).
+    const preview = await page.evaluate(() => {
+      const psr = (window as never as {
+        __psr: PsrHooks & { controller: { histEntryClick(i: number): void } };
+      }).__psr;
+      const stackNames = [...document.querySelectorAll('#stacksPanel .stackRow .name')]
+        .map((el) => el.textContent);
+      const entryLabels = [...document.querySelectorAll('#historyPanel .histItem .lbl')]
+        .map((el) => el.textContent);
+      const before = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
+      psr.controller.histEntryClick(0); // must be a no-op without a PDF
+      const after = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
+      return { stackNames, entryLabels, inert: before === after };
+    });
+    check('pending session previews its trails in the sidebar',
+      preview.stackNames.includes('Recovered session')
+        && preview.entryLabels.includes('Lemma recovery-marker'),
+      JSON.stringify(preview));
+    check('preview clicks are inert and do not corrupt anchors', preview.inert);
     await page.evaluate(async () => {
       const psr = (window as never as {
         __psr: { controller: { openFile(f: File): Promise<void> } };

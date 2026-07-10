@@ -412,20 +412,21 @@ export class Controller {
   }
 
   goBack(): void {
-    if (!this.hist.canBack()) return;
+    if (!this.docOpen || !this.hist.canBack()) return;
     this.hist.updateCurrentPos(this.viewer.currentPosition());
     const n = this.hist.back();
     if (n) this.viewer.scrollTo(n.pos);
   }
 
   goForward(): void {
-    if (!this.hist.canForward()) return;
+    if (!this.docOpen || !this.hist.canForward()) return;
     this.hist.updateCurrentPos(this.viewer.currentPosition());
     const n = this.hist.forward();
     if (n) this.viewer.scrollTo(n.pos);
   }
 
   histEntryClick(i: number): void {
+    if (!this.docOpen) return; // read-only preview while a session waits for its PDF
     if (i === this.hist.active.index) {
       this.viewer.scrollTo(this.hist.current.pos);
       return;
@@ -437,22 +438,30 @@ export class Controller {
 
   stackSwitch(id: number): void {
     if (id === this.hist.activeId) return;
+    if (!this.docOpen) {
+      // preview mode: allow browsing trails, but never touch positions
+      this.hist.switchStack(id);
+      return;
+    }
     this.hist.updateCurrentPos(this.viewer.currentPosition());
     const n = this.hist.switchStack(id);
     if (n) this.viewer.scrollTo(n.pos);
   }
 
   stackClose(id: number): void {
+    if (!this.docOpen) return;
     const wasActive = this.hist.closeStack(id);
     if (wasActive && this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
   }
 
   stackRename(id: number, name: string): void {
+    if (!this.docOpen) return;
     this.hist.renameStack(id, name);
     this.notify(); // restore the row even if the name was rejected
   }
 
   entryRename(i: number, label: string): void {
+    if (!this.docOpen) return;
     this.hist.renameEntry(i, label);
     this.notify();
   }
@@ -466,12 +475,12 @@ export class Controller {
 
   /** Undo the last history mutation (overwrite, fork, close, rename, clear). */
   undoHist(): void {
-    if (!this.hist.undo()) return;
+    if (!this.docOpen || !this.hist.undo()) return;
     if (this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
   }
 
   redoHist(): void {
-    if (!this.hist.redo()) return;
+    if (!this.docOpen || !this.hist.redo()) return;
     if (this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
   }
 
@@ -654,6 +663,7 @@ export class Controller {
   discardPendingSession(): void {
     this.pendingProgress = null;
     this.pendingProgressHandle = null;
+    this.hist.reset(); // clear the sidebar preview
     this.notify();
   }
 
@@ -705,8 +715,21 @@ export class Controller {
         console.warn('stored PDF handle no longer valid', e);
       }
     }
+    this.enterPendingState(json, progressHandle);
+  }
+
+  /**
+   * Session-first waiting state: show the session's trails and history in
+   * the sidebar right away (read-only preview — no document to navigate),
+   * so the user sees the file has loaded.
+   */
+  private enterPendingState(
+    json: ProgressFile,
+    progressHandle: FileSystemFileHandle | null,
+  ): void {
     this.pendingProgress = { json };
     this.pendingProgressHandle = progressHandle;
+    this.hist.load(json.state.hist);
     this.notify();
   }
 
@@ -770,6 +793,7 @@ export class Controller {
 
   /** Re-anchor a history entry to the current reading position. */
   entrySetPos(i: number): void {
+    if (!this.docOpen) return;
     this.hist.setEntryPos(i, this.viewer.currentPosition());
   }
 
@@ -924,7 +948,7 @@ export class Controller {
         const pr = await fetch(pdfUrl);
         if (!pr.ok) {
           // Degrade gracefully: keep the session and ask for the PDF.
-          this.pendingProgress = { json };
+          this.enterPendingState(json, null);
           this.showToast(
             `Couldn't find the PDF (${json.pdf.relPath}) next to the progress file `
             + '\u2014 open the PDF manually to restore the session',
