@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
 import NavPanel, { type NavTab } from './NavPanel';
-import { IconAnchor, IconClose } from './icons';
+import { IconAnchor, IconClose, IconEdit } from './icons';
 
-const rowBase = 'flex items-center gap-1.5 px-1.5 py-0.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
+const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
+// The rename input occupies the exact box of the name span (same font,
+// fixed height, padding compensated by negative margin) so nothing shifts.
+const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[13px] border border-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
 
 function StackRow({ snap, id, name, count }: {
@@ -22,14 +25,14 @@ function StackRow({ snap, id, name, count }: {
   const active = id === snap.activeStackId;
   return (
     <div
-      className={`stackRow ${rowBase} ${active ? rowActive : ''}`}
+      className={`stackRow group ${rowBase} ${active ? rowActive : ''}`}
       title={`${name} — double-click to rename`}
       onClick={() => controller.stackSwitch(id)}
     >
       {editing ? (
         <input
           ref={inputRef}
-          className="rename flex-1 min-w-0 bg-inputbg text-fgapp border border-accent rounded px-1 outline-none"
+          className={renameCls}
           defaultValue={name}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
@@ -56,6 +59,18 @@ function StackRow({ snap, id, name, count }: {
         >
           {name}
         </span>
+      )}
+      {!editing && (
+        <button
+          className="editName flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+          title="Rename this trail"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing(true);
+          }}
+        >
+          <IconEdit />
+        </button>
       )}
       <span className="cnt text-[11px] leading-none text-dim flex-none">{count}</span>
       <button
@@ -93,7 +108,7 @@ function HistRow({ label, page, current, index }: {
       {editing ? (
         <input
           ref={inputRef}
-          className="rename flex-1 min-w-0 bg-inputbg text-fgapp border border-accent rounded px-1 outline-none"
+          className={renameCls}
           defaultValue={label}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
@@ -120,6 +135,18 @@ function HistRow({ label, page, current, index }: {
         >
           {label}
         </span>
+      )}
+      {!editing && (
+        <button
+          className="editName flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+          title="Rename this entry"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing(true);
+          }}
+        >
+          <IconEdit />
+        </button>
       )}
       <button
         className="setPos flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"

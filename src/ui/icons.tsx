@@ -61,3 +61,10 @@ export const IconClose = ({ size = 12 }: { size?: number }) => (
 
 export const IconPrev = () => <Svg size={14} d={['m18 15-6-6-6 6']} />;
 export const IconNext = () => <Svg size={14} d={['m6 9 6 6 6-6']} />;
+
+/** Rename (pencil). */
+export const IconEdit = ({ size = 11 }: { size?: number }) => (
+  <Svg size={size} d={[
+    'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z',
+  ]} />
+);
