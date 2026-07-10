@@ -16,11 +16,11 @@ you were actually reading. PDF Stack Reader records every jump you make
 - **Cmd/Ctrl+click** (or middle-click) a link to **fork**: the whole history
   up to the cursor is copied into a new stack — so unlike a browser tab
   opened with cmd+click, back still works there — and the new stack is saved
-  in the sidebar's stack list. Switch between stacks freely; close them when
-  done;
+  in the sidebar's stack list (renamable, closable, switchable);
 - click any entry in the History panel to move the cursor there;
-- hover any internal link for ~⅓s to get a popup preview of its destination
-  without jumping at all.
+- hover an internal link for ~⅓s to get a page-width popup preview of its
+  destination, aligned with the PDF; move the cursor into it to scroll it,
+  and drag its bottom edge to resize.
 
 Entries are labelled from the text around the link ("Lemma 3.16", "(7.2)", ...)
 plus the destination page. History, zoom, and position are restored per
@@ -29,57 +29,70 @@ document when you reopen it.
 ## Reading-progress files
 
 Your full reading state (all stacks, cursor, zoom, exact position) can be
-saved to a JSON file at a location and name you choose (`Save` button or
-`Cmd/Ctrl+S`; suggested name `<pdf>.psr.json`). The file stores a relative
-reference to the PDF, so keeping the pair side by side makes it portable.
+saved to a file at a location and name you choose (`Save` button or
+`Cmd/Ctrl+S`; suggested name `<pdf>.psr`). The format is a line-oriented
+plain-text format (one history entry per line) designed to produce small,
+semantically clear git diffs. The file stores a relative reference to the
+PDF, so keeping the pair side by side makes it portable.
 
-- **Open a plain PDF**: the tab warns about unsaved reading progress when
+- **Open a plain PDF**: the app warns about unsaved reading progress when
   you close it. Once you save to a file, the session is bound to it.
 - **Open a progress file** (Open button, drag & drop, or
-  `?file=path/to/x.psr.json`): the PDF is located automatically (a
-  previously granted file handle, the relative path when served over HTTP,
-  or one picker prompt), the state is restored, and from then on progress
-  **auto-saves continuously** to that file — so closing the tab never warns
-  unless a save is still pending or failed.
+  `?file=path/to/x.psr`): the PDF is located automatically (a previously
+  granted file handle, the relative path when served over HTTP, or one
+  picker prompt), the state is restored, and from then on progress
+  **auto-saves continuously** to that file — so closing never warns unless
+  a save is still pending or failed.
 
-Saving/auto-saving to files uses the File System Access API and needs a
-Chromium-based browser; everything else works anywhere.
+Saving/auto-saving to files uses the File System Access API (Chromium-based
+browsers and the desktop app); everything else works anywhere.
 
-## Running as a web app
+## Stack
 
-Requires Node (any recent version). No dependencies, no build step
-(pdf.js is vendored in `vendor/`).
+TypeScript throughout. React + Vite + Tailwind CSS for the UI; the pdf.js
+(`pdfjs-dist`) rendering core is an imperative, typed module behind a thin
+controller the UI subscribes to. Electron for the desktop shell. Python for
+the helper scripts. No hand-written vendored code.
 
-```sh
-node server.js          # http://127.0.0.1:8377
-node server.js 9000     # custom port
-```
-
-Open the URL in a browser, then open a PDF with the Open button, drag & drop,
-or `?file=<path under this folder>`.
-
-## Running as a desktop app
-
-The full desktop shell (Electron) has native menus — File (Open, Save
-Progress), Edit, View (zoom, sidebar, fullscreen), History (Back/Forward),
-Window — and turns the unsaved-progress warning into a native dialog:
+## Develop / run as a web app
 
 ```sh
-npm install        # once, pulls electron as a dev dependency
-npm run desktop
+npm install
+npm run dev          # Vite dev server (hot reload)
+
+npm run build        # typecheck + build web app and node/desktop/test code
+npm start            # serve the built app at http://127.0.0.1:8377
+python3 desktop/launch.py   # build-if-needed + serve + open browser
 ```
 
-The shell just serves the unchanged web app on an ephemeral localhost port;
-menu items dispatch to the same in-app functions, and the web app keeps
-working in any normal browser.
+Open a PDF with the Open button, drag & drop, or `?file=sample/....pdf`.
 
-There is also a dependency-free lightweight wrapper (Chromium `--app` mode,
-no menus):
+## Desktop app
 
 ```sh
-./desktop/launch.sh
-./desktop/make-app.sh   # creates dist/PDF Stack Reader.app (double-clickable)
+npm run build
+npm run desktop              # Electron shell
+python3 desktop/make_app.py  # dist/PDF Stack Reader.app (double-clickable)
 ```
+
+The shell serves the built web app over a custom `psr://` protocol and adds
+native menus — File (Open `Cmd+O`, Save Progress `Cmd+S`), Edit, View (zoom,
+fit, sidebar, fullscreen), History (Back `Cmd+[`, Forward `Cmd+]`), Window —
+and shows the unsaved-progress warning as a native dialog. The web app
+itself is unchanged and keeps working in any normal browser.
+
+## Tests
+
+```sh
+npm run build && npm start   # in one terminal
+npm test                     # in another
+```
+
+Headless end-to-end suite (playwright-core driving a separate headless
+Edge/Chrome with its own profile — it never touches your browsing session):
+rendering, labelled link jumps, exact-position back/forward, forking, panel
+resizing at the extremes, hover preview geometry, search highlights, and
+progress-file save/restore round trips.
 
 ## Keyboard shortcuts
 
@@ -98,17 +111,15 @@ no menus):
 ## Project layout
 
 ```
-index.html, style.css   UI shell
-js/viewer.js            pdf.js rendering: lazy pages, text layer, links, zoom
-js/history.js           list of history stacks (data structure + panel UI)
-js/search.js            full-text search with precise highlight overlays
-js/store.js             localStorage state + IndexedDB recents/file handles
-js/preview.js           hover preview popup of link destinations
-js/main.js              wiring, outline, keyboard, open/drop/persistence
-server.js               dependency-free static server (binds 127.0.0.1 only)
-test/e2e.mjs            headless end-to-end tests (npm test, needs server up)
-desktop/                desktop-app wrapper scripts
-vendor/                 pinned pdf.js (pdfjs-dist 5.4.149)
+index.html, vite.config.ts   Vite entry
+src/core/                    typed app core: viewer (pdf.js), history stacks,
+                             search, hover preview, persistence, controller
+src/ui/                      React components (Tailwind)
+src/node/server.ts           static server for browser use (127.0.0.1 only)
+src/desktop/                 Electron shell (custom psr:// protocol, menus)
+src/test/e2e.ts              headless end-to-end suite
+desktop/launch.py            build-if-needed + serve + open browser
+desktop/make_app.py          generate the macOS .app bundle
 ```
 
 ## Notes / limitations

@@ -5,48 +5,69 @@
 // offsets can be mapped onto the text layer's text nodes with a TreeWalker
 // and turned into precise highlight rectangles via Range.getClientRects().
 
+import type { Viewer, PageRec } from './viewer';
+
+export interface Match {
+  page: number;
+  start: number;
+  end: number;
+}
+
+interface NodeSpan {
+  node: Text;
+  start: number;
+  end: number;
+}
+
 export class SearchController {
-  constructor(viewer) {
+  viewer: Viewer;
+  query = '';
+  matches: Match[] = [];
+  index = -1;
+  private pageTexts: string[] | null = null;
+  private buildPromise: Promise<void> | null = null;
+
+  constructor(viewer: Viewer) {
     this.viewer = viewer;
-    this.reset();
   }
 
-  reset() {
+  reset(): void {
     this.query = '';
     this.matches = [];
     this.index = -1;
     this.pageTexts = null;
-    this._buildPromise = null;
+    this.buildPromise = null;
   }
 
-  async _buildText() {
+  private async buildText(): Promise<void> {
     if (this.pageTexts) return;
-    if (!this._buildPromise) {
-      this._buildPromise = (async () => {
+    if (!this.buildPromise) {
+      this.buildPromise = (async () => {
         const doc = this.viewer.doc;
-        const texts = [];
+        if (!doc) return;
+        const texts: string[] = [];
         for (let i = 1; i <= doc.numPages; i++) {
           const page = await doc.getPage(i);
           const tc = await page.getTextContent();
           let s = '';
           for (const item of tc.items) {
-            if (typeof item.str === 'string') s += item.str;
+            if ('str' in item && typeof item.str === 'string') s += item.str;
           }
           texts.push(s);
         }
         this.pageTexts = texts;
       })();
     }
-    await this._buildPromise;
+    await this.buildPromise;
   }
 
-  async setQuery(q) {
+  async setQuery(q: string): Promise<void> {
     this.query = q;
     this.matches = [];
     this.index = -1;
     if (!q || !this.viewer.doc) return;
-    await this._buildText();
-    if (this.query !== q) return; // superseded while building
+    await this.buildText();
+    if (this.query !== q || !this.pageTexts) return; // superseded while building
     const nq = q.toLowerCase();
     this.pageTexts.forEach((t, pi) => {
       const lt = t.toLowerCase();
@@ -58,7 +79,7 @@ export class SearchController {
     });
   }
 
-  step(dir) {
+  step(dir: 1 | -1): Match | null {
     if (!this.matches.length) return null;
     if (this.index === -1) {
       // start from the current viewport position
@@ -72,25 +93,26 @@ export class SearchController {
     return this.matches[this.index];
   }
 
-  countLabel() {
+  countLabel(): string {
     if (!this.query) return '';
     if (!this.matches.length) return '0 / 0';
     return `${this.index + 1} / ${this.matches.length}`;
   }
 
-  _textNodeMap(textLayerDiv) {
+  private textNodeMap(textLayerDiv: HTMLElement): NodeSpan[] {
     const walker = document.createTreeWalker(textLayerDiv, NodeFilter.SHOW_TEXT);
-    const nodes = [];
+    const nodes: NodeSpan[] = [];
     let off = 0;
-    let node;
+    let node: Node | null;
     while ((node = walker.nextNode())) {
-      nodes.push({ node, start: off, end: off + node.data.length });
-      off += node.data.length;
+      const t = node as Text;
+      nodes.push({ node: t, start: off, end: off + t.data.length });
+      off += t.data.length;
     }
     return nodes;
   }
 
-  _rangeForMatch(nodes, m) {
+  private rangeForMatch(nodes: NodeSpan[], m: Match): Range | null {
     const sN = nodes.find((n) => m.start >= n.start && m.start < n.end);
     const eN = nodes.find((n) => m.end > n.start && m.end <= n.end);
     if (!sN || !eN) return null;
@@ -100,8 +122,8 @@ export class SearchController {
     return range;
   }
 
-  // Draw highlight overlays for all matches on a rendered page.
-  async highlightPage(p, pageNumber) {
+  /** Draw highlight overlays for all matches on a rendered page. */
+  async highlightPage(p: PageRec, pageNumber: number): Promise<void> {
     if (!p.el) return;
     p.el.querySelectorAll('.searchHl').forEach((e) => e.remove());
     if (!this.query || !p.rendered) return;
@@ -110,31 +132,31 @@ export class SearchController {
     if (p.textReady) await p.textReady;
     if (!p.textLayerDiv || !p.rendered) return;
 
-    const nodes = this._textNodeMap(p.textLayerDiv);
+    const nodes = this.textNodeMap(p.textLayerDiv);
     const pageRect = p.el.getBoundingClientRect();
     for (const m of ms) {
-      const range = this._rangeForMatch(nodes, m);
+      const range = this.rangeForMatch(nodes, m);
       if (!range) continue;
       const selected = this.matches.indexOf(m) === this.index;
       for (const r of range.getClientRects()) {
         if (r.width < 0.5 || r.height < 0.5) continue;
         const d = document.createElement('div');
         d.className = 'searchHl' + (selected ? ' selected' : '');
-        d.style.left = (r.left - pageRect.left) + 'px';
-        d.style.top = (r.top - pageRect.top) + 'px';
-        d.style.width = r.width + 'px';
-        d.style.height = r.height + 'px';
+        d.style.left = `${r.left - pageRect.left}px`;
+        d.style.top = `${r.top - pageRect.top}px`;
+        d.style.width = `${r.width}px`;
+        d.style.height = `${r.height}px`;
         p.el.appendChild(d);
       }
     }
   }
 
-  // Vertical position (0..1) of a match within its page. Page must be rendered.
-  async matchYRatio(m) {
+  /** Vertical position (0..1) of a match within its page. */
+  async matchYRatio(m: Match): Promise<number> {
     const p = await this.viewer.ensurePage(m.page);
     if (!p || !p.textLayerDiv) return 0;
-    const nodes = this._textNodeMap(p.textLayerDiv);
-    const range = this._rangeForMatch(nodes, m);
+    const nodes = this.textNodeMap(p.textLayerDiv);
+    const range = this.rangeForMatch(nodes, m);
     if (!range) return 0;
     const rects = range.getClientRects();
     if (!rects.length) return 0;
@@ -142,7 +164,7 @@ export class SearchController {
     return Math.min(Math.max((rects[0].top - pageRect.top) / pageRect.height, 0), 1);
   }
 
-  async refreshHighlights() {
+  async refreshHighlights(): Promise<void> {
     for (const { p, pageNumber } of this.viewer.renderedPages()) {
       await this.highlightPage(p, pageNumber);
     }

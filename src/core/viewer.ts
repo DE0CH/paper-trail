@@ -1,54 +1,114 @@
 // PDF rendering: continuous scroll, lazy page rendering, text layer,
 // link annotations, zoom, and scale-independent positions.
 
-import * as pdfjsLib from '../vendor/pdf.min.mjs';
+import {
+  getDocument,
+  GlobalWorkerOptions,
+  TextLayer,
+  type PDFDocumentProxy,
+  type PDFPageProxy,
+  type PageViewport,
+} from 'pdfjs-dist';
+import type { Pos } from './types';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  new URL('../vendor/pdf.worker.min.mjs', import.meta.url).toString();
+GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 
-const RENDER_MARGIN = 900;   // px beyond viewport to pre-render
+const RENDER_MARGIN = 900; // px beyond viewport to pre-render
 const DESTROY_MARGIN = 3200; // px beyond viewport to tear pages down
-const PROBE_OFFSET = 8;      // px used to define "current position"
-const DEST_TOP_MARGIN = 48;  // px of context above a jump target (at scale 1)
+const PROBE_OFFSET = 8; // px used to define "current position"
+const DEST_TOP_MARGIN = 48; // px of context above a jump target (at scale 1)
+
+export interface PageRec {
+  page: PDFPageProxy;
+  vp1: PageViewport;
+  el: HTMLDivElement;
+  canvas: HTMLCanvasElement | null;
+  textLayerDiv: HTMLDivElement | null;
+  annotDiv: HTMLDivElement | null;
+  annots: Annot[] | null;
+  rendered: boolean;
+  renderedScale: number;
+  rendering: Promise<void> | null;
+  textReady: Promise<void> | null;
+  pinned: number;
+}
+
+interface Annot {
+  subtype: string;
+  rect: [number, number, number, number];
+  url?: string;
+  dest?: string | unknown[];
+}
+
+export interface LinkInfo {
+  dest: string | unknown[];
+  pageNumber: number;
+  linkEl: HTMLAnchorElement;
+  pageRec: PageRec;
+  fork?: boolean;
+}
+
+export interface ViewerCallbacks {
+  onLinkClick?: (info: LinkInfo) => void;
+  onLinkHover?: (info: LinkInfo, entering: boolean) => void;
+  onPageChange?: (page: number) => void;
+  onScroll?: () => void;
+  onPageRendered?: (p: PageRec, pageNumber: number) => void;
+  onScaleChange?: (scale: number) => void;
+}
 
 export class Viewer {
-  constructor(container, viewerEl, callbacks = {}) {
-    this.container = container; // scrolling element
+  container: HTMLElement;
+  viewerEl: HTMLElement;
+  cb: ViewerCallbacks;
+  doc: PDFDocumentProxy | null = null;
+  pages: PageRec[] = [];
+  scale = 1;
+  fitWidth = true;
+  private epoch = 0;
+  private suppressUntil = 0;
+  private lastPage = 0;
+  private scrollRaf = 0;
+
+  constructor(container: HTMLElement, viewerEl: HTMLElement, callbacks: ViewerCallbacks = {}) {
+    this.container = container;
     this.viewerEl = viewerEl;
     this.cb = callbacks;
-    this.doc = null;
-    this.pages = [];
-    this.scale = 1;
-    this.fitWidth = true;
-    this._epoch = 0;
-    this._suppressUntil = 0;
-    this._lastPage = 0;
-    this._scrollRaf = 0;
 
     container.addEventListener('scroll', () => {
-      if (this._scrollRaf) return;
-      this._scrollRaf = requestAnimationFrame(() => {
-        this._scrollRaf = 0;
-        this._onScroll();
+      if (this.scrollRaf) return;
+      this.scrollRaf = requestAnimationFrame(() => {
+        this.scrollRaf = 0;
+        this.onScrollEvent();
       });
     });
   }
 
-  async open(src) {
+  private loadingTask: ReturnType<typeof getDocument> | null = null;
+
+  async open(src: { data?: Uint8Array; url?: string }): Promise<PDFDocumentProxy | null> {
     this.close();
-    const epoch = ++this._epoch;
-    const doc = await pdfjsLib.getDocument(src).promise;
-    if (epoch !== this._epoch) { doc.destroy(); return null; }
+    const epoch = ++this.epoch;
+    const task = getDocument(src);
+    const doc = await task.promise;
+    if (epoch !== this.epoch) {
+      void task.destroy();
+      return null;
+    }
+    this.loadingTask = task;
     this.doc = doc;
     const n = doc.numPages;
     this.pages = [];
     for (let i = 1; i <= n; i++) {
       const page = await doc.getPage(i);
-      if (epoch !== this._epoch) return null;
+      if (epoch !== this.epoch) return null;
       this.pages.push({
         page,
         vp1: page.getViewport({ scale: 1 }),
-        el: null,
+        el: document.createElement('div'),
         canvas: null,
         textLayerDiv: null,
         annotDiv: null,
@@ -57,116 +117,134 @@ export class Viewer {
         renderedScale: 0,
         rendering: null,
         textReady: null,
+        pinned: 0,
       });
     }
     if (this.fitWidth) this.scale = this.computeFitScale();
-    this._buildShells();
-    this._updateVisible();
+    this.buildShells();
+    this.updateVisible();
     return doc;
   }
 
-  close() {
-    this._epoch++;
-    if (this.doc) { this.doc.destroy().catch(() => {}); }
+  close(): void {
+    this.epoch++;
+    if (this.loadingTask) this.loadingTask.destroy().catch(() => {});
+    this.loadingTask = null;
     this.doc = null;
     this.pages = [];
     this.viewerEl.replaceChildren();
-    this._lastPage = 0;
+    this.lastPage = 0;
   }
 
-  get numPages() { return this.pages.length; }
+  get numPages(): number {
+    return this.pages.length;
+  }
 
-  computeFitScale() {
+  computeFitScale(): number {
     const w = this.container.clientWidth - 36;
     const base = this.pages[0] ? this.pages[0].vp1.width : 612;
     return Math.min(Math.max(w / base, 0.25), 5);
   }
 
-  _buildShells() {
+  private buildShells(): void {
     this.viewerEl.replaceChildren();
     this.viewerEl.style.setProperty('--scale-factor', String(this.scale));
     for (let i = 0; i < this.pages.length; i++) {
       const p = this.pages[i];
-      const div = document.createElement('div');
-      div.className = 'page';
-      div.dataset.page = String(i + 1);
-      this._sizeShell(p, div);
-      p.el = div;
-      this.viewerEl.appendChild(div);
+      p.el.className = 'page';
+      p.el.dataset.page = String(i + 1);
+      this.sizeShell(p);
+      this.viewerEl.appendChild(p.el);
     }
   }
 
-  _sizeShell(p, el = p.el) {
-    el.style.width = Math.floor(p.vp1.width * this.scale) + 'px';
-    el.style.height = Math.floor(p.vp1.height * this.scale) + 'px';
-    el.style.setProperty('--scale-factor', String(this.scale));
+  private sizeShell(p: PageRec): void {
+    p.el.style.width = `${Math.floor(p.vp1.width * this.scale)}px`;
+    p.el.style.height = `${Math.floor(p.vp1.height * this.scale)}px`;
+    p.el.style.setProperty('--scale-factor', String(this.scale));
   }
 
-  setScale(scale, { fitWidth = false } = {}) {
+  setScale(scale: number, { fitWidth = false } = {}): void {
     scale = Math.min(Math.max(scale, 0.25), 5);
-    if (!this.pages.length) { this.scale = scale; this.fitWidth = fitWidth; return; }
+    if (!this.pages.length) {
+      this.scale = scale;
+      this.fitWidth = fitWidth;
+      return;
+    }
     const pos = this.currentPosition();
     this.scale = scale;
     this.fitWidth = fitWidth;
     this.viewerEl.style.setProperty('--scale-factor', String(scale));
     for (const p of this.pages) {
-      this._destroyPage(p);
-      this._sizeShell(p);
+      this.destroyPage(p);
+      this.sizeShell(p);
     }
     this.scrollTo(pos);
-    this._updateVisible();
-    if (this.cb.onScaleChange) this.cb.onScaleChange(scale);
+    this.updateVisible();
+    this.cb.onScaleChange?.(scale);
   }
 
   // ----- positions -----
 
-  currentPosition() {
+  currentPosition(): Pos {
     if (!this.pages.length) return { page: 1, yRatio: 0 };
     const probe = this.container.scrollTop + PROBE_OFFSET;
     let best = this.pages[0];
     let bestIdx = 0;
     for (let i = 0; i < this.pages.length; i++) {
       const el = this.pages[i].el;
-      if (el.offsetTop <= probe) { best = this.pages[i]; bestIdx = i; }
-      else break;
+      if (el.offsetTop <= probe) {
+        best = this.pages[i];
+        bestIdx = i;
+      } else break;
     }
     const h = best.el.offsetHeight || 1;
     const yRatio = Math.min(Math.max((probe - best.el.offsetTop) / h, 0), 1);
     return { page: bestIdx + 1, yRatio };
   }
 
-  scrollTo({ page, yRatio = 0 }, { suppressTracking = true } = {}) {
+  scrollTo({ page, yRatio = 0 }: Pos, { suppressTracking = true } = {}): void {
     const p = this.pages[page - 1];
     if (!p) return;
-    if (suppressTracking) this._suppress();
+    if (suppressTracking) this.suppress();
     this.container.scrollTop = p.el.offsetTop + yRatio * p.el.offsetHeight - PROBE_OFFSET;
-    this._updateVisible();
+    this.updateVisible();
   }
 
-  _suppress() { this._suppressUntil = Date.now() + 600; }
-  isTrackingSuppressed() { return Date.now() < this._suppressUntil; }
+  private suppress(): void {
+    this.suppressUntil = Date.now() + 600;
+  }
 
-  // Resolve a PDF destination (named string or explicit array) to a position.
-  async resolveDest(dest) {
+  isTrackingSuppressed(): boolean {
+    return Date.now() < this.suppressUntil;
+  }
+
+  /** Resolve a PDF destination (named string or explicit array) to a position. */
+  async resolveDest(dest: string | unknown[] | null | undefined): Promise<Pos | null> {
     try {
-      let d = dest;
-      if (typeof d === 'string') d = await this.doc.getDestination(d);
+      if (!this.doc || dest == null) return null;
+      let d: unknown[] | null = typeof dest === 'string' ? await this.doc.getDestination(dest) : dest;
       if (!Array.isArray(d)) return null;
-      let pageIndex;
+      let pageIndex: number;
       if (typeof d[0] === 'object' && d[0] !== null) {
-        pageIndex = await this.doc.getPageIndex(d[0]);
+        pageIndex = await this.doc.getPageIndex(d[0] as Parameters<PDFDocumentProxy['getPageIndex']>[0]);
       } else {
-        pageIndex = d[0];
+        pageIndex = d[0] as number;
       }
       const p = this.pages[pageIndex];
       if (!p) return null;
-      const type = d[1] && d[1].name;
-      let x = null; let y = null;
-      if (type === 'XYZ') { x = d[2]; y = d[3]; }
-      else if (type === 'FitH' || type === 'FitBH') { y = d[2]; }
+      const type = (d[1] as { name?: string } | undefined)?.name;
+      let x: number | null = null;
+      let y: number | null = null;
+      if (type === 'XYZ') {
+        x = d[2] as number | null;
+        y = d[3] as number | null;
+      } else if (type === 'FitH' || type === 'FitBH') {
+        y = d[2] as number | null;
+      }
       let yRatio = 0;
       if (typeof y === 'number') {
-        const [, vy] = p.vp1.convertToViewportPoint(x || 0, y);
+        const [, vy] = p.vp1.convertToViewportPoint(x ?? 0, y);
         yRatio = Math.min(Math.max((vy - DEST_TOP_MARGIN) / p.vp1.height, 0), 1);
       }
       return { page: pageIndex + 1, yRatio };
@@ -178,17 +256,17 @@ export class Viewer {
 
   // ----- rendering -----
 
-  _onScroll() {
-    this._updateVisible();
+  private onScrollEvent(): void {
+    this.updateVisible();
     const cur = this.currentPosition();
-    if (cur.page !== this._lastPage) {
-      this._lastPage = cur.page;
-      if (this.cb.onPageChange) this.cb.onPageChange(cur.page);
+    if (cur.page !== this.lastPage) {
+      this.lastPage = cur.page;
+      this.cb.onPageChange?.(cur.page);
     }
-    if (this.cb.onScroll) this.cb.onScroll();
+    this.cb.onScroll?.();
   }
 
-  _updateVisible() {
+  private updateVisible(): void {
     if (!this.pages.length) return;
     const st = this.container.scrollTop;
     const ch = this.container.clientHeight;
@@ -196,39 +274,42 @@ export class Viewer {
       const top = p.el.offsetTop;
       const bot = top + p.el.offsetHeight;
       if (bot >= st - RENDER_MARGIN && top <= st + ch + RENDER_MARGIN) {
-        this._ensureRendered(p);
+        this.ensureRendered(p);
       } else if (!p.pinned && (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN)) {
-        this._destroyPage(p);
+        this.destroyPage(p);
       }
     }
   }
 
-  _ensureRendered(p) {
+  private ensureRendered(p: PageRec): Promise<void> | null {
     if ((p.rendered && p.renderedScale === this.scale) || p.rendering) return p.rendering;
-    p.rendering = this._render(p)
+    p.rendering = this.render(p)
       .catch((e) => console.warn('render failed', e))
-      .finally(() => { p.rendering = null; });
+      .finally(() => {
+        p.rendering = null;
+      });
     return p.rendering;
   }
 
-  async _render(p) {
-    const epoch = this._epoch;
+  private async render(p: PageRec): Promise<void> {
+    const epoch = this.epoch;
     const scale = this.scale;
     const vp = p.page.getViewport({ scale });
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
-    // Cap canvas size (Safari/Chrome limits, memory).
+    // Cap canvas size (browser limits, memory).
     while (vp.width * dpr * vp.height * dpr > 16_000_000 && dpr > 0.5) dpr *= 0.8;
 
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(vp.width * dpr);
     canvas.height = Math.floor(vp.height * dpr);
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d', { alpha: false })!;
     await p.page.render({
+      canvas,
       canvasContext: ctx,
       viewport: vp,
       transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
     }).promise;
-    if (epoch !== this._epoch || scale !== this.scale) return;
+    if (epoch !== this.epoch || scale !== this.scale) return;
 
     const tld = document.createElement('div');
     tld.className = 'textLayer';
@@ -242,7 +323,7 @@ export class Viewer {
     p.renderedScale = scale;
 
     p.textReady = (async () => {
-      const tl = new pdfjsLib.TextLayer({
+      const tl = new TextLayer({
         textContentSource: p.page.streamTextContent(),
         container: tld,
         viewport: vp,
@@ -253,31 +334,31 @@ export class Viewer {
       tld.appendChild(eoc);
     })().catch((e) => console.warn('text layer failed', e));
 
-    await this._renderAnnotations(p, vp);
+    await this.renderAnnotations(p, vp);
     await p.textReady;
-    if (this.cb.onPageRendered) {
-      this.cb.onPageRendered(p, this.pages.indexOf(p) + 1);
-    }
+    this.cb.onPageRendered?.(p, this.pages.indexOf(p) + 1);
   }
 
-  async _renderAnnotations(p, vp) {
-    if (!p.annots) p.annots = await p.page.getAnnotations({ intent: 'display' });
+  private async renderAnnotations(p: PageRec, vp: PageViewport): Promise<void> {
+    if (!p.annots) p.annots = (await p.page.getAnnotations({ intent: 'display' })) as Annot[];
     if (!p.annotDiv) return;
     const pageNumber = this.pages.indexOf(p) + 1;
     for (const a of p.annots) {
       if (a.subtype !== 'Link') continue;
-      const r = vp.convertToViewportRectangle(a.rect);
-      const left = Math.min(r[0], r[2]);
-      const top = Math.min(r[1], r[3]);
-      const w = Math.abs(r[0] - r[2]);
-      const h = Math.abs(r[1] - r[3]);
+      // (convertToViewportRectangle was removed from pdf.js; do it manually)
+      const [x1, y1] = vp.convertToViewportPoint(a.rect[0], a.rect[1]);
+      const [x2, y2] = vp.convertToViewportPoint(a.rect[2], a.rect[3]);
+      const left = Math.min(x1, x2);
+      const top = Math.min(y1, y2);
+      const w = Math.abs(x1 - x2);
+      const h = Math.abs(y1 - y2);
       if (w < 1 || h < 1) continue;
       const el = document.createElement('a');
       el.className = 'pdfLink';
-      el.style.left = left + 'px';
-      el.style.top = top + 'px';
-      el.style.width = w + 'px';
-      el.style.height = h + 'px';
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
       if (a.url) {
         el.href = a.url;
         el.target = '_blank';
@@ -286,25 +367,19 @@ export class Viewer {
         el.classList.add('external');
       } else if (a.dest) {
         el.href = '#';
-        const info = { dest: a.dest, pageNumber, linkEl: el, pageRec: p };
+        const info: LinkInfo = { dest: a.dest, pageNumber, linkEl: el, pageRec: p };
         el.addEventListener('click', (ev) => {
           ev.preventDefault();
-          if (this.cb.onLinkClick) {
-            this.cb.onLinkClick({ ...info, fork: ev.metaKey || ev.ctrlKey });
-          }
+          this.cb.onLinkClick?.({ ...info, fork: ev.metaKey || ev.ctrlKey });
         });
         // Middle-click forks too (mirrors "open in new tab").
         el.addEventListener('auxclick', (ev) => {
           if (ev.button !== 1) return;
           ev.preventDefault();
-          if (this.cb.onLinkClick) this.cb.onLinkClick({ ...info, fork: true });
+          this.cb.onLinkClick?.({ ...info, fork: true });
         });
-        el.addEventListener('mouseenter', () => {
-          if (this.cb.onLinkHover) this.cb.onLinkHover(info, true);
-        });
-        el.addEventListener('mouseleave', () => {
-          if (this.cb.onLinkHover) this.cb.onLinkHover(info, false);
-        });
+        el.addEventListener('mouseenter', () => this.cb.onLinkHover?.(info, true));
+        el.addEventListener('mouseleave', () => this.cb.onLinkHover?.(info, false));
       } else {
         continue;
       }
@@ -312,7 +387,7 @@ export class Viewer {
     }
   }
 
-  _destroyPage(p) {
+  private destroyPage(p: PageRec): void {
     if (!p.rendered) return;
     p.el.replaceChildren();
     p.rendered = false;
@@ -323,44 +398,52 @@ export class Viewer {
     p.textReady = null;
   }
 
-  // Force a page to be rendered (without scrolling) and wait for text layer.
-  // The page is pinned briefly so the windowing logic doesn't destroy it
-  // while (or right after) the caller reads its DOM.
-  async ensurePage(pageNumber) {
+  /**
+   * Force a page to be rendered (without scrolling) and wait for its text
+   * layer. The page is pinned briefly so the windowing logic doesn't destroy
+   * it while (or right after) the caller reads its DOM.
+   */
+  async ensurePage(pageNumber: number): Promise<PageRec | null> {
     const p = this.pages[pageNumber - 1];
     if (!p) return null;
-    p.pinned = (p.pinned || 0) + 1;
+    p.pinned++;
     try {
-      let job = this._ensureRendered(p);
+      let job = this.ensureRendered(p);
       if (job) await job;
       if (p.textReady) await p.textReady;
       if (!p.rendered) {
         // Was destroyed by scrolling while rendering; retry once now pinned.
-        job = this._ensureRendered(p);
+        job = this.ensureRendered(p);
         if (job) await job;
         if (p.textReady) await p.textReady;
       }
       return p;
     } finally {
-      setTimeout(() => { p.pinned = Math.max(0, (p.pinned || 1) - 1); }, 2000);
+      setTimeout(() => {
+        p.pinned = Math.max(0, p.pinned - 1);
+      }, 2000);
     }
   }
 
-  renderedPages() {
+  renderedPages(): Array<{ p: PageRec; pageNumber: number }> {
     return this.pages
       .map((p, i) => ({ p, pageNumber: i + 1 }))
       .filter((x) => x.p.rendered);
   }
 
-  // Extract a human-readable label for a link ("Lemma 3.16", "(7.2)", ...)
-  // from the text layer underneath / around the link rectangle.
-  async getLinkLabel(p, linkEl) {
+  // ----- link labels -----
+
+  /**
+   * Extract a human-readable label for a link ("Lemma 3.16", "(7.2)", ...)
+   * from the text layer underneath / around the link rectangle.
+   */
+  async getLinkLabel(p: PageRec, linkEl: HTMLElement): Promise<string | null> {
     try {
       if (p.textReady) await p.textReady;
       if (!p.textLayerDiv) return null;
       const lr = linkEl.getBoundingClientRect();
-      let res = this._caretLabel(p, lr);
-      if (!res || !res.text) res = this._spanClipLabel(p, lr);
+      let res = this.caretLabel(p, lr);
+      if (!res || !res.text) res = this.spanClipLabel(p, lr);
       let { text, before } = res;
       text = text.replace(/\s+/g, ' ').trim();
       if (!text) return null;
@@ -379,13 +462,12 @@ export class Viewer {
       if (prefix === '(' && !text.startsWith('(')) {
         text = '(' + text + (text.endsWith(')') ? '' : ')');
       } else {
-        // A ")" that leaked in without a matching "(" doesn't belong to the label.
+        // A ")" that leaked in without a matching "(" doesn't belong.
         if (text.endsWith(')') && !text.includes('(')) text = text.slice(0, -1);
         if (prefix && KEY.test(prefix)) {
-          text = (prefix + ' ' + text).replace(/\s+/g, ' ').trim();
+          text = `${prefix} ${text}`.replace(/\s+/g, ' ').trim();
         }
       }
-      // Trim punctuation that leaked in at the edges.
       text = text.replace(/[,;:]$/, '');
       if (text.length > 48) text = text.slice(0, 47) + '\u2026';
       return text;
@@ -395,18 +477,24 @@ export class Viewer {
     }
   }
 
-  // Exact text under a rectangle via caret hit-testing (needs the rect to be
-  // inside the viewport, which is true for a link that was just clicked).
-  _caretLabel(p, lr) {
+  /**
+   * Exact text under a rectangle via caret hit-testing (needs the rect to be
+   * inside the viewport, which is true for a link that was just clicked).
+   */
+  private caretLabel(p: PageRec, lr: DOMRect): { text: string; before: string } | null {
     const midY = (lr.top + lr.bottom) / 2;
     if (midY < 0 || midY > window.innerHeight || lr.width < 1) return null;
-    const caretPos = (x, y) => {
-      if (document.caretPositionFromPoint) {
-        const c = document.caretPositionFromPoint(x, y);
+    const caretPos = (x: number, y: number): { node: Node; offset: number } | null => {
+      const docAny = document as Document & {
+        caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+        caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      };
+      if (docAny.caretPositionFromPoint) {
+        const c = docAny.caretPositionFromPoint(x, y);
         return c ? { node: c.offsetNode, offset: c.offset } : null;
       }
-      if (document.caretRangeFromPoint) {
-        const r = document.caretRangeFromPoint(x, y);
+      if (docAny.caretRangeFromPoint) {
+        const r = docAny.caretRangeFromPoint(x, y);
         return r ? { node: r.startContainer, offset: r.startOffset } : null;
       }
       return null;
@@ -419,7 +507,7 @@ export class Viewer {
       const start = caretPos(lr.left + 1, midY);
       const end = caretPos(Math.max(lr.left + 1, lr.right - 1), midY);
       if (!start || !end) return null;
-      if (!p.textLayerDiv.contains(start.node) || !p.textLayerDiv.contains(end.node)) return null;
+      if (!p.textLayerDiv!.contains(start.node) || !p.textLayerDiv!.contains(end.node)) return null;
       const range = document.createRange();
       try {
         range.setStart(start.node, start.offset);
@@ -429,7 +517,8 @@ export class Viewer {
       }
       if (range.collapsed && start.node === end.node) {
         // Very narrow link; take one character.
-        if (start.node.nodeType === Node.TEXT_NODE && start.offset < start.node.data.length) {
+        if (start.node.nodeType === Node.TEXT_NODE
+            && start.offset < (start.node as Text).data.length) {
           range.setEnd(start.node, start.offset + 1);
         }
       }
@@ -438,29 +527,33 @@ export class Viewer {
       const ec = range.endContainer;
       if (ec.nodeType === Node.TEXT_NODE) {
         let e = range.endOffset;
-        const data = ec.data;
+        const data = (ec as Text).data;
         while (e < data.length && /[0-9]/.test(data[e])) e++;
-        if (e < data.length && data[e] === '.' && /[0-9]/.test(data[e + 1] || '')) {
+        if (e < data.length && data[e] === '.' && /[0-9]/.test(data[e + 1] ?? '')) {
           e++;
           while (e < data.length && /[0-9]/.test(data[e])) e++;
         }
-        try { range.setEnd(ec, e); } catch { /* keep old end */ }
+        try {
+          range.setEnd(ec, e);
+        } catch { /* keep old end */ }
       }
       const before = start.node.nodeType === Node.TEXT_NODE
-        ? start.node.data.slice(0, start.offset)
+        ? (start.node as Text).data.slice(0, start.offset)
         : '';
       return { text: range.toString(), before };
     } finally {
-      if (p.annotDiv) p.annotDiv.style.pointerEvents = prevPE;
+      if (p.annotDiv && prevPE !== null) p.annotDiv.style.pointerEvents = prevPE;
     }
   }
 
-  // Fallback: approximate the covered substring of each intersecting span
-  // proportionally. Works off-screen, less precise.
-  _spanClipLabel(p, lr) {
+  /**
+   * Fallback: approximate the covered substring of each intersecting span
+   * proportionally. Works off-screen, less precise.
+   */
+  private spanClipLabel(p: PageRec, lr: DOMRect): { text: string; before: string } {
     let text = '';
     let before = '';
-    for (const span of p.textLayerDiv.querySelectorAll('span')) {
+    for (const span of p.textLayerDiv!.querySelectorAll('span')) {
       const s = span.textContent;
       if (!s) continue;
       const sr = span.getBoundingClientRect();

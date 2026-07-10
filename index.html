@@ -5,77 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PDF Stack Reader</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header id="toolbar">
-  <button id="btnSidebar" title="Toggle sidebar (t)">&#9776;</button>
-  <button id="btnOpen" title="Open a PDF or reading-progress file (o)">Open</button>
-  <button id="btnSave" title="Save reading progress to a file (Cmd/Ctrl+S)" disabled>Save</button>
-  <span id="docTitle"></span>
-  <span class="spacer"></span>
-
-  <button id="btnBack" title="Back — pop up the stack (Backspace / Alt+&larr;)" disabled>&larr;</button>
-  <button id="btnFwd" title="Forward — down again (Shift+Backspace / Alt+&rarr;)" disabled>&rarr;</button>
-  <span class="sep"></span>
-
-  <input id="pageInput" type="text" inputmode="numeric" title="Go to page" disabled>
-  <span id="pageCount">/ 0</span>
-  <span class="sep"></span>
-
-  <button id="btnZoomOut" title="Zoom out (-)">&minus;</button>
-  <span id="zoomLevel">100%</span>
-  <button id="btnZoomIn" title="Zoom in (+)">+</button>
-  <button id="btnFit" title="Fit width (0)">Fit</button>
-  <span class="sep"></span>
-
-  <input id="searchInput" type="text" placeholder="Search  ( / )" disabled>
-  <span id="searchCount"></span>
-  <button id="btnSearchPrev" title="Previous match (Shift+Enter)">&#9650;</button>
-  <button id="btnSearchNext" title="Next match (Enter)">&#9660;</button>
-</header>
-
-<div id="main">
-  <aside id="sidebar">
-    <div id="stacksCol">
-      <div id="stacksHeader">Stacks</div>
-      <div id="stacksPanel" class="panel"></div>
-    </div>
-    <div class="resizer" id="resizeStacks" title="Drag to resize"></div>
-    <div id="sideCol">
-      <div id="sideTabs">
-        <button data-tab="history" class="active">History</button>
-        <button data-tab="outline">Outline</button>
-        <span class="spacer"></span>
-        <button id="btnClearTree" title="Clear navigation history (all stacks)">clear</button>
-      </div>
-      <div id="historyPanel" class="panel"></div>
-      <div id="outlinePanel" class="panel hidden"></div>
-    </div>
-    <div class="resizer" id="resizeSidebar" title="Drag to resize"></div>
-  </aside>
-
-  <div id="viewerContainer" tabindex="0">
-    <div id="viewer"></div>
-    <div id="welcome">
-      <div class="box">
-        <h1>PDF Stack Reader</h1>
-        <p>A PDF reader that remembers <em>how</em> you got where you are.<br>
-        Every reference you follow is pushed onto a history stack, so you can<br>
-        dive many levels deep and pop back to the exact spot you left.<br>
-        Cmd-click a link to fork the whole history into a new stack.</p>
-        <button id="btnWelcomeOpen">Choose a PDF&hellip;</button>
-        <p class="hint">or drop a file anywhere</p>
-        <div id="recent"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="preview" class="hidden"><canvas></canvas><div class="previewPage"></div></div>
-<div id="dropOverlay" class="hidden">Drop PDF to open</div>
-<input type="file" id="fileInput" accept="application/pdf,.pdf,.json" hidden>
-
-<script type="module" src="js/main.js"></script>
+<div id="root"></div>
+<script type="module" src="/src/ui/main.tsx"></script>
 </body>
 </html>

@@ -1,16 +1,31 @@
 {
   "name": "pdf-stack-reader",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A PDF reader with a list of navigation history stacks: browser-style back/forward plus cmd+click forking.",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "desktop": "electron desktop/electron/main.cjs",
-    "test": "node test/e2e.mjs"
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build && tsc -p tsconfig.node.json",
+    "start": "node build-node/node/server.js",
+    "desktop": "electron build-node/desktop/main.js",
+    "test": "node build-node/test/e2e.js"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.1.200",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
     "electron": "^43.1.0",
-    "playwright-core": "^1.61.1"
+    "playwright-core": "^1.61.1",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4"
   }
 }
