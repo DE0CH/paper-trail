@@ -117,7 +117,7 @@ export default function NavPanel({
 }) {
   const tabBtn = (t: NavTab, label: string) => (
     <button
-      className={`px-2 py-2 text-[12.5px] cursor-pointer border-b-2 ${tab === t ? 'text-fgapp border-accent' : 'text-dim border-transparent'}`}
+      className={`inline-flex items-center h-full px-2 text-[12.5px] cursor-pointer border-b-2 border-t-2 border-t-transparent ${tab === t ? 'text-fgapp border-b-accent' : 'text-dim border-b-transparent'}`}
       onClick={() => onTab(t)}
     >
       {label}
@@ -126,13 +126,13 @@ export default function NavPanel({
 
   return (
     <div id="navCol" className="flex flex-col overflow-hidden border-r border-borderapp h-full">
-      <div className="flex items-center border-b border-borderapp px-1.5 flex-none">
+      <div className="flex items-stretch h-9 border-b border-borderapp px-1.5 flex-none">
         {tabBtn('outline', 'Outline')}
         {tabBtn('pages', 'Pages')}
         <span className="flex-1" />
         <button
           id="btnNavClose"
-          className="inline-flex items-center h-7 text-dim hover:text-fgapp cursor-pointer px-1.5"
+          className="inline-flex items-center self-center h-7 text-dim hover:text-fgapp cursor-pointer px-1.5"
           title="Close panel"
           onClick={onClose}
         >

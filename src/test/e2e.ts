@@ -121,6 +121,11 @@ async function run(): Promise<void> {
     await page.locator(LINK_SEL).nth(3).hover();
     try {
       await page.waitForSelector('#preview:not(.hidden)', { timeout: 4000 });
+      // pages render lazily into their holders
+      await page.waitForFunction(
+        () => !!document.querySelector('#preview .previewContent canvas'),
+        undefined, { timeout: 5000 },
+      );
       const pv = await page.evaluate(() => {
         const el = document.getElementById('preview')!;
         const c = el.querySelector('canvas')!;
@@ -143,6 +148,33 @@ async function run(): Promise<void> {
       check('preview is page-width and aligned with the PDF',
         pv.alignedLeft && pv.sameWidth && pv.scrollable,
         JSON.stringify({ alignedLeft: pv.alignedLeft, sameWidth: pv.sameWidth }));
+
+      // Regression: the preview spans the WHOLE document (one holder per
+      // page) and scrolling to the far end renders those pages too.
+      const span = await page.evaluate(async () => {
+        const scroller = document.querySelector('#preview .previewScroll')!;
+        const holders = document.querySelectorAll('#preview .previewPageHolder');
+        scroller.scrollTop = scroller.scrollHeight; // jump to the last page
+        await new Promise((r) => setTimeout(r, 600));
+        const last = holders[holders.length - 1]!;
+        return {
+          holders: holders.length,
+          lastRendered: !!last.querySelector('canvas'),
+          label: document.querySelector('#preview .previewPage')!.textContent,
+        };
+      });
+      check('preview scrolls through the entire document',
+        span.holders === 41 && span.lastRendered && /p\.\s*41/.test(span.label ?? ''),
+        JSON.stringify(span));
+
+      // Regression: preview canvases are device-pixel exact (no resample blur).
+      const sharp = await page.evaluate(() => {
+        const c = document.querySelector('#preview .previewPageHolder canvas') as HTMLCanvasElement;
+        const r = c.getBoundingClientRect();
+        return { backing: c.width, css: r.width, dpr: window.devicePixelRatio };
+      });
+      check('preview canvas is device-pixel exact',
+        Math.abs(sharp.backing / sharp.css - sharp.dpr) < 0.001, JSON.stringify(sharp));
     } catch {
       check('hover preview appears with rendered content', false, 'never became visible');
     }

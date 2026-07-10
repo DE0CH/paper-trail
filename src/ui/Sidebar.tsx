@@ -183,7 +183,7 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
-        <div className="text-dim text-[12.5px] px-2.5 py-2 border-b border-borderapp">Trails</div>
+        <div className="flex items-center h-9 flex-none text-dim text-[12.5px] px-2.5 border-b border-borderapp">Trails</div>
         <div id="stacksPanel" className="flex-1 overflow-auto p-1.5">
           {snap.stacks.map((s) => (
             <StackRow key={s.id} snap={snap} id={s.id} name={s.name} count={s.entries.length} />
@@ -203,8 +203,8 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden"
         style={{ width: widths.side, minWidth: widths.side }}
       >
-        <div className="flex items-center border-b border-borderapp px-1.5">
-          <span className="text-dim text-[12.5px] px-1 py-2">History</span>
+        <div className="flex items-center h-9 flex-none border-b border-borderapp px-1.5">
+          <span className="text-dim text-[12.5px] px-1">History</span>
           <span className="flex-1" />
           <button
             id="btnMark"
