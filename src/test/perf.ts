@@ -265,6 +265,74 @@ async function run(): Promise<void> {
       }
       await page.close();
     }
+
+    // ---- empirical limits: where does it actually stop being usable? ----
+    console.log('\nLimit search (hard = fails outright, soft = unusably slow):');
+    const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+
+    // Hard limit: localStorage quota for auto-resume state.
+    const quota = await page.evaluate(() => {
+      // grow a synthetic state until setItem fails
+      const entry = () => ({
+        label: 'Lemma probe entry with a plausible label',
+        pos: { page: 3, yRatio: 0.5 },
+      });
+      let lo = 0;
+      let hi = 400_000;
+      const fits = (n: number): boolean => {
+        const s = JSON.stringify({
+          stacks: [{ id: 1, name: 'x', index: 0, entries: Array.from({ length: n }, entry) }],
+        });
+        try {
+          localStorage.setItem('psr:quota-probe', s);
+          localStorage.removeItem('psr:quota-probe');
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      while (hi - lo > 2000) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (fits(mid)) lo = mid; else hi = mid;
+      }
+      return lo;
+    });
+    console.log(`  HARD  localStorage auto-resume stops working beyond ~${Math.round(quota / 1000)}k`
+      + ' total entries (browser quota; session FILES have no such limit)');
+
+    // Soft limit: visit latency vs entries in the ACTIVE stack (the history
+    // panel renders all of them).
+    let softAt = 0;
+    for (const n of [2_000, 5_000, 10_000, 20_000, 40_000, 80_000]) {
+      const ms = await page.evaluate(async (count) => {
+        interface Psr {
+          hist: { load(d: unknown): boolean };
+          jumpVia(pos: { page: number; yRatio: number }, label: string): void;
+        }
+        const psr = (window as never as { __psr: Psr }).__psr;
+        const entries = Array.from({ length: count }, (_, i) => ({
+          label: `Lemma ${i} probe entry with a plausible label`,
+          pos: { page: 1 + (i % 40), yRatio: (i % 100) / 100 },
+        }));
+        psr.hist.load({
+          v: 3, activeId: 1, nameCounter: 2,
+          stacks: [{ id: 1, name: 'big', index: count - 1, entries }],
+        });
+        await new Promise((r) => requestAnimationFrame(r));
+        const t0 = performance.now();
+        psr.jumpVia({ page: 2, yRatio: 0.5 }, 'probe');
+        await new Promise((r) => requestAnimationFrame(r));
+        return performance.now() - t0;
+      }, n);
+      console.log(`        active stack ${String(n).padStart(6)} entries -> visit ${ms.toFixed(0)}ms`);
+      if (ms > 100 && !softAt) softAt = n;
+    }
+    console.log(softAt
+      ? `  SOFT  interaction exceeds ~100ms (feels sluggish) around ${Math.round(softAt / 1000)}k entries in the active stack`
+      : '  SOFT  never exceeded 100ms in the tested range');
+    await page.close();
   } finally {
     await browser.close();
   }

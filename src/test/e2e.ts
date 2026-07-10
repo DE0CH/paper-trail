@@ -352,6 +352,35 @@ async function run(): Promise<void> {
     check('redo is cleared by a new action',
       stU.canRedoBefore === true && stU.redoClearedByNewAction === true);
 
+    // --- undo depth is capped at 50; the oldest snapshot is dropped ---
+    const capProbe = await page.evaluate(() => {
+      const psr = (window as never as {
+        __psr: PsrUndoHooks & { controller: { clearHistory(): void } };
+      }).__psr;
+      psr.controller.clearHistory(); // fresh single-entry stack (undoable itself)
+      const base = psr.hist.active.entries.length; // 1 ("Start")
+      for (let i = 0; i < 55; i++) {
+        psr.jumpVia({ page: 1 + (i % 5), yRatio: 0 }, `fill ${i}`);
+      }
+      let undos = 0;
+      while (undos < 200) {
+        psr.controller.undoHist();
+        undos++;
+        if (!(psr.hist as never as { canUndo(): boolean }).canUndo()) break;
+      }
+      const res = { base, undos, len: psr.hist.active.entries.length };
+      // restore a two-stack state for the checks further down
+      (psr.jumpVia as (p: unknown, l: string, f?: boolean) => void)(
+        { page: 2, yRatio: 0 }, 'branch', true,
+      );
+      return res;
+    });
+    // 55 pushes recorded 55 snapshots; the cap keeps the latest 50, so undo
+    // can rewind to the state after the 5th push (1 + 5 entries).
+    check('undo cap drops the oldest snapshots (50 deep)',
+      capProbe.undos === 50 && capProbe.len === capProbe.base + 5,
+      JSON.stringify(capProbe));
+
     // --- progress session: dirty flag + fake-handle save ---
     const st4 = await page.evaluate(async () => {
       const psr = (window as never as { __psr: PsrHooks }).__psr;

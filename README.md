@@ -147,9 +147,20 @@ worst case shows the time goes to DOM/React rendering of the huge history
 list and `scrollIntoView` — the snapshot copy itself never exceeds 0.6 ms
 and does not appear among the top functions. Conclusion: the naive
 full-copy undo is the right data structure; no cleverness warranted at any
-plausible reading workload. Known absurd-scale edges: states beyond ~5 MB
-exceed the localStorage quota (persistence is skipped gracefully) and the
-unvirtualized history list is the first thing to actually slow down.
+plausible reading workload.
+
+**Empirical limits** (measured by the same profiler; none are enforced):
+
+- **Hard**: auto-resume via localStorage stops working beyond **~63 000
+  total history entries** (browser quota; the app degrades gracefully by
+  skipping it). Session *files* have no such limit.
+- **Soft**: interactions exceed ~100 ms (start feeling sluggish) around
+  **~20 000 entries in the active trail** (2 000 → 21 ms, 10 000 → 61 ms,
+  20 000 → 140 ms, 80 000 → 618 ms); the cost is rendering the
+  unvirtualized history list, not the data structures.
+- **Undo**: depth is capped at **50 snapshots**; exceeding it silently
+  drops the oldest (verified by test). Undo history is in-memory only —
+  gone after reopening — and any new action clears redo.
 
 ## Notes / limitations
 
