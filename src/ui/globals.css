@@ -28,10 +28,16 @@ html, body, #root {
 
 .page {
   position: relative;
-  margin: 0 auto 14px;
+  /* The gap scales with the zoom, so the whole layout scales uniformly —
+     this keeps the smooth-zoom CSS transform and the committed layout in
+     exact agreement (constant gaps caused a position jump on release). */
+  margin: 0 auto calc(10px * var(--scale-factor, 1));
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
   direction: ltr;
+}
+#viewer {
+  padding-top: calc(12px * var(--scale-factor, 1));
 }
 /* page canvases size themselves exactly (backing / dpr) via inline styles */
 

@@ -285,7 +285,7 @@ export default function App() {
             tabIndex={0}
             className="relative flex-1 overflow-auto outline-none"
           >
-            <div ref={viewerRef} id="viewer" className="pt-4 pb-[60vh]" />
+            <div ref={viewerRef} id="viewer" className="pb-[60vh]" />
             <Welcome snap={snap} />
           </div>
         </div>

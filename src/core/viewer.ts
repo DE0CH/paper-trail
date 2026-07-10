@@ -197,11 +197,35 @@ export class Viewer {
       this.fitWidth = fitWidth;
       return;
     }
-    const ratio = scale / this.scale;
     const st = this.container.scrollTop;
     const sl = this.container.scrollLeft;
-    const rect = this.container.getBoundingClientRect();
     const pos = anchor ? null : this.currentPosition();
+
+    // Anchored zoom (pinch commit): capture the exact page-relative point
+    // under the cursor BEFORE relayout, so it can be restored exactly after
+    // — assuming uniform content scaling is not precise enough (rounding,
+    // clamped scroll) and caused visible jumps at gesture release.
+    let anchorRef: { idx: number; fy: number; fx: number; ax: number; ay: number } | null = null;
+    if (anchor && this.pages.length) {
+      const rect = this.container.getBoundingClientRect();
+      const ay = anchor.y - rect.top;
+      const ax = anchor.x - rect.left;
+      const cy = st + ay;
+      const cx = sl + ax;
+      let idx = 0;
+      for (let i = 0; i < this.pages.length; i++) {
+        if (this.pages[i].el.offsetTop <= cy) idx = i;
+        else break;
+      }
+      const el = this.pages[idx].el;
+      anchorRef = {
+        idx,
+        fy: (cy - el.offsetTop) / (el.offsetHeight || 1),
+        fx: (cx - el.offsetLeft) / (el.offsetWidth || 1),
+        ax,
+        ay,
+      };
+    }
 
     this.scale = scale;
     this.fitWidth = fitWidth;
@@ -210,14 +234,13 @@ export class Viewer {
       this.markStale(p); // keep the old canvas stretched until the new render
       this.sizeShell(p);
     }
-    if (anchor) {
-      // Pinch/ctrl+wheel zoom: keep the document point under the cursor
-      // (approximately) stationary.
-      const cy = anchor.y - rect.top;
-      const cx = anchor.x - rect.left;
+    if (anchorRef) {
+      const el = this.pages[anchorRef.idx].el;
       this.suppress();
-      this.container.scrollTop = (st + cy) * ratio - cy;
-      this.container.scrollLeft = (sl + cx) * ratio - cx;
+      this.container.scrollTop =
+        el.offsetTop + anchorRef.fy * el.offsetHeight - anchorRef.ay;
+      this.container.scrollLeft =
+        el.offsetLeft + anchorRef.fx * el.offsetWidth - anchorRef.ax;
     } else if (pos) {
       this.scrollTo(pos);
     }

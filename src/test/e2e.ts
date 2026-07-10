@@ -660,17 +660,27 @@ async function run(): Promise<void> {
     });
     await retina.goto(BASE + '/?file=sample/WStarCats.pdf');
     await retina.waitForSelector('.page[data-page="1"] canvas', { timeout: 20000 });
-    const sharpness = async () => retina.evaluate(() => {
-      const c = document.querySelector<HTMLCanvasElement>('.page[data-page="1"] canvas')!;
-      const r = c.getBoundingClientRect();
-      return {
-        backing: c.width,
-        css: r.width,
-        ratio: c.width / r.width,
-        // the bitmap must map exactly 1:1 onto device pixels
-        exact: Math.abs(c.width / parseFloat(c.style.width) - window.devicePixelRatio) < 1e-9,
-      };
-    });
+    const sharpness = async () => {
+      // wait until a freshly rendered (non-placeholder) canvas exists —
+      // stale canvases are intentionally kept stretched during re-renders
+      await retina.waitForFunction(() =>
+        [...document.querySelectorAll<HTMLCanvasElement>('.page canvas')].some(
+          (c) => Math.abs(c.width / parseFloat(c.style.width) - window.devicePixelRatio) < 1e-9,
+        ), undefined, { timeout: 15000 });
+      return retina.evaluate(() => {
+        const c = [...document.querySelectorAll<HTMLCanvasElement>('.page canvas')].find(
+          (x) => Math.abs(x.width / parseFloat(x.style.width) - window.devicePixelRatio) < 1e-9,
+        )!;
+        const r = c.getBoundingClientRect();
+        return {
+          backing: c.width,
+          css: r.width,
+          ratio: c.width / r.width,
+          // the bitmap must map exactly 1:1 onto device pixels
+          exact: Math.abs(c.width / parseFloat(c.style.width) - window.devicePixelRatio) < 1e-9,
+        };
+      });
+    };
     let sh = await sharpness();
     check('canvas renders at device resolution (fit zoom)', sh.ratio >= 1.9 && sh.exact,
       JSON.stringify(sh));
@@ -718,6 +728,40 @@ async function run(): Promise<void> {
       JSON.stringify(pinch));
     check('scale changes keep a placeholder canvas (no blank flash)',
       pinch.placeholder === true);
+
+    // --- releasing a pinch must not make the content jump (regression:
+    // constant inter-page gaps + approximate anchor math caused an
+    // ~800px jump deep in the document) ---
+    const jump = await retina.evaluate(async () => {
+      const psr = (window as never as {
+        __psr: {
+          viewer: {
+            scale: number;
+            setScale(s: number, o?: unknown): void;
+            scrollTo(p: { page: number; yRatio: number }): void;
+          };
+        };
+      }).__psr;
+      psr.viewer.setScale(1.2);
+      psr.viewer.scrollTo({ page: 20, yRatio: 0.4 });
+      await new Promise((r) => setTimeout(r, 900));
+      const target = document.getElementById('viewerContainer')!;
+      const landmark = () =>
+        document.querySelector('.page[data-page="20"]')!.getBoundingClientRect().top;
+      for (let i = 0; i < 5; i++) {
+        target.dispatchEvent(new WheelEvent('wheel', {
+          ctrlKey: true, deltaY: -30, clientX: 700, clientY: 450,
+          bubbles: true, cancelable: true,
+        }));
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      const during = landmark();
+      await new Promise((r) => setTimeout(r, 450)); // commit
+      const after = landmark();
+      return { delta: Math.abs(after - during) };
+    });
+    check('pinch release does not jump (deep in the document)',
+      jump.delta < 4, `delta ${jump.delta.toFixed(1)}px`);
     await retina.waitForSelector('.page canvas', { timeout: 10000 });
     await retina.waitForTimeout(600);
     sh = await sharpness();
