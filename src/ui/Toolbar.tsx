@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
 
 const btn = 'px-2.5 py-1 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
@@ -32,11 +33,11 @@ export default function Toolbar({
     ? 'Saving\u2026'
     : snap.save === 'dirty'
       ? (snap.saveBound
-        ? 'Unsaved changes — auto-save is pending (Cmd/Ctrl+S to save now)'
-        : 'Unsaved changes — save your reading session to a file (Cmd/Ctrl+S)')
+        ? 'Unsaved changes — auto-save is pending (' + MOD + '+S to save now)'
+        : 'Unsaved changes — save your reading session to a file (' + MOD + '+S)')
       : snap.saveBound
-        ? 'Session saved — changes auto-save (Cmd/Ctrl+S to save now)'
-        : 'Save your reading session to a file (Cmd/Ctrl+S)';
+        ? 'Session saved — changes auto-save (' + MOD + '+S to save now)'
+        : 'Save your reading session to a file (' + MOD + '+S)';
 
   return (
     <header id="toolbar" className="flex items-center gap-1.5 h-10 px-2.5 bg-toolbar border-b border-borderapp select-none overflow-hidden whitespace-nowrap">
@@ -78,10 +79,10 @@ export default function Toolbar({
       <span className="flex-1" />
 
       <button id="btnUndo" className={btn} disabled={!snap.canUndo}
-        title="Undo the last history change (Cmd/Ctrl+Z)"
+        title={`Undo the last history change (${MOD}+Z)`}
         onClick={() => controller.undoHist()}>&#8630;</button>
       <button id="btnRedo" className={btn} disabled={!snap.canRedo}
-        title="Redo (Cmd/Ctrl+Shift+Z)"
+        title={`Redo (${MOD}+Shift+Z)`}
         onClick={() => controller.redoHist()}>&#8631;</button>
       {sep}
       <button id="btnBack" className={btn} disabled={!snap.canBack}

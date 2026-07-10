@@ -2,6 +2,7 @@
 // preview, persistence, and reading-progress sessions. Framework-agnostic;
 // the React UI subscribes to an immutable snapshot and calls methods.
 
+import { MOD } from './platform';
 import { Viewer, type LinkInfo } from './viewer';
 import { NavStacks } from './history';
 import { SearchController } from './search';
@@ -978,7 +979,7 @@ export class Controller {
       this.replaceUndoSlot = prevSlot;
       this.replaceRedoSlot = { source, state: this.serializeState() };
       this.lastReplaceAction = 'undoable';
-      this.showToast('PDF replaced \u2014 Cmd/Ctrl+Z to undo');
+      this.showToast(`PDF replaced \u2014 ${MOD}+Z to undo`);
       this.notify();
     }
   }

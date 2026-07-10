@@ -166,7 +166,7 @@ void app.whenReady().then(() => {
       defaultId: 0,
       cancelId: 0,
       message: 'You have unsaved reading progress.',
-      detail: 'Save it with Cmd+S first, or discard it and close.',
+      detail: `Save it with ${process.platform === 'darwin' ? 'Cmd' : 'Ctrl'}+S first, or discard it and close.`,
     });
     if (choice === 1) event.preventDefault(); // allow the unload
   });

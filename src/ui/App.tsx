@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { MOD } from '../core/platform';
 import { controller } from '../core/controller';
 import { loadUI, saveUI } from '../core/store';
 import Toolbar from './Toolbar';
@@ -142,7 +143,7 @@ export default function App() {
         case 'clear-history': controller.clearHistory(); break;
         case 'help':
           controller.showToast(
-            'Backspace: back \u00b7 Shift+Backspace: forward \u00b7 Cmd+click link: fork \u00b7 /: search \u00b7 Cmd+S: save progress',
+            `Backspace: back \u00b7 Shift+Backspace: forward \u00b7 ${MOD}+click link: fork \u00b7 /: search \u00b7 ${MOD}+S: save progress`,
             6000,
           );
           break;

@@ -1,4 +1,5 @@
 import { controller, type Snapshot } from '../core/controller';
+import { MOD } from '../core/platform';
 
 export default function Welcome({ snap }: { snap: Snapshot }) {
   if (snap.docOpen) return null;
@@ -36,11 +37,11 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
     <div id="welcome" className="absolute inset-0 flex items-center justify-center">
       <div className="text-center text-dim max-w-115">
         <h1 className="text-fgapp font-semibold text-[22px]">Paper Trail</h1>
-        <p className="mt-3 leading-relaxed">
-          A PDF reader that remembers <em>how</em> you got where you are.<br />
-          Every reference you follow extends your reading trail, so you can<br />
-          dive many levels deep and pop back to the exact spot you left.<br />
-          Cmd-click a link to branch off a separate trail.
+        <p className="mt-3 leading-relaxed text-pretty">
+          A PDF reader that remembers <em>how</em> you got where you are.
+          Every reference you follow extends your reading trail, so you can
+          dive many levels deep and pop back to the exact spot you left.
+          {' '}{MOD}-click a link to branch off a separate trail.
         </p>
         <button
           className="mt-4 bg-accent text-white text-sm px-4.5 py-2 rounded-lg cursor-pointer hover:brightness-110"
