@@ -659,6 +659,37 @@ async function run(): Promise<void> {
       anchored.page === 5 && Math.abs(anchored.yRatio - 0.3) < 0.02,
       JSON.stringify(anchored));
 
+    // --- manually mark the current position onto the trail ---
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.viewer.scrollTo({ page: 7, yRatio: 0.6 });
+    });
+    await page.waitForTimeout(700);
+    const markBefore = await page.evaluate(() =>
+      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries.length);
+    await page.click('#viewerContainer'); // focus outside inputs
+    await page.keyboard.press('m');
+    await page.waitForTimeout(300);
+    const marked = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const cur = psr.hist.active.entries[psr.hist.active.index];
+      return { n: psr.hist.active.entries.length, label: cur.label, pos: cur.pos };
+    });
+    check('"m" marks the current position as a trail entry',
+      marked.label === 'Marked p.7' && marked.pos.page === 7
+        && Math.abs(marked.pos.yRatio - 0.6) < 0.05,
+      JSON.stringify({ markBefore, marked }));
+    const stacksBeforeMarkFork = await page.evaluate(() =>
+      (window as never as { __psr: PsrHooks }).__psr.hist.stacks.length);
+    await page.click('#btnMark', { modifiers: ['Meta'] });
+    await page.waitForTimeout(300);
+    const markFork = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      return { stacks: psr.hist.stacks.length };
+    });
+    check('cmd+click on + branches the mark into a new trail',
+      markFork.stacks === stacksBeforeMarkFork + 1,
+      JSON.stringify({ before: stacksBeforeMarkFork, after: markFork.stacks }));
+
     // --- scrolling must NOT move entry anchors (explicit actions only) ---
     const scrollProbe = await page.evaluate(async () => {
       const psr = (window as never as { __psr: PsrHooks }).__psr;

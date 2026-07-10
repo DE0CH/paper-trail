@@ -791,6 +791,17 @@ export class Controller {
     this.notify();
   }
 
+  /**
+   * Manually push the current reading position onto the trail, exactly as
+   * if a link had been followed here ("mark this spot"). Cmd/Ctrl branches
+   * into a new trail, like cmd+clicking a link.
+   */
+  markPosition(fork = false): void {
+    if (!this.docOpen) return;
+    const pos = this.viewer.currentPosition();
+    this.jumpVia(pos, `Marked p.${pos.page}`, fork);
+  }
+
   /** Re-anchor a history entry to the current reading position. */
   entrySetPos(i: number): void {
     if (!this.docOpen) return;

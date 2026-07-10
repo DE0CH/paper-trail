@@ -97,6 +97,7 @@ export default function App() {
         case '-': controller.zoomOut(); break;
         case '0': controller.fitWidth(); break;
         case 't': setSidebarVisible((v) => !v); break;
+        case 'm': controller.markPosition(e.shiftKey); break;
         case 'o': void controller.pickFile(); break;
         default: break;
       }
@@ -137,6 +138,7 @@ export default function App() {
           break;
         case 'toggle-sidebar': setSidebarVisible((v) => !v); break;
         case 'toggle-nav': toggleNav(); break;
+        case 'mark': controller.markPosition(); break;
         case 'clear-history': controller.clearHistory(); break;
         case 'help':
           controller.showToast(

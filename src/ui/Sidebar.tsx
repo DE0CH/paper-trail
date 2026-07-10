@@ -205,6 +205,14 @@ export default function Sidebar({
           <span className="text-dim text-[12.5px] px-1 py-2">History</span>
           <span className="flex-1" />
           <button
+            id="btnMark"
+            className="text-[15px] leading-none text-dim hover:text-fgapp cursor-pointer px-1.5"
+            title="Mark this spot — add the current position to the trail (m); Cmd-click to branch into a new trail"
+            onClick={(e) => controller.markPosition(e.metaKey || e.ctrlKey)}
+          >
+            +
+          </button>
+          <button
             className="text-[11px] text-dim hover:text-fgapp cursor-pointer px-1.5"
             title="Clear reading history (all trails)"
             onClick={() => controller.clearHistory()}

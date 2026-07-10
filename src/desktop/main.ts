@@ -96,6 +96,8 @@ function buildMenu(): void {
         { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => send('back') },
         { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => send('forward') },
         { type: 'separator' },
+        { label: 'Mark This Spot', accelerator: 'CmdOrCtrl+D', click: () => send('mark') },
+        { type: 'separator' },
         { label: 'Clear History', click: () => send('clear-history') },
       ],
     },
