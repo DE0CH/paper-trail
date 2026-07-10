@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PDF Tree Reader</title>
+<title>PDF Stack Reader</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -40,7 +40,7 @@
       <button data-tab="history" class="active">History</button>
       <button data-tab="outline">Outline</button>
       <span class="spacer"></span>
-      <button id="btnClearTree" title="Clear navigation history">clear</button>
+      <button id="btnClearTree" title="Clear navigation history (all stacks)">clear</button>
     </div>
     <div id="historyPanel" class="panel"></div>
     <div id="outlinePanel" class="panel hidden"></div>
@@ -50,10 +50,11 @@
     <div id="viewer"></div>
     <div id="welcome">
       <div class="box">
-        <h1>PDF Tree Reader</h1>
+        <h1>PDF Stack Reader</h1>
         <p>A PDF reader that remembers <em>how</em> you got where you are.<br>
-        Every reference you follow becomes a node in a navigation tree,<br>
-        so you can dive many levels deep and always find your way back.</p>
+        Every reference you follow is pushed onto a history stack, so you can<br>
+        dive many levels deep and pop back to the exact spot you left.<br>
+        Cmd-click a link to fork the whole history into a new stack.</p>
         <button id="btnWelcomeOpen">Choose a PDF&hellip;</button>
         <p class="hint">or drop a file anywhere</p>
         <div id="recent"></div>

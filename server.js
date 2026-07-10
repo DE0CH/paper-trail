@@ -1,4 +1,4 @@
-// Minimal static file server for PDF Tree Reader. No dependencies.
+// Minimal static file server for PDF Stack Reader. No dependencies.
 // Usage: node server.js [port]   (default 8377, binds 127.0.0.1 only)
 'use strict';
 
@@ -57,5 +57,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`PDF Tree Reader running at http://127.0.0.1:${PORT}`);
+  console.log(`PDF Stack Reader running at http://127.0.0.1:${PORT}`);
 });

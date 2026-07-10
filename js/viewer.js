@@ -289,7 +289,15 @@ export class Viewer {
         const info = { dest: a.dest, pageNumber, linkEl: el, pageRec: p };
         el.addEventListener('click', (ev) => {
           ev.preventDefault();
-          if (this.cb.onLinkClick) this.cb.onLinkClick(info);
+          if (this.cb.onLinkClick) {
+            this.cb.onLinkClick({ ...info, fork: ev.metaKey || ev.ctrlKey });
+          }
+        });
+        // Middle-click forks too (mirrors "open in new tab").
+        el.addEventListener('auxclick', (ev) => {
+          if (ev.button !== 1) return;
+          ev.preventDefault();
+          if (this.cb.onLinkClick) this.cb.onLinkClick({ ...info, fork: true });
         });
         el.addEventListener('mouseenter', () => {
           if (this.cb.onLinkHover) this.cb.onLinkHover(info, true);

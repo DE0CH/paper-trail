@@ -1,7 +1,7 @@
 // Persistence: per-document state in localStorage, recent files (with
 // optional FileSystemFileHandle for one-click reopen) in IndexedDB.
 
-const LS_PREFIX = 'ptr:doc:';
+const LS_PREFIX = 'psr:doc:';
 
 export const Store = {
   saveDoc(fp, data) {
@@ -23,7 +23,7 @@ export const Store = {
 
 // ---------- IndexedDB (recents + file handles) ----------
 
-const DB_NAME = 'ptr';
+const DB_NAME = 'psr';
 const DB_VERSION = 1;
 const RECENTS = 'recents';
 

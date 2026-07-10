@@ -1,7 +1,7 @@
-// PDF Tree Reader — application wiring.
+// PDF Stack Reader — application wiring.
 
 import { Viewer } from './viewer.js';
-import { NavTree, renderTree } from './navtree.js';
+import { NavStacks, renderHistoryPanel } from './history.js';
 import { SearchController } from './search.js';
 import { Store, putRecent, getRecents, ensureReadPermission } from './store.js';
 
@@ -41,7 +41,7 @@ const els = {
 let docOpen = false;
 let currentName = '';
 let currentFp = null;
-let searchNodeId = null;
+let searchEntry = null; // history entry reused while stepping through matches
 
 // ---------- core objects ----------
 
@@ -58,8 +58,8 @@ const viewer = new Viewer(els.viewerContainer, els.viewer, {
   onScaleChange: updateZoomLabel,
 });
 
-const tree = new NavTree(null);
-tree.onChange = () => {
+const hist = new NavStacks(null);
+hist.onChange = () => {
   renderHistory();
   updateNavButtons();
   scheduleSave();
@@ -83,17 +83,21 @@ function updateZoomLabel() {
 }
 
 function updateNavButtons() {
-  els.btnBack.disabled = !tree.canBack();
-  els.btnFwd.disabled = !tree.canForward();
+  els.btnBack.disabled = !hist.canBack();
+  els.btnFwd.disabled = !hist.canForward();
 }
 
 function renderHistory() {
-  renderTree(tree, els.historyPanel, onTreeNodeClick);
+  renderHistoryPanel(hist, els.historyPanel, {
+    onEntryClick: onHistEntryClick,
+    onStackClick: onStackSwitch,
+    onStackClose: onStackClose,
+  });
 }
 
 function updateCurrentBadge() {
-  const badge = els.historyPanel.querySelector('.treeNode.current .pg');
-  if (badge && tree.current) badge.textContent = 'p.' + tree.current.pos.page;
+  const badge = els.historyPanel.querySelector('.histItem.current .pg');
+  if (badge && hist.current) badge.textContent = 'p.' + hist.current.pos.page;
 }
 
 // ---------- persistence ----------
@@ -106,7 +110,7 @@ function serializeState() {
     name: currentName,
     scale: viewer.scale,
     fitWidth: viewer.fitWidth,
-    tree: tree.serialize(),
+    hist: hist.serialize(),
     pos: viewer.currentPosition(),
     ts: Date.now(),
   };
@@ -134,8 +138,8 @@ function restoreState() {
   if (typeof d.scale === 'number') {
     viewer.setScale(d.scale, { fitWidth: !!d.fitWidth });
   }
-  if (d.tree) tree.load(d.tree);
-  const pos = (tree.current && tree.current.pos) || d.pos;
+  if (d.hist) hist.load(d.hist);
+  const pos = (hist.current && hist.current.pos) || d.pos;
   if (pos) viewer.scrollTo(pos);
   return true;
 }
@@ -178,42 +182,61 @@ async function renderRecents() {
 
 // ---------- navigation semantics ----------
 
-// A deliberate jump: record where we were, go to `pos`, add a tree node.
-function jumpVia(pos, label) {
-  tree.updateCurrentPos(viewer.currentPosition());
+// A deliberate jump: record where we were, go to `pos`, push a history
+// entry — or, when forking (cmd/ctrl/middle-click), copy the whole history
+// into a new stack first.
+function jumpVia(pos, label, fork = false) {
+  hist.updateCurrentPos(viewer.currentPosition());
   viewer.scrollTo(pos);
-  tree.visit({ label, pos });
+  if (fork) {
+    hist.fork({ label, pos });
+    toast('Forked into a new stack');
+  } else {
+    hist.visit({ label, pos });
+  }
 }
 
-async function handleLinkClick({ dest, pageRec, linkEl }) {
+async function handleLinkClick({ dest, pageRec, linkEl, fork }) {
   const info = await viewer.resolveDest(dest);
   if (!info) { toast('Could not resolve link destination'); return; }
   const label = (await viewer.getLinkLabel(pageRec, linkEl)) || ('p.' + info.page);
-  jumpVia(info, label);
+  jumpVia(info, label, !!fork);
 }
 
 function goBack() {
-  if (!tree.canBack()) return;
-  tree.updateCurrentPos(viewer.currentPosition());
-  const n = tree.back();
+  if (!hist.canBack()) return;
+  hist.updateCurrentPos(viewer.currentPosition());
+  const n = hist.back();
   if (n) viewer.scrollTo(n.pos);
 }
 
 function goForward() {
-  if (!tree.canForward()) return;
-  tree.updateCurrentPos(viewer.currentPosition());
-  const n = tree.forward();
+  if (!hist.canForward()) return;
+  hist.updateCurrentPos(viewer.currentPosition());
+  const n = hist.forward();
   if (n) viewer.scrollTo(n.pos);
 }
 
-function onTreeNodeClick(id) {
-  if (id === tree.currentId) {
-    viewer.scrollTo(tree.current.pos);
+function onHistEntryClick(i) {
+  if (i === hist.active.index) {
+    viewer.scrollTo(hist.current.pos);
     return;
   }
-  tree.updateCurrentPos(viewer.currentPosition());
-  const n = tree.jump(id);
+  hist.updateCurrentPos(viewer.currentPosition());
+  const n = hist.jumpTo(i);
   if (n) viewer.scrollTo(n.pos);
+}
+
+function onStackSwitch(id) {
+  if (id === hist.activeId) return;
+  hist.updateCurrentPos(viewer.currentPosition());
+  const n = hist.switchStack(id);
+  if (n) viewer.scrollTo(n.pos);
+}
+
+function onStackClose(id) {
+  const wasActive = hist.closeStack(id);
+  if (wasActive && hist.current) viewer.scrollTo(hist.current.pos);
 }
 
 let scrollTimer = 0;
@@ -221,7 +244,7 @@ function onViewerScroll() {
   clearTimeout(scrollTimer);
   scrollTimer = setTimeout(() => {
     if (!docOpen || viewer.isTrackingSuppressed()) return;
-    tree.updateCurrentPos(viewer.currentPosition());
+    hist.updateCurrentPos(viewer.currentPosition());
     updateCurrentBadge();
     scheduleSave();
   }, 500);
@@ -245,18 +268,17 @@ async function gotoMatch(dir) {
   const yr = await search.matchYRatio(m);
   const pos = { page: m.page, yRatio: Math.max(0, yr - 0.05) };
   const label = '\u201c' + search.query + '\u201d';
-  if (searchNodeId != null && searchNodeId === tree.currentId) {
-    // Iterating matches: move the existing search node along instead of
-    // creating one node per match.
-    tree.current.label = label;
-    tree.updateCurrentPos(pos);
+  if (searchEntry && hist.current === searchEntry) {
+    // Iterating matches: move the existing search entry along instead of
+    // pushing one entry per match.
+    searchEntry.label = label;
+    hist.updateCurrentPos(pos);
     viewer.scrollTo(pos);
     renderHistory();
   } else {
-    tree.updateCurrentPos(viewer.currentPosition());
+    hist.updateCurrentPos(viewer.currentPosition());
     viewer.scrollTo(pos);
-    const n = tree.visit({ label, pos });
-    searchNodeId = n.id;
+    searchEntry = hist.visit({ label, pos });
   }
   await search.refreshHighlights();
 }
@@ -283,10 +305,12 @@ async function buildOutline() {
       div.className = 'outlineItem';
       div.textContent = it.title || '\u2014';
       div.title = it.title || '';
-      div.addEventListener('click', async () => {
+      div.addEventListener('click', async (ev) => {
         if (!it.dest) return;
         const info = await viewer.resolveDest(it.dest);
-        if (info) jumpVia(info, it.title || ('p.' + info.page));
+        if (info) {
+          jumpVia(info, it.title || ('p.' + info.page), ev.metaKey || ev.ctrlKey);
+        }
       });
       li.appendChild(div);
       if (it.items && it.items.length) {
@@ -311,10 +335,10 @@ async function openData(data, name, { handle = null } = {}) {
     docOpen = true;
     currentName = name;
     currentFp = (doc.fingerprints && doc.fingerprints[0]) || null;
-    searchNodeId = null;
+    searchEntry = null;
 
     els.docTitle.textContent = name;
-    document.title = name + ' \u2014 PDF Tree Reader';
+    document.title = name + ' \u2014 PDF Stack Reader';
     els.pageCount.textContent = '/ ' + viewer.numPages;
     els.pageInput.value = '1';
     els.pageInput.disabled = false;
@@ -324,7 +348,7 @@ async function openData(data, name, { handle = null } = {}) {
     els.welcome.classList.add('hidden');
 
     search.reset();
-    tree.reset();
+    hist.reset();
     updateZoomLabel();
     buildOutline();
     restoreState();
@@ -383,8 +407,8 @@ els.btnSidebar.addEventListener('click', () => els.sidebar.classList.toggle('hid
 
 els.btnClearTree.addEventListener('click', () => {
   if (!docOpen) return;
-  tree.reset();
-  tree.updateCurrentPos(viewer.currentPosition());
+  hist.reset();
+  hist.updateCurrentPos(viewer.currentPosition());
   renderHistory();
 });
 
@@ -535,4 +559,4 @@ if (fileParam) {
 }
 
 // Expose internals for debugging / automated tests.
-window.__ptr = { viewer, tree, search, jumpVia, goBack, goForward };
+window.__psr = { viewer, hist, search, jumpVia, goBack, goForward };
