@@ -100,11 +100,15 @@ html, body, #root {
   position: absolute;
   inset: 0;
   z-index: 2;
+  /* The layer itself must not intercept mouse events (it covers the whole
+     page and would make text unselectable); only the links do. */
+  pointer-events: none;
 }
 .pdfLink {
   position: absolute;
   display: block;
   border-radius: 2px;
+  pointer-events: auto;
 }
 .pdfLink:hover {
   background: rgba(79, 140, 255, 0.22);

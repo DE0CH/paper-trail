@@ -265,6 +265,54 @@ async function run(): Promise<void> {
     check('nav panel reopens from the toolbar', (await page.locator('#navCol').count()) === 1);
     await page.click('#navCol button:has-text("Outline")');
 
+    // --- text selection: emulate a person dragging across a line ---
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.viewer.scrollTo({ page: 1, yRatio: 0 });
+    });
+    await page.waitForSelector('.page[data-page="1"] .textLayer span', { timeout: 10000 });
+    const p1box = (await page.locator('.page[data-page="1"]').boundingBox())!;
+    const selY = p1box.y + p1box.height * 0.215; // the title line
+    await page.mouse.move(p1box.x + p1box.width * 0.3, selY);
+    await page.mouse.down();
+    await page.mouse.move(p1box.x + p1box.width * 0.72, selY, { steps: 8 });
+    await page.mouse.up();
+    const selection = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+    check('dragging the mouse selects text', selection.trim().length >= 4,
+      JSON.stringify(selection.slice(0, 50)));
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+    // --- weird characters in user-controlled names must survive the save
+    // format (names/labels are free text) ---
+    const weird = 'entry 3 0.5 tricky | "quo\'tes" \\ § 数学 🙂 <b>tag</b>';
+    await page.evaluate((w) => {
+      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
+      const activeId = psr.hist.stacks.find((s) => s.name === psr.hist.active.name);
+      void activeId;
+      // rename the ACTIVE stack and its first entry
+      const active = psr.hist.stacks.find((s) => s.entries === psr.hist.active.entries)!;
+      psr.hist.renameStack(active.id, w);
+      psr.hist.renameEntry(0, w + ' as a label\nwith newline');
+    }, weird);
+    await page.waitForTimeout(300); // let React render
+    const weirdRes = await page.evaluate((w) => {
+      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
+      const parsed = psr.parseProgressText(psr.progressText());
+      const stack = parsed?.state.hist.stacks.find((s) => s.name === w);
+      const uiNames = [...document.querySelectorAll('#stacksPanel .stackRow .name')]
+        .map((el) => el.textContent);
+      return {
+        ok: !!parsed,
+        name: stack?.name,
+        label: stack?.entries[0].label,
+        uiHasWeird: uiNames.includes(w),
+      };
+    }, weird);
+    check('weird characters survive the save-format round trip',
+      weirdRes.ok && weirdRes.name === weird
+        && weirdRes.label === weird + ' as a label with newline', // newline flattened
+      JSON.stringify(weirdRes));
+    check('weird characters render in the UI', weirdRes.uiHasWeird === true);
+
     // --- undo/redo of history mutations ---
     const stU = await page.evaluate(async () => {
       const psr = (window as never as { __psr: PsrUndoHooks }).__psr;
@@ -370,6 +418,31 @@ async function run(): Promise<void> {
     await page.evaluate(() => {
       (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
     });
+    // --- rendering sharpness on a retina display (deviceScaleFactor 2) ---
+    const retina = await browser.newPage({
+      viewport: { width: 1400, height: 900 },
+      deviceScaleFactor: 2,
+    });
+    await retina.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await retina.waitForSelector('.page[data-page="1"] canvas', { timeout: 20000 });
+    const sharpness = async () => retina.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>('.page[data-page="1"] canvas')!;
+      const r = c.getBoundingClientRect();
+      return { backing: c.width, css: r.width, ratio: c.width / r.width };
+    });
+    let sh = await sharpness();
+    check('canvas renders at device resolution (fit zoom)', sh.ratio >= 1.9,
+      JSON.stringify(sh));
+    await retina.evaluate(() => {
+      (window as never as { __psr: { viewer: { setScale(s: number): void } } })
+        .__psr.viewer.setScale(2.5);
+    });
+    await retina.waitForTimeout(1200);
+    await retina.waitForSelector('.page[data-page="1"] canvas', { timeout: 10000 });
+    sh = await sharpness();
+    check('canvas stays at device resolution at high zoom', sh.ratio >= 1.9,
+      JSON.stringify(sh));
+    await retina.close();
   } finally {
     await browser.close();
   }
@@ -383,6 +456,13 @@ interface PsrUndoHooks extends PsrHooks {
   controller: { undoHist(): void; redoHist(): void };
 }
 
+interface PsrFormatHooks extends PsrHooks {
+  progressText(): string;
+  parseProgressText(t: string): {
+    state: { hist: { stacks: Array<{ name: string; entries: Array<{ label: string }> }> } };
+  } | null;
+}
+
 // Shape of the window.__psr test hooks (see core/controller.ts).
 interface PsrHooks {
   hist: {
@@ -391,6 +471,8 @@ interface PsrHooks {
     jumpTo(i: number): unknown;
     closeStack(id: number): boolean;
     canRedo(): boolean;
+    renameStack(id: number, name: string): void;
+    renameEntry(i: number, label: string): void;
   };
   viewer: {
     currentPosition(): { page: number; yRatio: number };

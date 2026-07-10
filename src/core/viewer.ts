@@ -296,8 +296,10 @@ export class Viewer {
     const scale = this.scale;
     const vp = p.page.getViewport({ scale });
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
-    // Cap canvas size (browser limits, memory).
-    while (vp.width * dpr * vp.height * dpr > 16_000_000 && dpr > 0.5) dpr *= 0.8;
+    // Cap canvas area (memory / browser limits). Desktop Chromium handles
+    // very large canvases; 64M pixels keeps retina rendering sharp even at
+    // high zoom while staying well inside the limits.
+    while (vp.width * dpr * vp.height * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
 
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(vp.width * dpr);
@@ -442,7 +444,7 @@ export class Viewer {
       if (p.textReady) await p.textReady;
       if (!p.textLayerDiv) return null;
       const lr = linkEl.getBoundingClientRect();
-      let res = this.caretLabel(p, lr);
+      let res = this.caretLabel(p, lr, linkEl);
       if (!res || !res.text) res = this.spanClipLabel(p, lr);
       let { text, before } = res;
       text = text.replace(/\s+/g, ' ').trim();
@@ -481,7 +483,11 @@ export class Viewer {
    * Exact text under a rectangle via caret hit-testing (needs the rect to be
    * inside the viewport, which is true for a link that was just clicked).
    */
-  private caretLabel(p: PageRec, lr: DOMRect): { text: string; before: string } | null {
+  private caretLabel(
+    p: PageRec,
+    lr: DOMRect,
+    linkEl: HTMLElement,
+  ): { text: string; before: string } | null {
     const midY = (lr.top + lr.bottom) / 2;
     if (midY < 0 || midY > window.innerHeight || lr.width < 1) return null;
     const caretPos = (x: number, y: number): { node: Node; offset: number } | null => {
@@ -499,10 +505,10 @@ export class Viewer {
       }
       return null;
     };
-    // The annotation layer sits above the text layer; disable its hit-testing
-    // while sampling carets.
-    const prevPE = p.annotDiv ? p.annotDiv.style.pointerEvents : null;
-    if (p.annotDiv) p.annotDiv.style.pointerEvents = 'none';
+    // The link sits above the text layer (pointer-events: auto); disable its
+    // hit-testing while sampling carets underneath it.
+    const prevPE = linkEl.style.pointerEvents;
+    linkEl.style.pointerEvents = 'none';
     try {
       const start = caretPos(lr.left + 1, midY);
       const end = caretPos(Math.max(lr.left + 1, lr.right - 1), midY);
@@ -542,7 +548,7 @@ export class Viewer {
         : '';
       return { text: range.toString(), before };
     } finally {
-      if (p.annotDiv && prevPE !== null) p.annotDiv.style.pointerEvents = prevPE;
+      linkEl.style.pointerEvents = prevPE;
     }
   }
 

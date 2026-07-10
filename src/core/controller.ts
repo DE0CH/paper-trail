@@ -133,6 +133,9 @@ export class Controller {
       goForward: () => this.goForward(),
       writeProgress: () => this.writeProgress(),
       progressFileObject: () => this.progressFileObject(),
+      // format-level hooks for tests
+      progressText: () => serializeProgress(this.progressFileObject()),
+      parseProgressText: (t: string) => parseProgress(t),
     };
   }
 

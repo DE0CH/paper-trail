@@ -8,11 +8,11 @@ export type NavTab = 'outline' | 'pages';
 
 function OutlineTree({ nodes }: { nodes: OutlineNode[] }) {
   return (
-    <ul className="outline list-none m-0 pl-3">
+    <ul className="outlineTree list-none m-0 pl-3">
       {nodes.map((n, i) => (
         <li key={i}>
           <div
-            className="outlineItem px-1.5 py-0.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp overflow-hidden text-ellipsis whitespace-nowrap"
+            className="outlineItem px-1.5 py-0.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp overflow-hidden text-ellipsis whitespace-nowrap"
             title={n.title}
             onClick={(e) => void controller.outlineJump(n, e.metaKey || e.ctrlKey)}
           >
