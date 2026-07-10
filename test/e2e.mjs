@@ -149,6 +149,40 @@ try {
   } catch { /* hlCount stays 0 */ }
   check('search finds 4 matches with highlights', hlCount >= 1, 'highlights: ' + hlCount);
 
+  // --- panel resizing: extreme drags must not break the layout ---
+  async function dragHandle(sel, toX) {
+    const box = await page.locator(sel).boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(toX, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+  }
+  const widths = async () => page.evaluate(() => ({
+    sidebar: document.getElementById('sidebar').getBoundingClientRect().width,
+    stacks: document.getElementById('stacksCol').getBoundingClientRect().width,
+    sideCol: document.getElementById('sideCol').getBoundingClientRect().width,
+    win: window.innerWidth,
+  }));
+  await dragHandle('#resizeSidebar', 0); // sidebar all the way left
+  let w = await widths();
+  check('sidebar drag to far left keeps panels usable',
+    w.stacks >= 79 && w.sideCol >= 140 && w.sidebar >= w.stacks + 140,
+    JSON.stringify(w));
+  await dragHandle('#resizeStacks', 0); // stacks column all the way left
+  w = await widths();
+  check('stacks drag to far left keeps a usable column',
+    w.stacks >= 79 && w.sideCol >= 140, JSON.stringify(w));
+  await dragHandle('#resizeStacks', 1300); // stacks column all the way right
+  w = await widths();
+  check('stacks drag to far right leaves room for history',
+    w.sideCol >= 140 && w.stacks <= w.sidebar - 140, JSON.stringify(w));
+  await dragHandle('#resizeSidebar', 1390); // sidebar all the way right
+  w = await widths();
+  check('sidebar drag to far right leaves room for the viewer',
+    w.sidebar <= w.win - 250, JSON.stringify(w));
+  // restore something sane for the remaining tests
+  await dragHandle('#resizeSidebar', 440);
+
   // --- progress session: dirty flag + fake-handle save ---
   st = await page.evaluate(async () => {
     const P = window.__psr;

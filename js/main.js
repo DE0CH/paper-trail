@@ -796,16 +796,38 @@ function setPanelWidth(el, w) {
   el.style.minWidth = w + 'px';
 }
 
-function setupResizer(handleEl, targetEl, key, min, max) {
+const clampW = (v, min, max) => Math.min(Math.max(min, max), Math.max(min, v));
+
+// Minimum widths that keep every panel usable: the stacks column, the
+// history/outline column, and the viewer must never collapse.
+const STACKS_MIN = 80;
+const SIDECOL_MIN = 150;
+const VIEWER_MIN = 260;
+
+function stacksBounds() {
+  return {
+    min: STACKS_MIN,
+    max: els.sidebar.getBoundingClientRect().width - SIDECOL_MIN,
+  };
+}
+function sidebarBounds() {
+  return {
+    min: els.stacksCol.getBoundingClientRect().width + SIDECOL_MIN,
+    max: Math.max(320, window.innerWidth - VIEWER_MIN),
+  };
+}
+
+function setupResizer(handleEl, targetEl, key, getBounds) {
   handleEl.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     handleEl.setPointerCapture(e.pointerId);
     handleEl.classList.add('dragging');
     document.body.classList.add('resizing');
+    const { min, max } = getBounds();
     const startX = e.clientX;
     const startW = targetEl.getBoundingClientRect().width;
     const move = (ev) => {
-      setPanelWidth(targetEl, Math.min(max, Math.max(min, startW + ev.clientX - startX)));
+      setPanelWidth(targetEl, clampW(startW + ev.clientX - startX, min, max));
     };
     const up = () => {
       handleEl.removeEventListener('pointermove', move);
@@ -822,12 +844,19 @@ function setupResizer(handleEl, targetEl, key, min, max) {
   });
 }
 
-setupResizer(els.resizeStacks, els.stacksCol, 'stacksW', 90, 400);
-setupResizer(els.resizeSidebar, els.sidebar, 'sidebarW', 220, 800);
+setupResizer(els.resizeStacks, els.stacksCol, 'stacksW', stacksBounds);
+setupResizer(els.resizeSidebar, els.sidebar, 'sidebarW', sidebarBounds);
 {
+  // Restore persisted widths, clamped so a saved layout can never start broken.
   const ui = loadUI();
-  if (ui.stacksW) setPanelWidth(els.stacksCol, ui.stacksW);
-  if (ui.sidebarW) setPanelWidth(els.sidebar, ui.sidebarW);
+  if (ui.sidebarW) {
+    setPanelWidth(els.sidebar,
+      clampW(ui.sidebarW, STACKS_MIN + SIDECOL_MIN, Math.max(320, window.innerWidth - VIEWER_MIN)));
+  }
+  if (ui.stacksW) {
+    const b = stacksBounds();
+    setPanelWidth(els.stacksCol, clampW(ui.stacksW, b.min, b.max));
+  }
 }
 
 // refit on window resize
