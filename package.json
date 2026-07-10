@@ -24,13 +24,14 @@
     "@vitejs/plugin-react": "^6.0.3",
     "electron": "^43.1.0",
     "electron-builder": "^26.15.3",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.1.200",
     "playwright-core": "^1.61.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
-    "vite": "^8.1.4",
-    "pdfjs-dist": "^6.1.200",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "vite": "^8.1.4"
   },
   "main": "build-node/desktop/main.js",
   "author": "DE0CH",

@@ -47,6 +47,25 @@ const cursorOverlay = () => {
       ring.style.opacity = '0.9';
       setTimeout(() => { ring.style.opacity = '0'; }, 280);
     }, true);
+    // key HUD: show a keycap while modifier keys are held (so viewers can
+    // see the cmd+click in the recording)
+    const hud = document.createElement('div');
+    hud.style.cssText =
+      'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);'
+      + 'z-index:2147483647;pointer-events:none;padding:10px 22px;'
+      + 'border-radius:12px;background:rgba(17,17,20,0.92);color:#fff;'
+      + 'font:600 20px -apple-system,sans-serif;letter-spacing:.5px;'
+      + 'border:1px solid #4f8cff;opacity:0;transition:opacity .15s;';
+    document.documentElement.append(hud);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Meta' || e.key === 'Control') {
+        hud.textContent = e.key === 'Meta' ? '\u2318 command' : 'ctrl';
+        hud.style.opacity = '1';
+      }
+    }, true);
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Meta' || e.key === 'Control') hud.style.opacity = '0';
+    }, true);
   };
   if (document.readyState !== 'loading') mk();
   else document.addEventListener('DOMContentLoaded', mk);
@@ -134,38 +153,90 @@ async function run(): Promise<void> {
     await page.mouse.move(640, 400);
     await page.waitForTimeout(900);
 
-    // 1. hover a reference -> preview
+    // Center of the first *real* reference link currently visible in the
+    // viewer (middle band, real width) — so every hop in the recording
+    // follows an actual dependency in the paper. Polls, because link
+    // annotations render shortly after a jump.
+    const findLinkInView = () => page.evaluate(() => {
+      const cont = document.getElementById('viewerContainer')!.getBoundingClientRect();
+      const links = [...document.querySelectorAll<HTMLElement>('.pdfLink:not(.external)')];
+      for (const el of links) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 14 || r.height < 8) continue;
+        if (r.top > cont.top + 90 && r.bottom < cont.bottom - 140
+            && r.left > cont.left + 40 && r.right < cont.right - 40) {
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+      }
+      return null;
+    });
+    // Like a reader scanning for the next reference: wait for annotations,
+    // and scroll down gradually until a link is in view.
+    const visibleLink = async (): Promise<{ x: number; y: number } | null> => {
+      for (let attempt = 0; attempt < 10; attempt++) {
+        for (let tries = 0; tries < 4; tries++) {
+          const found = await findLinkInView();
+          if (found) return found;
+          await page.waitForTimeout(250);
+        }
+        await page.mouse.wheel(0, 420); // scan further down
+        await page.waitForTimeout(450);
+      }
+      return null;
+    };
+
+    // 1. hover the first reference -> destination preview appears
     const link = (await page.locator(LINK).nth(3).boundingBox())!;
     await glide(center(link).x, center(link).y, 700);
-    await page.waitForTimeout(1600); // preview appears
-    // 2. click it -> jump, trail grows
-    await page.mouse.down(); await page.mouse.up();
-    await page.waitForTimeout(1400);
-    // 3. back to where we were
-    await page.keyboard.press('Backspace');
-    await page.waitForTimeout(1100);
-    // 4. branch with cmd+click on another reference
-    await page.waitForSelector(LINK, { timeout: 10000 });
-    const link2 = (await page.locator(LINK).nth(0).boundingBox())!;
-    await glide(center(link2).x, center(link2).y, 650);
-    await page.keyboard.down('Meta');
-    await page.mouse.down(); await page.mouse.up();
-    await page.keyboard.up('Meta');
-    await page.waitForTimeout(1500);
-    // 5. hop through the history panel
-    const entry = (await page.locator('#historyPanel .histItem').first().boundingBox())!;
-    await glide(center(entry).x, center(entry).y, 650);
-    await page.mouse.down(); await page.mouse.up();
-    await page.waitForTimeout(1100);
-    // 6. mark the current spot
-    const mark = (await page.locator('#btnMark').boundingBox())!;
-    await glide(center(mark).x, center(mark).y, 550);
+    await page.waitForTimeout(1700);
+    // 2. click it, then keep following real references — a genuine
+    //    dependency chain, four levels deep
     await page.mouse.down(); await page.mouse.up();
     await page.waitForTimeout(1300);
-    // 7. rest on the trails panel
+    for (let depth = 0; depth < 3; depth++) {
+      // read on a little before chasing the next reference, so successive
+      // hops target different results
+      await page.mouse.wheel(0, 460);
+      await page.waitForTimeout(650);
+      const target = await visibleLink();
+      if (!target) break;
+      await glide(target.x, target.y, 650);
+      await page.waitForTimeout(500);
+      await page.mouse.down(); await page.mouse.up();
+      await page.waitForTimeout(1250);
+    }
+    // 3. pop back one level (exact position restore)
+    await page.keyboard.press('Backspace');
+    await page.waitForTimeout(1100);
+    // 4. jump back arbitrarily: click an early entry in the history panel
+    const entries = page.locator('#historyPanel .histItem');
+    const second = (await entries.nth(1).boundingBox())!;
+    await glide(center(second).x, center(second).y, 700);
+    await page.waitForTimeout(400);
+    await page.mouse.down(); await page.mouse.up();
+    await page.waitForTimeout(1300);
+    // 5. branch: cmd+click a reference (the HUD shows the held key);
+    //    the new trail inherits the whole deep history
+    const target2 = await visibleLink();
+    if (target2) {
+      await glide(target2.x, target2.y, 700);
+      await page.waitForTimeout(350);
+      await page.keyboard.down('Meta');
+      await page.waitForTimeout(450);
+      await page.mouse.down(); await page.mouse.up();
+      await page.waitForTimeout(500);
+      await page.keyboard.up('Meta');
+      await page.waitForTimeout(1400);
+    }
+    // 6. glide over the inherited deep history of the new trail
+    const hist = (await page.locator('#historyPanel').boundingBox())!;
+    await glide(hist.x + hist.width / 2, hist.y + 60, 600);
+    await glide(hist.x + hist.width / 2, hist.y + Math.min(hist.height - 40, 230), 900);
+    await page.waitForTimeout(800);
+    // 7. rest on the trails panel showing both trails
     const stacks = (await page.locator('#stacksPanel').boundingBox())!;
     await glide(stacks.x + 60, stacks.y + 40, 500);
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(1000);
 
     await page.evaluate(() => { (window as never as { __psr: { session: { dirty: boolean } } }).__psr.session.dirty = false; });
     await page.close();

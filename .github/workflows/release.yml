@@ -25,6 +25,16 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
+      - name: Run e2e suite against the built app
+        shell: bash
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          node build-node/test/e2e.js
+
       - name: Package (unsigned)
         run: npx electron-builder --win --publish never
       - name: Smoke-test the packaged app
@@ -52,6 +62,16 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+      - name: Run e2e suite against the built app
+        shell: bash
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          node build-node/test/e2e.js
 
       - name: Package (unsigned)
         run: npx electron-builder --mac --publish never

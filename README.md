@@ -18,27 +18,18 @@ file you can come back to (or keep in git next to the paper).
 
 ## Quick start
 
-You need [Node.js](https://nodejs.org). The desktop app works out of the
-box; in-browser use wants a Chromium-based browser (Chrome, Edge, Brave)
-for session saving.
+- **Use it in the browser**: https://paper-trail-green.vercel.app
+  (a Chromium-based browser — Chrome, Edge, Brave — is needed for saving
+  session files)
+- **Or download the desktop app** (native menus, works offline):
+  grab the `.dmg` (macOS, universal) or installer (Windows) from the
+  [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
+  The builds are currently unsigned — on macOS, right-click → Open the
+  first time.
 
-```sh
-npm install
-npm run build
-
-npm run desktop              # desktop app with native menus
-# — or —
-npm start                    # then open http://127.0.0.1:8377
-```
-
-macOS extras:
-
-```sh
-python3 desktop/make_app.py  # double-clickable "Paper Trail.app" in dist/
-python3 desktop/launch.py    # build-if-needed + serve + open browser
-```
-
-Open a PDF with the **Open** button or drop it anywhere in the window.
+Then open a PDF with the **Open** button or drop it anywhere in the
+window. (Building from source is covered in
+[CONTRIBUTING.md](CONTRIBUTING.md).)
 
 ## Reading with trails
 
