@@ -10,14 +10,10 @@
 //
 // Prereq: npm run build && npm start.  Usage: node build-node/test/perf.js
 
+import { findBrowser } from './browsers';
 import { chromium, type Page } from 'playwright-core';
-import * as fs from 'node:fs';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8377';
-const CANDIDATES = [
-  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-];
 
 // From "a normal paper-reading session" up to "absurd".
 const SCENARIOS = [
@@ -207,11 +203,7 @@ async function cpuProfile(page: Page): Promise<string[]> {
 }
 
 async function run(): Promise<void> {
-  const executablePath = CANDIDATES.find((p) => fs.existsSync(p));
-  if (!executablePath) {
-    console.error('No Chromium-family browser found');
-    process.exit(2);
-  }
+  const executablePath = findBrowser();
   const browser = await chromium.launch({
     executablePath,
     headless: true,

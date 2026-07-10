@@ -6,16 +6,13 @@
 // Prereq: app built and server running (npm start); ffmpeg on PATH for the
 // GIF conversion. Usage: npm run media   → writes docs/media/*
 
+import { findBrowser } from './browsers';
 import { chromium, type Page } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8377';
-const CANDIDATES = [
-  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-];
 const OUT = path.resolve(__dirname, '..', '..', 'docs', 'media');
 const REC = path.join(OUT, '.rec');
 const LINK = '.page[data-page="1"] .annotLayer .pdfLink:not(.external)';
@@ -56,8 +53,7 @@ const cursorOverlay = () => {
 };
 
 async function run(): Promise<void> {
-  const executablePath = CANDIDATES.find((p) => fs.existsSync(p));
-  if (!executablePath) throw new Error('no Chromium-family browser found');
+  const executablePath = findBrowser();
   fs.mkdirSync(REC, { recursive: true });
 
   const browser = await chromium.launch({ executablePath, headless: true });

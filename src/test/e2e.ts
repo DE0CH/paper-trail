@@ -7,15 +7,10 @@
 // Prereq: the app must be built (npm run build) and the server running
 // (npm start). Usage: node build-node/test/e2e.js [baseUrl]
 
+import { findBrowser } from './browsers';
 import { chromium, type Page } from 'playwright-core';
-import * as fs from 'node:fs';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8377';
-const CANDIDATES = [
-  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-];
 
 interface Result { name: string; ok: boolean; detail: string }
 const results: Result[] = [];
@@ -27,11 +22,7 @@ function check(name: string, ok: boolean, detail = ''): void {
 const LINK_SEL = '.page[data-page="1"] .annotLayer .pdfLink:not(.external)';
 
 async function run(): Promise<void> {
-  const executablePath = CANDIDATES.find((p) => fs.existsSync(p));
-  if (!executablePath) {
-    console.error('No Chromium-family browser found');
-    process.exit(2);
-  }
+  const executablePath = findBrowser();
 
   const browser = await chromium.launch({ executablePath, headless: true });
   try {

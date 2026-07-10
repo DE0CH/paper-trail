@@ -12,12 +12,9 @@
     "test": "node build-node/test/e2e.js",
     "perf": "node build-node/test/perf.js",
     "media": "node build-node/test/media.js",
-    "dist:mac": "electron-builder --mac --publish never"
-  },
-  "dependencies": {
-    "pdfjs-dist": "^6.1.200",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "icons": "node build-node/test/icons.js"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",
@@ -30,7 +27,10 @@
     "playwright-core": "^1.61.1",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
-    "vite": "^8.1.4"
+    "vite": "^8.1.4",
+    "pdfjs-dist": "^6.1.200",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "main": "build-node/desktop/main.js",
   "author": "DE0CH",
@@ -51,14 +51,28 @@
         {
           "target": "zip",
           "arch": [
-            "arm64",
-            "x64"
+            "universal"
           ]
         },
         {
           "target": "dmg",
           "arch": [
-            "arm64",
+            "universal"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
             "x64"
           ]
         }
