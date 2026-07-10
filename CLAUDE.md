@@ -15,7 +15,7 @@ re-litigate without asking.
   custom `psr://` protocol. The node server exists only for browser use.
 - Never guess filesystem paths between a session file and its PDF: the
   user supplies both files explicitly (either order, seamless UI).
-- Reading-session files are line-oriented plain text (`.psr`), designed
+- Reading-session files are line-oriented plain text (`.trail`), designed
   for clean git diffs. **Never JSON** for user-facing save formats. Free
   text goes last on a line; no internal ids in the file.
 - History entry anchors never change from scrolling — only from explicit

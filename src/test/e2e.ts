@@ -417,7 +417,7 @@ async function run(): Promise<void> {
       out.dirtyAfterJump = psr.session.dirty;
       let captured = '';
       psr.session.handle = {
-        name: 't.psr',
+        name: 't.trail',
         createWritable: async () => {
           let data = '';
           return {
@@ -444,7 +444,7 @@ async function run(): Promise<void> {
     check('jump marks session dirty', st4.dirtyAfterJump === true);
     check('save writes line-oriented progress file and clears dirty',
       st4.dirtyAfterSave === false
-        && st4.savedJson!.type === 'psr-progress v2'
+        && st4.savedJson!.type === 'paper-trail-session v1'
         && st4.savedJson!.size > 100000
         && st4.savedJson!.stacks === 2,
       JSON.stringify(st4.savedJson));
@@ -469,7 +469,7 @@ async function run(): Promise<void> {
         .forEach((k) => localStorage.removeItem(k));
       (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
     });
-    await page.goto(BASE + '/?file=sample/WStarCats.psr');
+    await page.goto(BASE + '/?file=sample/WStarCats.trail');
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForTimeout(800);
     const st5 = await page.evaluate(() => {
@@ -489,7 +489,7 @@ async function run(): Promise<void> {
 
     // --- cross-directory round trip: relPath ../WStarCats.pdf resolves
     // relative to the progress file's own location ---
-    await page.goto(BASE + '/?file=sample/sub/WStarCats-sub.psr');
+    await page.goto(BASE + '/?file=sample/sub/WStarCats-sub.trail');
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForTimeout(600);
     const sub = await page.evaluate(() => {
@@ -509,7 +509,7 @@ async function run(): Promise<void> {
     });
 
     // --- corrupt progress file degrades to a clear error ---
-    await page.goto(BASE + '/?file=sample/corrupt.psr');
+    await page.goto(BASE + '/?file=sample/corrupt.trail');
     await page.waitForSelector('#toast', { timeout: 10000 });
     const corruptToast = await page.evaluate(() =>
       document.getElementById('toast')?.textContent ?? '');
@@ -518,7 +518,7 @@ async function run(): Promise<void> {
 
     // --- missing PDF: session is kept pending; opening the PDF manually
     // restores it ---
-    await page.goto(BASE + '/?file=sample/sub/missing-pdf.psr');
+    await page.goto(BASE + '/?file=sample/sub/missing-pdf.trail');
     await page.waitForSelector('#toast', { timeout: 10000 });
     const missToast = await page.evaluate(() =>
       document.getElementById('toast')?.textContent ?? '');
@@ -571,7 +571,7 @@ async function run(): Promise<void> {
     });
 
     // --- mismatching PDF: banner + adopt + out-of-range positions clamp ---
-    await page.goto(BASE + '/?file=sample/sub/mismatch.psr');
+    await page.goto(BASE + '/?file=sample/sub/mismatch.trail');
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForSelector('#mismatchBanner', { timeout: 5000 });
     const mm = await page.evaluate(() => {
@@ -592,7 +592,7 @@ async function run(): Promise<void> {
     await page.evaluate(() => {
       (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
     });
-    await page.goto(BASE + '/?file=sample/sub/mismatch.psr');
+    await page.goto(BASE + '/?file=sample/sub/mismatch.trail');
     await page.waitForSelector('#mismatchBanner', { timeout: 20000 });
     await page.click('#btnAdoptPdf');
     const adopted = await page.evaluate(() => {
@@ -619,8 +619,8 @@ async function run(): Promise<void> {
         __psr: PsrHooks & { controller: { openFile(f: File): Promise<void> } };
       }).__psr;
       psr.jumpVia({ page: 3, yRatio: 0 }, 'existing history');
-      const text = await (await fetch('/sample/WStarCats.psr')).text();
-      await psr.controller.openFile(new File([text], 'WStarCats.psr'));
+      const text = await (await fetch('/sample/WStarCats.trail')).text();
+      await psr.controller.openFile(new File([text], 'WStarCats.trail'));
     });
     await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
     check('loading a session over existing history asks first', true);
@@ -632,8 +632,8 @@ async function run(): Promise<void> {
       const psr = (window as never as {
         __psr: PsrHooks & { controller: { openFile(f: File): Promise<void> } };
       }).__psr;
-      const text = await (await fetch('/sample/WStarCats.psr')).text();
-      await psr.controller.openFile(new File([text], 'WStarCats.psr'));
+      const text = await (await fetch('/sample/WStarCats.trail')).text();
+      await psr.controller.openFile(new File([text], 'WStarCats.trail'));
     });
     await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
     await page.click('#btnSessionReplace');

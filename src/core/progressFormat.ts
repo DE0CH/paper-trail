@@ -2,7 +2,7 @@
 // to produce small, semantically clear git diffs (one history entry per
 // line; appending an entry is a one-line diff). Example:
 //
-//   psr-progress v2
+//   paper-trail-session v1
 //   saved 2026-07-10T12:34:56.000Z
 //   pdf.name WStarCats.pdf
 //   pdf.relPath WStarCats.pdf
@@ -26,8 +26,8 @@
 
 import type { HistStack, ProgressFile } from './types';
 
-export const PROGRESS_HEADER = 'psr-progress v2';
-export const PROGRESS_EXT = '.psr';
+export const PROGRESS_HEADER = 'paper-trail-session v1';
+export const PROGRESS_EXT = '.trail';
 
 const line = (s: string) => s.replace(/[\r\n]+/g, ' ').trimEnd();
 

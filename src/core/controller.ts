@@ -716,7 +716,7 @@ export class Controller {
   }
 
   private isProgressName(name: string): boolean {
-    return /\.psr$/i.test(name || '');
+    return /\.trail$/i.test(name || '');
   }
 
   async openFile(file: File, handle: FileSystemFileHandle | null = null): Promise<void> {
@@ -994,7 +994,7 @@ export class Controller {
     if (!this.fileInput) {
       this.fileInput = document.createElement('input');
       this.fileInput.type = 'file';
-      this.fileInput.accept = 'application/pdf,.pdf,.psr';
+      this.fileInput.accept = 'application/pdf,.pdf,.trail';
       this.fileInput.hidden = true;
       document.body.appendChild(this.fileInput);
       this.fileInput.addEventListener('change', () => {

@@ -21,7 +21,7 @@ src/core/                    framework-agnostic app core:
   history.ts                   NavStacks: list of history stacks + snapshot undo
   search.ts                    full-text search, Range-based highlights
   preview.ts                   hover preview popup
-  progressFormat.ts            .psr serializer/parser
+  progressFormat.ts            .trail serializer/parser
   store.ts                     localStorage state, IndexedDB recents/handles
   controller.ts                everything wired together; owns all state
 src/ui/                      React components; subscribe to the controller
@@ -61,7 +61,7 @@ pinch-release position deltas. Keep element ids/classes (`#stacksPanel`,
 `.pdfLink`, `.searchHl`, ...) and the `window.__psr` hooks stable; tests
 depend on them.
 
-## Session file format (`.psr`)
+## Session file format (`.trail`)
 
 Line-oriented plain text, one logical fact per line, free text always
 last on the line (no escaping; newlines are flattened on save). Designed
@@ -69,7 +69,7 @@ so appending an entry is a one-line git diff. Internal ids never appear;
 stacks are an ordered list and `active` is a 0-based position.
 
 ```
-psr-progress v2
+paper-trail-session v1
 saved 2026-07-10T12:34:56.000Z
 pdf.name WStarCats.pdf
 pdf.relPath WStarCats.pdf

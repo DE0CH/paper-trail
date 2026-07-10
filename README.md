@@ -68,7 +68,7 @@ resize by dragging their edges — each keeps its own width.
 ## Saving your place: reading sessions
 
 **Save session** (`Cmd/Ctrl+S`) writes everything — all trails, position,
-zoom — to a small plain-text file (`<pdf>.psr`) wherever you choose. It
+zoom — to a small plain-text file (`<pdf>.trail`) wherever you choose. It
 diffs cleanly, so versioning it in git alongside the paper works well.
 
 - Open the PDF first and use **Load session…**, or open the session file
