@@ -1,11 +1,12 @@
-# Builds the macOS desktop app and attaches it to a GitHub Release
-# ("Downloads"). Triggered by version tags (v1.2.3) or manually.
+# Builds the macOS (signed + notarized) and Windows desktop apps and
+# attaches them to a GitHub Release ("Downloads"). Triggered by version
+# tags (v1.2.3) or manually.
 #
 # Test locally with act (runs the job natively on your Mac):
 #   act workflow_dispatch -W .github/workflows/release.yml -P macos-latest=-self-hosted
 # The release-upload step is skipped under act (env.ACT is set).
 
-name: Release macOS app
+name: Release desktop apps
 
 on:
   push:
