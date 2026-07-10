@@ -7,3 +7,4 @@ build-node/
 __pycache__/
 .vercel/
 .vercel
+dist-electron/

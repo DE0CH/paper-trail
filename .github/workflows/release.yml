@@ -1,0 +1,51 @@
+# Builds the macOS desktop app and attaches it to a GitHub Release
+# ("Downloads"). Triggered by version tags (v1.2.3) or manually.
+#
+# Test locally with act (runs the job natively on your Mac):
+#   act workflow_dispatch -W .github/workflows/release.yml -P macos-latest=-self-hosted
+# The release-upload step is skipped under act (env.ACT is set).
+
+name: Release macOS app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Package (unsigned)
+        run: npx electron-builder --mac --publish never
+
+      - name: Smoke-test the packaged app
+        run: |
+          APP=$(find dist-electron -maxdepth 3 -name "Paper Trail.app" | head -1)
+          echo "smoke-testing: $APP"
+          "$APP/Contents/MacOS/Paper Trail" --smoke
+
+      - name: List artifacts
+        run: ls -la dist-electron/*.dmg dist-electron/*.zip
+
+      - name: Upload to GitHub Release
+        if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          generate_release_notes: true

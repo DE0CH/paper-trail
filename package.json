@@ -11,7 +11,8 @@
     "desktop": "electron build-node/desktop/main.js",
     "test": "node build-node/test/e2e.js",
     "perf": "node build-node/test/perf.js",
-    "media": "node build-node/test/media.js"
+    "media": "node build-node/test/media.js",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "dependencies": {
     "pdfjs-dist": "^6.1.200",
@@ -25,9 +26,43 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "playwright-core": "^1.61.1",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
     "vite": "^8.1.4"
+  },
+  "main": "build-node/desktop/main.js",
+  "author": "DE0CH",
+  "build": {
+    "appId": "local.paper-trail",
+    "productName": "Paper Trail",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "build-node/**/*.js",
+      "dist-web/**"
+    ],
+    "mac": {
+      "identity": null,
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    }
   }
 }
