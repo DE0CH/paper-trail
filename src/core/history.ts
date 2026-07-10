@@ -18,6 +18,8 @@ const UNDO_LIMIT = 50;
 
 export class NavStacks {
   onChange: ((nav: NavStacks) => void) | null;
+  /** Fires on structural mutations (anything that records an undo step). */
+  onMutate: (() => void) | null = null;
   stacks: HistStack[] = [];
   activeId = 0;
   private nextId = 1;
@@ -59,6 +61,7 @@ export class NavStacks {
     this.undoStack.push(this.serialize());
     if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
     this.redoStack = [];
+    this.onMutate?.();
   }
 
   canUndo(): boolean { return this.undoStack.length > 0; }

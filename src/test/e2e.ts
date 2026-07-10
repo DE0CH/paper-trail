@@ -724,6 +724,34 @@ async function run(): Promise<void> {
         && rep.nameLine === 'pdf.name RevisedCopy.pdf'
         && !rep.banner,
       JSON.stringify(rep));
+
+    // --- replacing the PDF is undoable (and redoable) ---
+    const repUndo = await page.evaluate(async () => {
+      const psr = (window as never as {
+        __psr: PsrFormatHooks & {
+          controller: { undoHist(): void; redoHist(): void };
+          hist: { active: { entries: Array<{ label: string }> } };
+        };
+      }).__psr;
+      const historyBefore = psr.hist.active.entries.map((e) => e.label);
+      psr.controller.undoHist();
+      await new Promise((r) => setTimeout(r, 1200));
+      const afterUndo = {
+        title: document.title,
+        history: psr.hist.active.entries.map((e) => e.label),
+      };
+      psr.controller.redoHist();
+      await new Promise((r) => setTimeout(r, 1200));
+      const afterRedo = { title: document.title };
+      return { historyBefore, afterUndo, afterRedo };
+    });
+    check('undo restores the previous PDF with history intact',
+      repUndo.afterUndo.title.startsWith('WStarCats.pdf')
+        && JSON.stringify(repUndo.afterUndo.history) === JSON.stringify(repUndo.historyBefore),
+      JSON.stringify(repUndo.afterUndo));
+    check('redo re-applies the replacement',
+      repUndo.afterRedo.title.startsWith('RevisedCopy.pdf'),
+      JSON.stringify(repUndo.afterRedo));
     await page.evaluate(() => {
       (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
     });

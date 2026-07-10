@@ -49,6 +49,13 @@ interface Session {
   saving: boolean;
 }
 
+type PdfSource = File | FileSystemFileHandle | string;
+
+interface ReplaceSlot {
+  source: PdfSource;
+  state: SerializedState;
+}
+
 export class Controller {
   viewer!: Viewer;
   hist = new NavStacks(null);
@@ -83,6 +90,13 @@ export class Controller {
   private pinchFactor = 1;
   private pinchAnchor: { x: number; y: number } | null = null;
 
+  // Undoable PDF replacement: single-slot document-level undo/redo. The
+  // source is a File / handle / URL (a cheap disk reference, not bytes).
+  private currentSource: PdfSource | null = null;
+  private replaceUndoSlot: ReplaceSlot | null = null;
+  private replaceRedoSlot: ReplaceSlot | null = null;
+  private lastReplaceAction: 'none' | 'undoable' | 'redoable' = 'none';
+
   private listeners = new Set<() => void>();
   private snapshot: Snapshot | null = null;
   private fileInput: HTMLInputElement | null = null;
@@ -115,6 +129,10 @@ export class Controller {
     this.hist.onChange = () => {
       this.scheduleSave();
       this.notify();
+    };
+    // Any history mutation supersedes a pending replace-undo/redo.
+    this.hist.onMutate = () => {
+      this.lastReplaceAction = 'none';
     };
 
     // Trackpad pinch (and ctrl+wheel) zooms the document smoothly: every
@@ -202,8 +220,8 @@ export class Controller {
         zoomPercent: this.viewer ? Math.round(this.viewer.scale * 100) : 100,
         canBack: this.hist.canBack(),
         canForward: this.hist.canForward(),
-        canUndo: this.hist.canUndo(),
-        canRedo: this.hist.canRedo(),
+        canUndo: this.hist.canUndo() || this.lastReplaceAction === 'undoable',
+        canRedo: this.hist.canRedo() || this.lastReplaceAction === 'redoable',
         stacks: this.hist.stacks.map((s) => ({
           ...s,
           entries: s.entries.map((e) => ({ label: e.label, pos: { ...e.pos } })),
@@ -473,15 +491,78 @@ export class Controller {
     this.notify();
   }
 
-  /** Undo the last history mutation (overwrite, fork, close, rename, clear). */
+  /**
+   * Undo the last history mutation (overwrite, fork, close, rename, clear)
+   * — or, when the most recent action was a PDF replacement, undo that.
+   */
   undoHist(): void {
-    if (!this.docOpen || !this.hist.undo()) return;
+    if (!this.docOpen) return;
+    if (this.lastReplaceAction === 'undoable' && this.replaceUndoSlot) {
+      void this.applyReplaceSlot(this.replaceUndoSlot, 'redoable');
+      return;
+    }
+    if (!this.hist.undo()) return;
     if (this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
   }
 
   redoHist(): void {
-    if (!this.docOpen || !this.hist.redo()) return;
+    if (!this.docOpen) return;
+    if (this.lastReplaceAction === 'redoable' && this.replaceRedoSlot) {
+      void this.applyReplaceSlot(this.replaceRedoSlot, 'undoable');
+      return;
+    }
+    if (!this.hist.redo()) return;
     if (this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
+  }
+
+  private async readSource(
+    src: PdfSource,
+  ): Promise<{ bytes: Uint8Array; name: string; handle: FileSystemFileHandle | null } | null> {
+    try {
+      if (typeof src === 'string') {
+        const r = await fetch(src);
+        if (!r.ok) return null;
+        return {
+          bytes: new Uint8Array(await r.arrayBuffer()),
+          name: decodeURIComponent(src.split('/').pop() ?? 'document.pdf'),
+          handle: null,
+        };
+      }
+      if (src instanceof File) {
+        return { bytes: new Uint8Array(await src.arrayBuffer()), name: src.name, handle: null };
+      }
+      const f = await src.getFile();
+      return { bytes: new Uint8Array(await f.arrayBuffer()), name: f.name, handle: src };
+    } catch (e) {
+      console.warn('readSource failed', e);
+      return null;
+    }
+  }
+
+  private async applyReplaceSlot(
+    slot: ReplaceSlot,
+    next: 'undoable' | 'redoable',
+  ): Promise<void> {
+    const got = await this.readSource(slot.source);
+    if (!got) {
+      this.showToast('Could not reopen the other PDF');
+      this.lastReplaceAction = 'none';
+      this.notify();
+      return;
+    }
+    const progress: ProgressFile = { ...this.progressFileObject(), state: slot.state };
+    await this.openData(got.bytes, got.name, {
+      handle: got.handle,
+      source: slot.source,
+      progress,
+      progressHandle: this.session.handle,
+    });
+    this.adoptCurrentPdf();
+    this.lastReplaceAction = next;
+    this.showToast(next === 'redoable'
+      ? `Replacement undone \u2014 back to ${got.name}`
+      : `Replaced with ${got.name} again`);
+    this.notify();
   }
 
   gotoPage(n: number): void {
@@ -573,9 +654,11 @@ export class Controller {
       handle?: FileSystemFileHandle | null;
       progress?: ProgressFile | null;
       progressHandle?: FileSystemFileHandle | null;
+      /** Re-readable reference to where the bytes came from (for undoable replace). */
+      source?: PdfSource | null;
     } = {},
   ): Promise<void> {
-    const { handle = null, progress = null, progressHandle = null } = opts;
+    const { handle = null, progress = null, progressHandle = null, source = null } = opts;
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
     // Read the size before pdf.js transfers (detaches) the buffer.
     const size = data.byteLength || 0;
@@ -586,6 +669,7 @@ export class Controller {
       this.currentName = name;
       this.currentFp = doc.fingerprints?.[0] ?? null;
       this.currentSize = size;
+      this.currentSource = source ?? handle ?? null;
       this.searchEntry = null;
       this.currentPage = 1;
       document.title = `${name} \u2014 Paper Trail`;
@@ -642,6 +726,7 @@ export class Controller {
       return;
     }
     const buf = new Uint8Array(await file.arrayBuffer());
+    const source: PdfSource = handle ?? file;
     if (this.pendingProgress) {
       // A session file was opened first; the user is now supplying its
       // PDF — restore that session (and bind its file for auto-save).
@@ -651,12 +736,13 @@ export class Controller {
       this.pendingProgressHandle = null;
       await this.openData(buf, file.name, {
         handle,
+        source,
         progress: pp.json,
         progressHandle: ph,
       });
       return;
     }
-    await this.openData(buf, file.name, { handle });
+    await this.openData(buf, file.name, { handle, source });
   }
 
   /** Discard a session that is waiting for its PDF. */
@@ -707,6 +793,7 @@ export class Controller {
         const buf = new Uint8Array(await pdfFile.arrayBuffer());
         await this.openData(buf, pdfFile.name, {
           handle: rec.handle,
+          source: rec.handle,
           progress: json,
           progressHandle,
         });
@@ -841,12 +928,23 @@ export class Controller {
       await this.openFile(file, handle);
       return;
     }
+    const prevSlot: ReplaceSlot | null = this.currentSource
+      ? { source: this.currentSource, state: this.serializeState() }
+      : null;
     const progress = this.progressFileObject(); // carries the current state
     const progressHandle = this.session.handle;
     const buf = new Uint8Array(await file.arrayBuffer());
-    await this.openData(buf, file.name, { handle, progress, progressHandle });
+    const source: PdfSource = handle ?? file;
+    await this.openData(buf, file.name, { handle, source, progress, progressHandle });
     // Deliberate swap: adopt the new PDF into the session, no banner.
     this.adoptCurrentPdf();
+    if (prevSlot) {
+      this.replaceUndoSlot = prevSlot;
+      this.replaceRedoSlot = { source, state: this.serializeState() };
+      this.lastReplaceAction = 'undoable';
+      this.showToast('PDF replaced \u2014 Cmd/Ctrl+Z to undo');
+      this.notify();
+    }
   }
 
   /** Toolbar / menu entry point: pick a reading-session file. */
@@ -971,10 +1069,13 @@ export class Controller {
         // No writable handle over HTTP: session stays unbound (dirty flow).
         await this.openData(buf, decodeURIComponent(pdfUrl.pathname.split('/').pop()!), {
           progress: json,
+          source: pdfUrl.toString(),
         });
       } else {
         const buf = new Uint8Array(await r.arrayBuffer());
-        await this.openData(buf, decodeURIComponent(fileParam.split('/').pop()!));
+        await this.openData(buf, decodeURIComponent(fileParam.split('/').pop()!), {
+          source: fileParam,
+        });
       }
     } catch (e) {
       this.showToast(`Could not load ${fileParam} (${(e as Error).message})`);
