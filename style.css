@@ -172,6 +172,9 @@ html, body {
 
 /* text layer (adapted from pdf.js requirements) */
 .textLayer {
+  /* pdf.js 5.x sizes spans with --total-scale-factor (scale * PDF UserUnit).
+     We set --scale-factor from JS; UserUnit is 1 for virtually all PDFs. */
+  --total-scale-factor: var(--scale-factor, 1);
   position: absolute;
   text-align: initial;
   inset: 0;

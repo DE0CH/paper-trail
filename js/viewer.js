@@ -332,41 +332,39 @@ export class Viewer {
   }
 
   // Extract a human-readable label for a link ("Lemma 3.16", "(7.2)", ...)
-  // from the text layer spans underneath / around the link rectangle.
+  // from the text layer underneath / around the link rectangle.
   async getLinkLabel(p, linkEl) {
     try {
       if (p.textReady) await p.textReady;
       if (!p.textLayerDiv) return null;
       const lr = linkEl.getBoundingClientRect();
-      let text = '';
-      let before = '';
-      for (const span of p.textLayerDiv.querySelectorAll('span')) {
-        const s = span.textContent;
-        if (!s) continue;
-        const sr = span.getBoundingClientRect();
-        if (!sr.width || !sr.height) continue;
-        const vOverlap = Math.min(sr.bottom, lr.bottom) - Math.max(sr.top, lr.top);
-        if (vOverlap < Math.min(sr.height, lr.height) * 0.5) continue;
-        const hOverlap = Math.min(sr.right, lr.right) - Math.max(sr.left, lr.left);
-        if (hOverlap <= 0) continue;
-        const startFrac = Math.max(0, (lr.left - sr.left) / sr.width);
-        const endFrac = Math.min(1, (lr.right - sr.left) / sr.width);
-        const i0 = Math.floor(startFrac * s.length);
-        const i1 = Math.ceil(endFrac * s.length);
-        text += s.slice(i0, i1);
-        if (i0 > 0) before = s.slice(0, i0);
-      }
+      let res = this._caretLabel(p, lr);
+      if (!res || !res.text) res = this._spanClipLabel(p, lr);
+      let { text, before } = res;
       text = text.replace(/\s+/g, ' ').trim();
       if (!text) return null;
-      const m = before.match(/([A-Za-z()\u00a7.]+)[\s~]*$/);
+      // Repair a leading fragment like ".2" (caret slipped past "4" in "4.2")
+      // using the characters immediately preceding the link.
+      if (text.startsWith('.')) {
+        const r = before.match(/([0-9A-Za-z]+)$/);
+        if (r) {
+          text = r[1] + text;
+          before = before.slice(0, before.length - r[1].length);
+        }
+      }
+      const m = before.match(/(\(|[A-Za-z\u00a7.]+)[\s~]*$/);
       const prefix = m ? m[1] : '';
       const KEY = /^(Lemma|Theorem|Proposition|Corollary|Definition|Remark|Section|Subsection|Example|Notation|Question|Conjecture|Construction|Appendix|Chapter|Figure|Table|Prop|Thm|Defn?|Cor|Lem|Rem|Sec|Eq|Equation|page|Page)\.?$/i;
       if (prefix === '(' && !text.startsWith('(')) {
         text = '(' + text + (text.endsWith(')') ? '' : ')');
-      } else if (prefix && KEY.test(prefix)) {
-        text = (prefix + ' ' + text).replace(/\s+/g, ' ').trim();
+      } else {
+        // A ")" that leaked in without a matching "(" doesn't belong to the label.
+        if (text.endsWith(')') && !text.includes('(')) text = text.slice(0, -1);
+        if (prefix && KEY.test(prefix)) {
+          text = (prefix + ' ' + text).replace(/\s+/g, ' ').trim();
+        }
       }
-      // Trim trailing punctuation that leaked in from proportional clipping.
+      // Trim punctuation that leaked in at the edges.
       text = text.replace(/[,;:]$/, '');
       if (text.length > 48) text = text.slice(0, 47) + '\u2026';
       return text;
@@ -374,5 +372,89 @@ export class Viewer {
       console.warn('getLinkLabel failed', e);
       return null;
     }
+  }
+
+  // Exact text under a rectangle via caret hit-testing (needs the rect to be
+  // inside the viewport, which is true for a link that was just clicked).
+  _caretLabel(p, lr) {
+    const midY = (lr.top + lr.bottom) / 2;
+    if (midY < 0 || midY > window.innerHeight || lr.width < 1) return null;
+    const caretPos = (x, y) => {
+      if (document.caretPositionFromPoint) {
+        const c = document.caretPositionFromPoint(x, y);
+        return c ? { node: c.offsetNode, offset: c.offset } : null;
+      }
+      if (document.caretRangeFromPoint) {
+        const r = document.caretRangeFromPoint(x, y);
+        return r ? { node: r.startContainer, offset: r.startOffset } : null;
+      }
+      return null;
+    };
+    // The annotation layer sits above the text layer; disable its hit-testing
+    // while sampling carets.
+    const prevPE = p.annotDiv ? p.annotDiv.style.pointerEvents : null;
+    if (p.annotDiv) p.annotDiv.style.pointerEvents = 'none';
+    try {
+      const start = caretPos(lr.left + 1, midY);
+      const end = caretPos(Math.max(lr.left + 1, lr.right - 1), midY);
+      if (!start || !end) return null;
+      if (!p.textLayerDiv.contains(start.node) || !p.textLayerDiv.contains(end.node)) return null;
+      const range = document.createRange();
+      try {
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+      } catch {
+        return null;
+      }
+      if (range.collapsed && start.node === end.node) {
+        // Very narrow link; take one character.
+        if (start.node.nodeType === Node.TEXT_NODE && start.offset < start.node.data.length) {
+          range.setEnd(start.node, start.offset + 1);
+        }
+      }
+      // The right-edge caret often lands one character short of the end of a
+      // number like "3.16"; extend through any digits that continue it.
+      const ec = range.endContainer;
+      if (ec.nodeType === Node.TEXT_NODE) {
+        let e = range.endOffset;
+        const data = ec.data;
+        while (e < data.length && /[0-9]/.test(data[e])) e++;
+        if (e < data.length && data[e] === '.' && /[0-9]/.test(data[e + 1] || '')) {
+          e++;
+          while (e < data.length && /[0-9]/.test(data[e])) e++;
+        }
+        try { range.setEnd(ec, e); } catch { /* keep old end */ }
+      }
+      const before = start.node.nodeType === Node.TEXT_NODE
+        ? start.node.data.slice(0, start.offset)
+        : '';
+      return { text: range.toString(), before };
+    } finally {
+      if (p.annotDiv) p.annotDiv.style.pointerEvents = prevPE;
+    }
+  }
+
+  // Fallback: approximate the covered substring of each intersecting span
+  // proportionally. Works off-screen, less precise.
+  _spanClipLabel(p, lr) {
+    let text = '';
+    let before = '';
+    for (const span of p.textLayerDiv.querySelectorAll('span')) {
+      const s = span.textContent;
+      if (!s) continue;
+      const sr = span.getBoundingClientRect();
+      if (!sr.width || !sr.height) continue;
+      const vOverlap = Math.min(sr.bottom, lr.bottom) - Math.max(sr.top, lr.top);
+      if (vOverlap < Math.min(sr.height, lr.height) * 0.5) continue;
+      const hOverlap = Math.min(sr.right, lr.right) - Math.max(sr.left, lr.left);
+      if (hOverlap <= 0) continue;
+      const startFrac = Math.max(0, (lr.left - sr.left) / sr.width);
+      const endFrac = Math.min(1, (lr.right - sr.left) / sr.width);
+      const i0 = Math.floor(startFrac * s.length);
+      const i1 = Math.ceil(endFrac * s.length);
+      text += s.slice(i0, i1);
+      if (i0 > 0) before = s.slice(0, i0);
+    }
+    return { text, before };
   }
 }
