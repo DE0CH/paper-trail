@@ -1,4 +1,4 @@
-// Headless end-to-end tests for PDF Stack Reader.
+// Headless end-to-end tests for Paper Trail.
 //
 // Runs against a *separate* headless Chromium-family browser (Edge or
 // Chrome binary on this machine) with its own profile, so it never

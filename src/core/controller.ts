@@ -383,7 +383,7 @@ export class Controller {
     this.viewer.scrollTo(pos);
     if (fork) {
       this.hist.fork({ label, pos });
-      this.showToast('Forked into a new stack');
+      this.showToast('Branched into a new trail');
     } else {
       this.hist.visit({ label, pos });
     }
@@ -567,7 +567,7 @@ export class Controller {
       this.currentSize = size;
       this.searchEntry = null;
       this.currentPage = 1;
-      document.title = `${name} \u2014 PDF Stack Reader`;
+      document.title = `${name} \u2014 Paper Trail`;
 
       this.preview?.clear();
       this.restoring = true;

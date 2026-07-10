@@ -1,4 +1,4 @@
-// Minimal static file server for running PDF Stack Reader as a web app in a
+// Minimal static file server for running Paper Trail as a web app in a
 // normal browser (the Electron desktop shell serves the UI over a custom
 // protocol instead and does not use this). No dependencies.
 //
@@ -76,7 +76,7 @@ export function start(port: number): http.Server {
   server.listen(port, '127.0.0.1', () => {
     const addr = server.address();
     const p = typeof addr === 'object' && addr ? addr.port : port;
-    console.log(`PDF Stack Reader running at http://127.0.0.1:${p}`);
+    console.log(`Paper Trail running at http://127.0.0.1:${p}`);
   });
   return server;
 }

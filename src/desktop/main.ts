@@ -1,4 +1,4 @@
-// Electron desktop shell for PDF Stack Reader.
+// Electron desktop shell for Paper Trail.
 //
 // The built web app (dist-web) is served over a custom `psr://` protocol
 // straight from disk. Native application menus send actions over IPC; the
@@ -19,7 +19,7 @@ const SMOKE = process.argv.includes('--smoke');
 const WEB_ROOT = path.resolve(__dirname, '..', '..', 'dist-web');
 const SCHEME = 'psr';
 
-app.setName('PDF Stack Reader');
+app.setName('Paper Trail');
 
 protocol.registerSchemesAsPrivileged([{
   scheme: SCHEME,
@@ -180,7 +180,7 @@ void app.whenReady().then(() => {
         .then((probe: string) => {
           console.log('SMOKE', probe);
           const ok = JSON.parse(probe) as { title: string; shell: boolean };
-          app.exit(ok.title.includes('PDF Stack Reader') && ok.shell ? 0 : 1);
+          app.exit(ok.title.includes('Paper Trail') && ok.shell ? 0 : 1);
         })
         .catch((e: unknown) => {
           console.error('SMOKE FAIL', e);

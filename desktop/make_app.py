@@ -11,19 +11,19 @@ import sys
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
-APP = PROJECT / "dist" / "PDF Stack Reader.app"
+APP = PROJECT / "dist" / "Paper Trail.app"
 
 INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>PDF Stack Reader</string>
-  <key>CFBundleDisplayName</key><string>PDF Stack Reader</string>
-  <key>CFBundleIdentifier</key><string>local.pdf-stack-reader</string>
+  <key>CFBundleName</key><string>Paper Trail</string>
+  <key>CFBundleDisplayName</key><string>Paper Trail</string>
+  <key>CFBundleIdentifier</key><string>local.paper-trail</string>
   <key>CFBundleVersion</key><string>0.1.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>PDFStackReader</string>
+  <key>CFBundleExecutable</key><string>PaperTrail</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
@@ -53,7 +53,7 @@ def main() -> int:
     macos = APP / "Contents" / "MacOS"
     macos.mkdir(parents=True, exist_ok=True)
     (APP / "Contents" / "Info.plist").write_text(INFO_PLIST)
-    launcher = macos / "PDFStackReader"
+    launcher = macos / "PaperTrail"
     launcher.write_text(LAUNCHER)
     launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     print(f"Created: {APP}")

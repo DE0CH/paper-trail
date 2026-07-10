@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run PDF Stack Reader as a web app: build if needed, start the local
+"""Run Paper Trail as a web app: build if needed, start the local
 server, and open the default browser.
 
 For the desktop app with native menus, use the Electron shell instead:

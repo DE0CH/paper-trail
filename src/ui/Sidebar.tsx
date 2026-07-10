@@ -58,7 +58,7 @@ function StackRow({ snap, id, name, count }: {
       <span className="cnt text-[11px] text-dim flex-none">{count}</span>
       <button
         className="x flex-none px-1 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
-        title="Close this stack"
+        title="Close this trail"
         onClick={(e) => {
           e.stopPropagation();
           controller.stackClose(id);
@@ -181,7 +181,7 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
-        <div className="text-dim text-[12.5px] px-2.5 py-2 border-b border-borderapp">Stacks</div>
+        <div className="text-dim text-[12.5px] px-2.5 py-2 border-b border-borderapp">Trails</div>
         <div id="stacksPanel" className="flex-1 overflow-auto p-1.5">
           {snap.stacks.map((s) => (
             <StackRow key={s.id} snap={snap} id={s.id} name={s.name} count={s.entries.length} />
@@ -206,7 +206,7 @@ export default function Sidebar({
           <span className="flex-1" />
           <button
             className="text-[11px] text-dim hover:text-fgapp cursor-pointer px-1.5"
-            title="Clear navigation history (all stacks)"
+            title="Clear reading history (all trails)"
             onClick={() => controller.clearHistory()}
           >
             clear

@@ -35,12 +35,12 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
   return (
     <div id="welcome" className="absolute inset-0 flex items-center justify-center">
       <div className="text-center text-dim max-w-115">
-        <h1 className="text-fgapp font-semibold text-[22px]">PDF Stack Reader</h1>
+        <h1 className="text-fgapp font-semibold text-[22px]">Paper Trail</h1>
         <p className="mt-3 leading-relaxed">
           A PDF reader that remembers <em>how</em> you got where you are.<br />
-          Every reference you follow is pushed onto a history stack, so you can<br />
+          Every reference you follow extends your reading trail, so you can<br />
           dive many levels deep and pop back to the exact spot you left.<br />
-          Cmd-click a link to fork the whole history into a new stack.
+          Cmd-click a link to branch off a separate trail.
         </p>
         <button
           className="mt-4 bg-accent text-white text-sm px-4.5 py-2 rounded-lg cursor-pointer hover:brightness-110"

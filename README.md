@@ -1,22 +1,24 @@
-# PDF Stack Reader
+# Paper Trail
 
-A PDF reader built around navigation history you can trust: a **list of
-history stacks** with browser-style back/forward, plus forking.
+A PDF reader built around navigation history you can trust: parallel
+**reading trails** with browser-style back/forward, plus branching.
+(Internally each trail is a history stack; the package/repo keeps the
+technical name `pdf-stack-reader`.)
 
 When reading a math paper you often descend several levels deep — Lemma 3.16 →
 Definition 2.4 → Equation (7.2) — and then need to find your way back to where
-you were actually reading. PDF Stack Reader records every jump you make
-(internal link, outline entry, page jump, search hit):
+you were actually reading. Paper Trail records every jump you make
+(internal link, outline entry, page/thumbnail jump, search hit):
 
-- each jump is **pushed onto the active stack**; `Backspace` pops back up,
+- each jump is **pushed onto the active trail**; `Backspace` pops back up,
   returning to the *exact* scroll position you left, not just the page;
 - `Shift+Backspace` goes forward again; the stack is preserved until you
-  follow a new link mid-stack, which overwrites the entries above the cursor
+  follow a new link mid-trail, which overwrites the entries above the cursor
   (exactly like browser history);
 - **Cmd/Ctrl+click** (or middle-click) a link to **fork**: the whole history
-  up to the cursor is copied into a new stack — so unlike a browser tab
-  opened with cmd+click, back still works there — and the new stack is saved
-  in the sidebar's stack list (renamable, closable, switchable);
+  up to the cursor is copied into a new trail — so unlike a browser tab
+  opened with cmd+click, back still works there — and the new trail is saved
+  in the sidebar's trail list (renamable, closable, switchable);
 - click any entry in the History panel to move the cursor there;
 - **undo/redo** (`Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z`) reverts history
   *mutations*: an overwritten forward tail, a fork, a closed or renamed
@@ -30,26 +32,41 @@ Entries are labelled from the text around the link ("Lemma 3.16", "(7.2)", ...)
 plus the destination page. History, zoom, and position are restored per
 document when you reopen it.
 
-## Reading-progress files
+## Reading sessions
 
-Your full reading state (all stacks, cursor, zoom, exact position) can be
-saved to a file at a location and name you choose (`Save` button or
-`Cmd/Ctrl+S`; suggested name `<pdf>.psr`). The format is a line-oriented
-plain-text format (one history entry per line) designed to produce small,
-semantically clear git diffs. The file stores a relative reference to the
-PDF, so keeping the pair side by side makes it portable.
+Your full reading state (all trails, cursor, zoom, exact position) can be
+saved to a **reading-session file** at a location and name you choose
+(**Save session** / `Cmd/Ctrl+S`; suggested name `<pdf>.psr`). The format
+is line-oriented plain text (one history entry per line, an ordered list
+of trails, no internal ids) designed for small, semantically clear git
+diffs; names and labels with any characters are safe.
 
-- **Open a plain PDF**: the app warns about unsaved reading progress when
-  you close it. Once you save to a file, the session is bound to it.
-- **Open a progress file** (Open button, drag & drop, or
-  `?file=path/to/x.psr`): the PDF is located automatically (a previously
-  granted file handle, the relative path when served over HTTP, or one
-  picker prompt), the state is restored, and from then on progress
-  **auto-saves continuously** to that file — so closing never warns unless
-  a save is still pending or failed.
+The app never guesses filesystem paths (browser sandboxes don't expose
+them): you supply the PDF and the session file explicitly, in either
+order, and the UI makes both directions seamless:
+
+- **PDF first**: it opens normally; **Load session…** (also
+  `Cmd/Ctrl+Shift+O` in the desktop app) loads a session into it, with a
+  confirmation when it would replace non-trivial reading history.
+- **Session first**: the viewer shows a prompt naming the PDF the session
+  belongs to — open or drop it and you're back where you left off. (A
+  previously used PDF is re-opened silently when possible.)
+- Once bound to a file, the session **auto-saves continuously**; closing
+  only warns when something isn't saved yet. Unbound reading warns on
+  close until you save.
+- **Wrong PDF?** The session remembers the PDF's name; a mismatch shows a
+  dismissable banner with **Use this PDF**, which adopts the open file
+  into the session. Saved positions that don't exist in the current PDF
+  simply land at the top.
+- **Replace PDF** (⇄ next to the title): swap in another file — say, a
+  revised version of the paper — keeping the whole reading history.
+- Entry anchors never move as you scroll; re-anchor one deliberately with
+  the ⌖ button on its row (hover), rename entries/trails by double-click.
 
 Saving/auto-saving to files uses the File System Access API (Chromium-based
-browsers and the desktop app); everything else works anywhere.
+browsers and the desktop app); everything else works anywhere. Dev/test
+convenience: `?file=path/to/x.psr` over the local server resolves the PDF
+URL-relatively.
 
 ## Stack
 
