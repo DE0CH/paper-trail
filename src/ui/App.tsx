@@ -111,6 +111,8 @@ export default function App() {
       switch (action) {
         case 'open': void controller.pickFile(); break;
         case 'save': controller.saveProgressSafe(); break;
+        case 'load-session': void controller.requestLoadSession(); break;
+        case 'replace-pdf': void controller.requestReplacePdf(); break;
         case 'back': controller.goBack(); break;
         case 'forward': controller.goForward(); break;
         case 'undo':
@@ -249,14 +251,43 @@ export default function App() {
             onStartResize={startResize}
           />
         )}
-        <div
-          ref={containerRef}
-          id="viewerContainer"
-          tabIndex={0}
-          className="relative flex-1 overflow-auto outline-none"
-        >
-          <div ref={viewerRef} id="viewer" className="pt-4 pb-[60vh]" />
-          <Welcome snap={snap} />
+        <div className="relative flex-1 min-w-0 flex flex-col">
+          {snap.mismatch && (
+            <div
+              id="mismatchBanner"
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#4a3a12] text-[#f0d48a] border-b border-[#6b5518] text-[12.5px]"
+            >
+              <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                This session was saved with <b>{snap.mismatch.savedName}</b>, but{' '}
+                <b>{snap.mismatch.openName}</b> is open.
+              </span>
+              <button
+                id="btnAdoptPdf"
+                className="flex-none px-2 py-0.5 rounded-md bg-[#6b5518] hover:brightness-110 cursor-pointer"
+                title="Make this PDF the session's PDF — its name is written to the session file"
+                onClick={() => controller.adoptCurrentPdf()}
+              >
+                Use this PDF
+              </button>
+              <button
+                id="btnMismatchDismiss"
+                className="flex-none px-1.5 cursor-pointer hover:text-white"
+                title="Dismiss this warning"
+                onClick={() => controller.dismissMismatch()}
+              >
+                &times;
+              </button>
+            </div>
+          )}
+          <div
+            ref={containerRef}
+            id="viewerContainer"
+            tabIndex={0}
+            className="relative flex-1 overflow-auto outline-none"
+          >
+            <div ref={viewerRef} id="viewer" className="pt-4 pb-[60vh]" />
+            <Welcome snap={snap} />
+          </div>
         </div>
       </div>
 
@@ -276,6 +307,34 @@ export default function App() {
       {dragOver && (
         <div className="fixed inset-0 z-100 flex items-center justify-center text-[26px] bg-[rgba(20,22,26,0.8)] border-4 border-dashed border-accent pointer-events-none">
           Drop PDF to open
+        </div>
+      )}
+
+      {snap.confirmPdfName && (
+        <div className="fixed inset-0 z-105 flex items-center justify-center bg-black/50">
+          <div id="sessionConfirm" className="bg-panel border border-borderapp rounded-xl p-5 max-w-100 shadow-2xl">
+            <div className="text-fgapp font-semibold mb-2">Load this reading session?</div>
+            <div className="text-dim text-[12.5px] leading-relaxed mb-4">
+              It replaces your current reading history and position for this
+              document. (Unsaved history is lost.)
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                id="btnSessionCancel"
+                className="px-3 py-1.5 rounded-md text-fgapp hover:bg-hoverrow cursor-pointer"
+                onClick={() => controller.cancelSessionLoad()}
+              >
+                Cancel
+              </button>
+              <button
+                id="btnSessionReplace"
+                className="px-3 py-1.5 rounded-md bg-accent text-white hover:brightness-110 cursor-pointer"
+                onClick={() => controller.applyConfirmedSession()}
+              >
+                Replace
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

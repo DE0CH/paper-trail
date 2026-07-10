@@ -32,6 +32,7 @@ export interface PageRec {
   rendered: boolean;
   renderedScale: number;
   rendering: Promise<void> | null;
+  renderFailed?: boolean;
   textReady: Promise<void> | null;
   pinned: number;
 }
@@ -244,8 +245,14 @@ export class Viewer {
   }
 
   scrollTo({ page, yRatio = 0 }: Pos, { suppressTracking = true } = {}): void {
-    const p = this.pages[page - 1];
-    if (!p) return;
+    let p = this.pages[page - 1];
+    if (!p) {
+      // Position doesn't exist in this document (e.g. a session saved with
+      // a different PDF): navigate to the top instead of breaking.
+      if (!this.pages.length) return;
+      p = this.pages[0];
+      yRatio = 0;
+    }
     if (suppressTracking) this.suppress();
     this.container.scrollTop = p.el.offsetTop + yRatio * p.el.offsetHeight - PROBE_OFFSET;
     this.updateVisible();
@@ -323,10 +330,20 @@ export class Viewer {
 
   private ensureRendered(p: PageRec): Promise<void> | null {
     if ((p.rendered && p.renderedScale === this.scale) || p.rendering) return p.rendering;
+    p.renderFailed = false;
     p.rendering = this.render(p)
-      .catch((e) => console.warn('render failed', e))
+      .catch((e) => {
+        p.renderFailed = true;
+        console.warn('render failed', e);
+      })
       .finally(() => {
         p.rendering = null;
+        // A scale/document change can invalidate a render mid-flight (the
+        // result is discarded by the guard). Nothing else re-triggers
+        // rendering in that case, so check again.
+        if (!p.rendered && !p.renderFailed) {
+          queueMicrotask(() => this.updateVisible());
+        }
       });
     return p.rendering;
   }

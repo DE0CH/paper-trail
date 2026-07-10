@@ -35,6 +35,12 @@ export interface Snapshot {
   save: SaveState;
   saveBound: boolean;
   toast: { id: number; msg: string } | null;
+  /** A session file was opened first; waiting for the user to open its PDF. */
+  pendingPdfName: string | null;
+  /** A session load needs confirmation (it replaces current reading state). */
+  confirmPdfName: string | null;
+  /** The open PDF doesn't match the one the session was saved with. */
+  mismatch: { savedName: string; openName: string } | null;
 }
 
 interface Session {
@@ -62,6 +68,11 @@ export class Controller {
   private currentPage = 1;
   private restoring = false;
   private pendingProgress: { json: ProgressFile } | null = null;
+  private confirmSession: {
+    json: ProgressFile;
+    progressHandle: FileSystemFileHandle | null;
+  } | null = null;
+  private mismatch_: { savedName: string; openName: string } | null = null;
 
   private saveTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private fileSaveTimer: ReturnType<typeof setTimeout> | 0 = 0;
@@ -199,6 +210,9 @@ export class Controller {
               : 'idle',
         saveBound: !!this.session.handle,
         toast: this.toast_,
+        pendingPdfName: this.pendingProgress?.json.pdf.name ?? null,
+        confirmPdfName: this.confirmSession?.json.pdf.name ?? null,
+        mismatch: this.mismatch_,
       };
     }
     return this.snapshot;
@@ -264,7 +278,9 @@ export class Controller {
       this.viewer.setScale(d.scale, { fitWidth: !!d.fitWidth });
     }
     if (d.hist) this.hist.load(d.hist);
-    const pos = this.hist.current?.pos ?? d.pos;
+    // The saved view position is where the user actually was (entries keep
+    // their own anchored positions and don't follow scrolling).
+    const pos = d.pos ?? this.hist.current?.pos;
     if (pos) this.viewer.scrollTo(pos);
     return true;
   }
@@ -465,7 +481,9 @@ export class Controller {
     clearTimeout(this.scrollTimer);
     this.scrollTimer = setTimeout(() => {
       if (!this.docOpen || this.viewer.isTrackingSuppressed()) return;
-      this.hist.updateCurrentPos(this.viewer.currentPosition());
+      // Note: scrolling never moves history entries — their positions only
+      // change through explicit actions (following a link, back/forward,
+      // or the re-anchor button). Only the session's view position updates.
       this.scheduleSave();
       this.notify();
     }, 500);
@@ -570,10 +588,10 @@ export class Controller {
       this.session.dirty = false;
       this.session.saving = false;
       clearTimeout(this.fileSaveTimer);
-      if (progress?.pdf?.fingerprint && this.currentFp
-          && progress.pdf.fingerprint !== this.currentFp) {
-        this.showToast('Note: this PDF differs from the one the progress file was saved with', 4500);
-      }
+      this.mismatch_ = (progress?.pdf?.fingerprint && this.currentFp
+          && progress.pdf.fingerprint !== this.currentFp)
+        ? { savedName: progress.pdf.name, openName: name }
+        : null;
       if (this.currentFp) {
         void putRecent({
           fp: this.currentFp,
@@ -603,13 +621,37 @@ export class Controller {
       return;
     }
     const buf = new Uint8Array(await file.arrayBuffer());
+    if (this.pendingProgress) {
+      // A session file was opened first; the user is now supplying its
+      // PDF — restore that session (and bind its file for auto-save).
+      const pp = this.pendingProgress;
+      const ph = this.pendingProgressHandle;
+      this.pendingProgress = null;
+      this.pendingProgressHandle = null;
+      await this.openData(buf, file.name, {
+        handle,
+        progress: pp.json,
+        progressHandle: ph,
+      });
+      return;
+    }
     await this.openData(buf, file.name, { handle });
   }
 
+  /** Discard a session that is waiting for its PDF. */
+  discardPendingSession(): void {
+    this.pendingProgress = null;
+    this.pendingProgressHandle = null;
+    this.notify();
+  }
+
+  private pendingProgressHandle: FileSystemFileHandle | null = null;
+
   /**
-   * Open a reading-progress file: locate its PDF (stored handle from a
-   * previous session, else ask), restore the saved state, and bind the
-   * progress handle for continuous auto-save.
+   * Open a reading-session file. If a PDF is already open, the session is
+   * applied to it (after confirmation, since it replaces the current
+   * reading history). Otherwise the PDF is resolved via a remembered
+   * handle when possible; else the app shows a prompt asking for the PDF.
    */
   private async openProgressFile(
     file: File,
@@ -617,46 +659,167 @@ export class Controller {
   ): Promise<void> {
     const json = parseProgress(await file.text());
     if (!json) {
-      this.showToast('Not a PDF Stack Reader progress file');
+      this.showToast('Not a reading-session file');
       return;
     }
-    let pdfFile: File | null = null;
-    let pdfHandle: FileSystemFileHandle | null = null;
+
+    if (this.docOpen) {
+      // Loading a session into the currently open PDF.
+      const trivial = this.hist.stacks.length === 1
+        && this.hist.stacks[0].entries.length <= 1
+        && !this.session.dirty;
+      this.confirmSession = { json, progressHandle };
+      if (trivial) {
+        this.applyConfirmedSession();
+      } else {
+        this.notify(); // the UI shows a replace-confirmation dialog
+      }
+      return;
+    }
+
+    // Session first: try the remembered PDF silently, else prompt for it.
     const rec = json.pdf.fingerprint ? await getRecent(json.pdf.fingerprint) : null;
     if (rec?.handle && await ensureReadPermission(rec.handle)) {
       try {
-        pdfFile = await rec.handle.getFile();
-        pdfHandle = rec.handle;
+        const pdfFile = await rec.handle.getFile();
+        const buf = new Uint8Array(await pdfFile.arrayBuffer());
+        await this.openData(buf, pdfFile.name, {
+          handle: rec.handle,
+          progress: json,
+          progressHandle,
+        });
+        return;
       } catch (e) {
         console.warn('stored PDF handle no longer valid', e);
       }
     }
-    if (!pdfFile) {
-      this.showToast(`Select the PDF: ${json.pdf.name}`, 4000);
-      if (!window.showOpenFilePicker) {
-        this.pendingProgress = { json };
-        this.pickViaInput();
-        return;
-      }
+    this.pendingProgress = { json };
+    this.pendingProgressHandle = progressHandle;
+    this.notify();
+  }
+
+  /** Apply a session to the currently open PDF (confirmed by the user). */
+  applyConfirmedSession(): void {
+    const cs = this.confirmSession;
+    if (!cs || !this.docOpen) return;
+    this.confirmSession = null;
+    this.restoring = true;
+    try {
+      this.searchEntry = null;
+      this.restoreStateFrom(cs.json.state);
+    } finally {
+      this.restoring = false;
+    }
+    this.session.handle = cs.progressHandle;
+    this.session.dirty = false;
+    this.session.saving = false;
+    clearTimeout(this.fileSaveTimer);
+    this.mismatch_ = (cs.json.pdf.fingerprint && this.currentFp
+        && cs.json.pdf.fingerprint !== this.currentFp)
+      ? { savedName: cs.json.pdf.name, openName: this.currentName }
+      : null;
+    if (this.currentFp && cs.progressHandle) {
+      void putRecent({
+        fp: this.currentFp,
+        name: this.currentName,
+        ts: Date.now(),
+        progressHandle: cs.progressHandle,
+      });
+    }
+    this.notify();
+  }
+
+  cancelSessionLoad(): void {
+    this.confirmSession = null;
+    this.notify();
+  }
+
+  /** Banner: hide the mismatch warning (until the next mismatching load). */
+  dismissMismatch(): void {
+    this.mismatch_ = null;
+    this.notify();
+  }
+
+  /**
+   * Banner: make the currently open PDF the session's PDF — its name,
+   * fingerprint, and size are written to the session file on the next
+   * (auto-)save.
+   */
+  adoptCurrentPdf(): void {
+    this.mismatch_ = null;
+    // progressFileObject() always serializes the currently open PDF's
+    // identity, so marking the session dirty is enough to persist it.
+    this.scheduleSave();
+    if (this.session.handle) {
+      this.writeProgress().catch((e) => console.warn('adopt save failed', e));
+    }
+    this.notify();
+  }
+
+  /** Re-anchor a history entry to the current reading position. */
+  entrySetPos(i: number): void {
+    this.hist.setEntryPos(i, this.viewer.currentPosition());
+  }
+
+  /**
+   * Replace the open PDF with another file while keeping the whole reading
+   * state (all trails, cursor, zoom, session binding). Used e.g. when a
+   * paper gets a revised version. The new PDF's identity is adopted into
+   * the session, since the swap is deliberate.
+   */
+  async requestReplacePdf(): Promise<void> {
+    if (!this.docOpen) {
+      await this.pickFile();
+      return;
+    }
+    if (!window.showOpenFilePicker) {
+      this.replaceNext = true;
+      this.pickViaInput();
+      return;
+    }
+    try {
+      const [h] = await window.showOpenFilePicker({
+        types: [{ description: 'PDF documents', accept: { 'application/pdf': ['.pdf'] } }],
+      });
+      await this.replaceWithFile(await h.getFile(), h);
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') console.warn(e);
+    }
+  }
+
+  private replaceNext = false;
+
+  async replaceWithFile(file: File, handle: FileSystemFileHandle | null = null): Promise<void> {
+    if (!this.docOpen) {
+      await this.openFile(file, handle);
+      return;
+    }
+    const progress = this.progressFileObject(); // carries the current state
+    const progressHandle = this.session.handle;
+    const buf = new Uint8Array(await file.arrayBuffer());
+    await this.openData(buf, file.name, { handle, progress, progressHandle });
+    // Deliberate swap: adopt the new PDF into the session, no banner.
+    this.adoptCurrentPdf();
+  }
+
+  /** Toolbar / menu entry point: pick a reading-session file. */
+  async requestLoadSession(): Promise<void> {
+    if (window.showOpenFilePicker) {
       try {
-        const [h] = await window.showOpenFilePicker({
-          types: [{ description: 'PDF documents', accept: { 'application/pdf': ['.pdf'] } }],
-          // Open the picker in the progress file's folder.
-          ...(progressHandle ? { startIn: progressHandle } : {}),
+        const [handle] = await window.showOpenFilePicker({
+          types: [{
+            description: 'Reading session',
+            accept: { 'text/plain': [PROGRESS_EXT] },
+          }],
         });
-        pdfFile = await h.getFile();
-        pdfHandle = h;
-      } catch (e) {
-        if ((e as Error)?.name !== 'AbortError') console.warn(e);
+        if (handle) await this.openProgressFile(await handle.getFile(), handle);
         return;
+      } catch (e) {
+        if ((e as Error)?.name === 'AbortError') return;
+        console.warn('showOpenFilePicker failed, falling back', e);
       }
     }
-    const buf = new Uint8Array(await pdfFile.arrayBuffer());
-    await this.openData(buf, pdfFile.name, {
-      handle: pdfHandle,
-      progress: json,
-      progressHandle,
-    });
+    this.pickViaInput();
   }
 
   async pickFile(): Promise<void> {
@@ -692,15 +855,12 @@ export class Controller {
       this.fileInput.addEventListener('change', () => {
         const f = this.fileInput!.files?.[0];
         if (!f) return;
-        if (this.pendingProgress && /\.pdf$/i.test(f.name)) {
-          const pp = this.pendingProgress;
-          this.pendingProgress = null;
-          void f.arrayBuffer().then((buf) =>
-            this.openData(new Uint8Array(buf), f.name, { progress: pp.json }));
+        if (this.replaceNext) {
+          this.replaceNext = false;
+          void this.replaceWithFile(f);
           return;
         }
-        this.pendingProgress = null;
-        void this.openFile(f);
+        void this.openFile(f); // openFile applies any pending session
       });
     }
     this.fileInput.value = '';
@@ -750,7 +910,16 @@ export class Controller {
           new URL(fileParam, location.href),
         );
         const pr = await fetch(pdfUrl);
-        if (!pr.ok) throw new Error(`PDF not found at ${pdfUrl.pathname}`);
+        if (!pr.ok) {
+          // Degrade gracefully: keep the session and ask for the PDF.
+          this.pendingProgress = { json };
+          this.showToast(
+            `Couldn't find the PDF (${json.pdf.relPath}) next to the progress file `
+            + '\u2014 open the PDF manually to restore the session',
+            7000,
+          );
+          return;
+        }
         const buf = new Uint8Array(await pr.arrayBuffer());
         // No writable handle over HTTP: session stays unbound (dirty flow).
         await this.openData(buf, decodeURIComponent(pdfUrl.pathname.split('/').pop()!), {

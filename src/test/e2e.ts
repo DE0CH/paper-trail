@@ -37,6 +37,9 @@ async function run(): Promise<void> {
   try {
     const page: Page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
     page.on('pageerror', (e) => check('no page errors', false, String(e)));
+    // Accept beforeunload prompts so test navigations never race the
+    // dirty flag (the dirty/beforeunload logic has its own checks).
+    page.on('dialog', (d) => void d.accept());
 
     // fresh state
     await page.goto(BASE + '/');
@@ -389,10 +392,23 @@ async function run(): Promise<void> {
     check('jump marks session dirty', st4.dirtyAfterJump === true);
     check('save writes line-oriented progress file and clears dirty',
       st4.dirtyAfterSave === false
-        && st4.savedJson!.type === 'psr-progress v1'
+        && st4.savedJson!.type === 'psr-progress v2'
         && st4.savedJson!.size > 100000
         && st4.savedJson!.stacks === 2,
       JSON.stringify(st4.savedJson));
+    const noIds = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
+      const text = psr.progressText();
+      return {
+        stackLinesPlainNames: text.split('\n')
+          .filter((l) => l.startsWith('stack '))
+          .every((l) => !/^stack \d+ /.test(l)),
+        activeLine: text.split('\n').find((l) => l.startsWith('active ')),
+      };
+    });
+    check('save format has no internal stack ids',
+      noIds.stackLinesPlainNames && /^active \d+$/.test(noIds.activeLine ?? ''),
+      JSON.stringify(noIds));
 
     // --- progress file round trip over HTTP (?file=…psr.json) ---
     await page.evaluate(() => {
@@ -415,6 +431,196 @@ async function run(): Promise<void> {
     });
     check('progress file restores stack and position',
       st5.stack === 'RoundTrip' && st5.pos.page === 17 && !st5.bound, JSON.stringify(st5));
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+    });
+
+    // --- cross-directory round trip: relPath ../WStarCats.pdf resolves
+    // relative to the progress file's own location ---
+    await page.goto(BASE + '/?file=sample/sub/WStarCats-sub.psr');
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForTimeout(600);
+    const sub = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      return {
+        stacks: psr.hist.stacks.map((s) => s.name),
+        active: psr.hist.active.name,
+        page: psr.viewer.currentPosition().page,
+      };
+    });
+    check('cross-directory relPath resolves against the progress file',
+      sub.active === 'SubDir' && sub.page === 9
+        && sub.stacks.join('|') === 'Main line|SubDir',
+      JSON.stringify(sub));
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+    });
+
+    // --- corrupt progress file degrades to a clear error ---
+    await page.goto(BASE + '/?file=sample/corrupt.psr');
+    await page.waitForSelector('#toast', { timeout: 10000 });
+    const corruptToast = await page.evaluate(() =>
+      document.getElementById('toast')?.textContent ?? '');
+    check('corrupt progress file shows a clear error',
+      /not a progress file|Could not load/i.test(corruptToast), corruptToast);
+
+    // --- missing PDF: session is kept pending; opening the PDF manually
+    // restores it ---
+    await page.goto(BASE + '/?file=sample/sub/missing-pdf.psr');
+    await page.waitForSelector('#toast', { timeout: 10000 });
+    const missToast = await page.evaluate(() =>
+      document.getElementById('toast')?.textContent ?? '');
+    check('missing PDF asks the user for it',
+      /open the PDF manually/i.test(missToast), missToast);
+    await page.evaluate(async () => {
+      const psr = (window as never as {
+        __psr: { controller: { openFile(f: File): Promise<void> } };
+      }).__psr;
+      const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await psr.controller.openFile(new File([bytes], 'WStarCats.pdf'));
+    });
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForTimeout(600);
+    const recovered = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      return {
+        stack: psr.hist.active.name,
+        label: psr.hist.active.entries[psr.hist.active.index]?.label,
+        page: psr.viewer.currentPosition().page,
+      };
+    });
+    check('manually opening the PDF restores the pending session',
+      recovered.stack === 'Recovered session'
+        && recovered.label === 'Lemma recovery-marker'
+        && recovered.page === 12,
+      JSON.stringify(recovered));
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+    });
+
+    // --- mismatching PDF: banner + adopt + out-of-range positions clamp ---
+    await page.goto(BASE + '/?file=sample/sub/mismatch.psr');
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForSelector('#mismatchBanner', { timeout: 5000 });
+    const mm = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      return {
+        page: psr.viewer.currentPosition().page,
+        bannerText: document.getElementById('mismatchBanner')?.textContent ?? '',
+      };
+    });
+    check('mismatch banner names both PDFs',
+      /SomeOtherPaper\.pdf/.test(mm.bannerText) && /WStarCats\.pdf/.test(mm.bannerText),
+      mm.bannerText.slice(0, 90));
+    check('out-of-range saved position clamps to the top', mm.page === 1, `page ${mm.page}`);
+    await page.click('#btnMismatchDismiss');
+    check('mismatch banner can be dismissed',
+      (await page.locator('#mismatchBanner').count()) === 0);
+    // reload -> banner reappears (dismiss is once per occurrence); adopt fixes it
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+    });
+    await page.goto(BASE + '/?file=sample/sub/mismatch.psr');
+    await page.waitForSelector('#mismatchBanner', { timeout: 20000 });
+    await page.click('#btnAdoptPdf');
+    const adopted = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrFormatHooks }).__psr;
+      const text = psr.progressText();
+      return {
+        bannerGone: !document.getElementById('mismatchBanner'),
+        nameLine: text.split('\n').find((l) => l.startsWith('pdf.name ')),
+        fpIsReal: !/deadbeef/.test(text),
+      };
+    });
+    check('"Use this PDF" adopts the open PDF into the session',
+      adopted.bannerGone && adopted.nameLine === 'pdf.name WStarCats.pdf' && adopted.fpIsReal,
+      JSON.stringify(adopted));
+
+    // --- loading a session into an already open PDF asks for confirmation ---
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
+    });
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+    await page.evaluate(async () => {
+      const psr = (window as never as {
+        __psr: PsrHooks & { controller: { openFile(f: File): Promise<void> } };
+      }).__psr;
+      psr.jumpVia({ page: 3, yRatio: 0 }, 'existing history');
+      const text = await (await fetch('/sample/WStarCats.psr')).text();
+      await psr.controller.openFile(new File([text], 'WStarCats.psr'));
+    });
+    await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
+    check('loading a session over existing history asks first', true);
+    await page.click('#btnSessionCancel');
+    const cancelled = await page.evaluate(() =>
+      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries.at(-1)?.label);
+    check('cancel keeps the current history', cancelled === 'existing history', String(cancelled));
+    await page.evaluate(async () => {
+      const psr = (window as never as {
+        __psr: PsrHooks & { controller: { openFile(f: File): Promise<void> } };
+      }).__psr;
+      const text = await (await fetch('/sample/WStarCats.psr')).text();
+      await psr.controller.openFile(new File([text], 'WStarCats.psr'));
+    });
+    await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
+    await page.click('#btnSessionReplace');
+    await page.waitForTimeout(400);
+    const replaced = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      return { stack: psr.hist.active.name, page: psr.viewer.currentPosition().page };
+    });
+    check('replace applies the loaded session',
+      replaced.stack === 'RoundTrip' && replaced.page === 17, JSON.stringify(replaced));
+
+    // --- re-anchor an entry to the current position ---
+    await page.evaluate(() => {
+      (window as never as { __psr: PsrHooks }).__psr.viewer.scrollTo({ page: 5, yRatio: 0.3 });
+    });
+    await page.waitForTimeout(700);
+    await page.locator('#historyPanel .histItem').first().hover();
+    await page.locator('#historyPanel .histItem .setPos').first().click({ force: true });
+    await page.waitForTimeout(200);
+    const anchored = await page.evaluate(() =>
+      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries[0].pos);
+    check('entry can be re-anchored to the current position',
+      anchored.page === 5 && Math.abs(anchored.yRatio - 0.3) < 0.02,
+      JSON.stringify(anchored));
+
+    // --- scrolling must NOT move entry anchors (explicit actions only) ---
+    const scrollProbe = await page.evaluate(async () => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      const before = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
+      psr.viewer.scrollTo({ page: 20, yRatio: 0.5 });
+      await new Promise((r) => setTimeout(r, 900)); // past the settle debounce
+      const after = JSON.stringify(psr.hist.active.entries.map((e) => e.pos));
+      return { same: before === after };
+    });
+    check('scrolling does not move history entry anchors', scrollProbe.same);
+
+    // --- replace the PDF while keeping the reading state ---
+    const rep = await page.evaluate(async () => {
+      const psr = (window as never as {
+        __psr: PsrFormatHooks & {
+          controller: { replaceWithFile(f: File): Promise<void> };
+        };
+      }).__psr;
+      const before = psr.hist.active.entries.map((e) => e.label);
+      const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await psr.controller.replaceWithFile(new File([bytes], 'RevisedCopy.pdf'));
+      await new Promise((r) => setTimeout(r, 800));
+      return {
+        before,
+        after: psr.hist.active.entries.map((e) => e.label),
+        nameLine: psr.progressText().split('\n').find((l) => l.startsWith('pdf.name ')),
+        banner: !!document.getElementById('mismatchBanner'),
+      };
+    });
+    check('replacing the PDF keeps the reading history',
+      JSON.stringify(rep.before) === JSON.stringify(rep.after)
+        && rep.nameLine === 'pdf.name RevisedCopy.pdf'
+        && !rep.banner,
+      JSON.stringify(rep));
     await page.evaluate(() => {
       (window as never as { __psr: PsrHooks }).__psr.session.dirty = false;
     });

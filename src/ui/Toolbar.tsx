@@ -29,10 +29,10 @@ export default function Toolbar({
   const saveLabel = snap.save === 'saving'
     ? 'Saving\u2026'
     : snap.save === 'dirty'
-      ? 'Save \u2022'
+      ? 'Save session \u2022'
       : snap.saveBound
-        ? 'Saved'
-        : 'Save';
+        ? 'Session saved'
+        : 'Save session';
 
   return (
     <header id="toolbar" className="flex items-center gap-1.5 h-10 px-2.5 bg-toolbar border-b border-borderapp select-none overflow-hidden whitespace-nowrap">
@@ -46,12 +46,25 @@ export default function Toolbar({
       <button className={btn} title="Open a PDF or reading-progress file (o)" onClick={() => void controller.pickFile()}>Open</button>
       <button id="btnSave" className={btn} disabled={!snap.docOpen}
         title={snap.saveBound
-          ? 'Reading progress auto-saves (Cmd/Ctrl+S to save now)'
-          : 'Save reading progress to a file (Cmd/Ctrl+S)'}
+          ? 'Reading session auto-saves (Cmd/Ctrl+S to save now)'
+          : 'Save your reading session to a file (Cmd/Ctrl+S)'}
         onClick={() => controller.saveProgressSafe()}>
         {saveLabel}
       </button>
+      <button id="btnLoadSession" className={btn}
+        title="Load a reading session file (replaces your current reading history and position)"
+        onClick={() => void controller.requestLoadSession()}>
+        Load session&hellip;
+      </button>
       <span className="text-dim max-w-55 overflow-hidden text-ellipsis ml-1">{snap.docTitle}</span>
+      {snap.docOpen && (
+        <button
+          id="btnReplacePdf"
+          className={`${btn} text-dim`}
+          title="Replace the PDF with another file, keeping your reading history (e.g. a revised version)"
+          onClick={() => void controller.requestReplacePdf()}
+        >&#8644;</button>
+      )}
       <span className="flex-1" />
 
       <button id="btnUndo" className={btn} disabled={!snap.canUndo}

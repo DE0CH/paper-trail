@@ -54,8 +54,11 @@ function buildMenu(): void {
     {
       label: 'File',
       submenu: [
-        { label: 'Open PDF or Progress\u2026', accelerator: 'CmdOrCtrl+O', click: () => send('open') },
-        { label: 'Save Reading Progress', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
+        { label: 'Open\u2026', accelerator: 'CmdOrCtrl+O', click: () => send('open') },
+        { label: 'Save Reading Session', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
+        { label: 'Load Reading Session\u2026', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('load-session') },
+        { type: 'separator' },
+        { label: 'Replace PDF (Keep History)\u2026', click: () => send('replace-pdf') },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' },
       ],

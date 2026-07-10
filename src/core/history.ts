@@ -102,6 +102,15 @@ export class NavStacks {
     this.emit();
   }
 
+  /** Re-anchor an entry of the active stack to a new position (undoable). */
+  setEntryPos(i: number, pos: Pos): void {
+    const e = this.active.entries[i];
+    if (!e) return;
+    this.recordUndo();
+    e.pos = pos;
+    this.emit();
+  }
+
   get active(): HistStack {
     return this.stacks.find((s) => s.id === this.activeId) ?? this.stacks[0];
   }

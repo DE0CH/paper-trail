@@ -84,7 +84,7 @@ function HistRow({ label, page, current, index }: {
 
   return (
     <div
-      className={`histItem ${rowBase} ${current ? `current ${rowActive}` : ''}`}
+      className={`histItem group ${rowBase} ${current ? `current ${rowActive}` : ''}`}
       title={`${label} — page ${page} — double-click to rename`}
       onClick={() => controller.histEntryClick(index)}
     >
@@ -119,6 +119,16 @@ function HistRow({ label, page, current, index }: {
           {label}
         </span>
       )}
+      <button
+        className="setPos flex-none px-1 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+        title="Set this entry to the current position"
+        onClick={(e) => {
+          e.stopPropagation();
+          controller.entrySetPos(index);
+        }}
+      >
+        &#8982;
+      </button>
       <span className="pg text-[11px] text-dim flex-none">p.{page}</span>
     </div>
   );

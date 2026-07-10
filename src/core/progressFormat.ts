@@ -2,7 +2,7 @@
 // to produce small, semantically clear git diffs (one history entry per
 // line; appending an entry is a one-line diff). Example:
 //
-//   psr-progress v1
+//   psr-progress v2
 //   saved 2026-07-10T12:34:56.000Z
 //   pdf.name WStarCats.pdf
 //   pdf.relPath WStarCats.pdf
@@ -12,25 +12,30 @@
 //   view.fitWidth true
 //   view.page 17
 //   view.yRatio 0.42021803
-//   hist.active 1
-//   hist.nameCounter 2
+//   active 0
 //
-//   stack 1 RoundTrip
+//   stack RoundTrip
 //   cursor 1
 //   entry 8 0.29980178 Start
 //   entry 17 0.42 Lemma test-marker
 //
-// Free-text values (stack names, entry labels) go last on their line so no
-// escaping is needed; they must not contain newlines.
+// Stacks are an ordered list; `active` is the 0-based position of the
+// active one. Free-text values (stack names, entry labels) go last on
+// their line so no escaping is needed; newlines are flattened on save.
+// Internal ids are assigned on load — they never appear in the file.
 
 import type { HistStack, ProgressFile } from './types';
 
-export const PROGRESS_HEADER = 'psr-progress v1';
+export const PROGRESS_HEADER = 'psr-progress v2';
 export const PROGRESS_EXT = '.psr';
 
 const line = (s: string) => s.replace(/[\r\n]+/g, ' ').trimEnd();
 
 export function serializeProgress(p: ProgressFile): string {
+  const activeIndex = Math.max(
+    0,
+    p.state.hist.stacks.findIndex((s) => s.id === p.state.hist.activeId),
+  );
   const out: string[] = [];
   out.push(PROGRESS_HEADER);
   out.push(`saved ${new Date(p.savedAt).toISOString()}`);
@@ -42,11 +47,10 @@ export function serializeProgress(p: ProgressFile): string {
   out.push(`view.fitWidth ${p.state.fitWidth}`);
   out.push(`view.page ${p.state.pos.page}`);
   out.push(`view.yRatio ${p.state.pos.yRatio}`);
-  out.push(`hist.active ${p.state.hist.activeId}`);
-  out.push(`hist.nameCounter ${p.state.hist.nameCounter}`);
+  out.push(`active ${activeIndex}`);
   for (const s of p.state.hist.stacks) {
     out.push('');
-    out.push(`stack ${s.id} ${line(s.name)}`);
+    out.push(`stack ${line(s.name)}`);
     out.push(`cursor ${s.index}`);
     for (const e of s.entries) {
       out.push(`entry ${e.pos.page} ${e.pos.yRatio} ${line(e.label)}`);
@@ -71,10 +75,12 @@ export function parseProgress(text: string): ProgressFile | null {
       const key = sp === -1 ? raw : raw.slice(0, sp);
       const rest = sp === -1 ? '' : raw.slice(sp + 1);
       if (key === 'stack') {
-        const sp2 = rest.indexOf(' ');
-        const id = parseInt(sp2 === -1 ? rest : rest.slice(0, sp2), 10);
-        const name = sp2 === -1 ? '' : rest.slice(sp2 + 1);
-        cur = { id, name: name || `Untitled ${id}`, index: 0, entries: [] };
+        cur = {
+          id: stacks.length + 1,
+          name: rest || `Untitled ${stacks.length + 1}`,
+          index: 0,
+          entries: [],
+        };
         stacks.push(cur);
       } else if (key === 'cursor') {
         if (cur) cur.index = parseInt(rest, 10) | 0;
@@ -96,7 +102,16 @@ export function parseProgress(text: string): ProgressFile | null {
       if (!s.entries.length) return null;
       s.index = Math.min(Math.max(s.index, 0), s.entries.length - 1);
     }
-    const activeId = parseInt(kv['hist.active'] ?? '', 10);
+    const activeIndex = Math.min(
+      Math.max(parseInt(kv['active'] ?? '0', 10) | 0, 0),
+      stacks.length - 1,
+    );
+    // "Untitled N" numbering continues after the highest one in the file.
+    let maxUntitled = 0;
+    for (const s of stacks) {
+      const m = s.name.match(/^Untitled (\d+)$/);
+      if (m) maxUntitled = Math.max(maxUntitled, parseInt(m[1], 10));
+    }
     return {
       type: 'pdf-stack-reader-progress',
       v: 1,
@@ -118,8 +133,8 @@ export function parseProgress(text: string): ProgressFile | null {
         },
         hist: {
           v: 3,
-          activeId: stacks.some((s) => s.id === activeId) ? activeId : stacks[0].id,
-          nameCounter: parseInt(kv['hist.nameCounter'] ?? '', 10) || stacks.length + 1,
+          activeId: stacks[activeIndex].id,
+          nameCounter: Math.max(maxUntitled + 1, stacks.length + 1),
           stacks,
         },
         ts: Date.now(),
