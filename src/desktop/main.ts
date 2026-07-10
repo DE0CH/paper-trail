@@ -84,7 +84,7 @@ function buildMenu(): void {
         { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => send('zoom-out') },
         { label: 'Fit Width', accelerator: 'CmdOrCtrl+0', click: () => send('fit') },
         { type: 'separator' },
-        { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => send('toggle-sidebar') },
+        { label: 'Toggle Sidebar', accelerator: 'T', click: () => send('toggle-sidebar') },
         { label: 'Toggle Outline / Pages Panel', accelerator: 'CmdOrCtrl+Shift+B', click: () => send('toggle-nav') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
@@ -96,7 +96,10 @@ function buildMenu(): void {
         { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => send('back') },
         { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => send('forward') },
         { type: 'separator' },
-        { label: 'Mark This Spot', accelerator: 'CmdOrCtrl+D', click: () => send('mark') },
+        // Bare-letter accelerators match the in-app keys; when a text
+        // field has focus the renderer re-inserts the character instead.
+        { label: 'Mark This Spot', accelerator: 'M', click: () => send('mark') },
+        { label: 'Mark in a New Trail', accelerator: 'Shift+M', click: () => send('mark-branch') },
         { type: 'separator' },
         { label: 'Clear History', click: () => send('clear-history') },
       ],

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { controller, type Snapshot } from '../core/controller';
 import type { OutlineNode } from '../core/types';
+import { IconClose } from './icons';
 
 export type NavTab = 'outline' | 'pages';
 
@@ -131,11 +132,11 @@ export default function NavPanel({
         <span className="flex-1" />
         <button
           id="btnNavClose"
-          className="text-dim hover:text-fgapp cursor-pointer px-1.5 text-[13px]"
+          className="inline-flex items-center h-7 text-dim hover:text-fgapp cursor-pointer px-1.5"
           title="Close panel"
           onClick={onClose}
         >
-          &times;
+          <IconClose size={14} />
         </button>
       </div>
       {tab === 'outline' ? (

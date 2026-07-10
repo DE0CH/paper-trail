@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
 import NavPanel, { type NavTab } from './NavPanel';
+import { IconAnchor, IconClose } from './icons';
 
 const rowBase = 'flex items-center gap-1.5 px-1.5 py-0.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
@@ -56,16 +57,16 @@ function StackRow({ snap, id, name, count }: {
           {name}
         </span>
       )}
-      <span className="cnt text-[11px] text-dim flex-none">{count}</span>
+      <span className="cnt text-[11px] leading-none text-dim flex-none">{count}</span>
       <button
-        className="x flex-none px-1 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+        className="x flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
         title="Close this trail"
         onClick={(e) => {
           e.stopPropagation();
           controller.stackClose(id);
         }}
       >
-        &times;
+        <IconClose />
       </button>
     </div>
   );
@@ -121,16 +122,16 @@ function HistRow({ label, page, current, index }: {
         </span>
       )}
       <button
-        className="setPos flex-none px-1 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+        className="setPos flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
         title="Set this entry to the current position"
         onClick={(e) => {
           e.stopPropagation();
           controller.entrySetPos(index);
         }}
       >
-        &#8982;
+        <IconAnchor />
       </button>
-      <span className="pg text-[11px] text-dim flex-none">p.{page}</span>
+      <span className="pg text-[11px] leading-none text-dim flex-none">p.{page}</span>
     </div>
   );
 }

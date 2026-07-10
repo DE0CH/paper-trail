@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { MOD } from '../core/platform';
 import { controller } from '../core/controller';
+import { IconClose } from './icons';
 import { loadUI, saveUI } from '../core/store';
 import Toolbar from './Toolbar';
 import Sidebar from './Sidebar';
@@ -109,6 +110,13 @@ export default function App() {
 
   // Native menu actions when running inside the Electron desktop shell.
   useEffect(() => {
+    // If a text field has focus, type the character there and report true.
+    const typeInEditable = (ch: string): boolean => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return false;
+      document.execCommand('insertText', false, ch);
+      return true;
+    };
     window.ptDesktop?.onMenu((action) => {
       switch (action) {
         case 'open': void controller.pickFile(); break;
@@ -137,9 +145,21 @@ export default function App() {
           searchRef.current?.focus();
           searchRef.current?.select();
           break;
-        case 'toggle-sidebar': setSidebarVisible((v) => !v); break;
+        // Bare-letter menu accelerators (m / M / t) fire even while a text
+        // field has focus; re-insert the character there instead.
+        case 'toggle-sidebar':
+          if (typeInEditable('t')) break;
+          setSidebarVisible((v) => !v);
+          break;
         case 'toggle-nav': toggleNav(); break;
-        case 'mark': controller.markPosition(); break;
+        case 'mark':
+          if (typeInEditable('m')) break;
+          controller.markPosition();
+          break;
+        case 'mark-branch':
+          if (typeInEditable('M')) break;
+          controller.markPosition(true);
+          break;
         case 'clear-history': controller.clearHistory(); break;
         case 'help':
           controller.showToast(
@@ -274,11 +294,11 @@ export default function App() {
               </button>
               <button
                 id="btnMismatchDismiss"
-                className="flex-none px-1.5 cursor-pointer hover:text-white"
+                className="flex-none inline-flex items-center self-stretch px-1.5 cursor-pointer hover:text-white"
                 title="Dismiss this warning"
                 onClick={() => controller.dismissMismatch()}
               >
-                &times;
+                <IconClose />
               </button>
             </div>
           )}

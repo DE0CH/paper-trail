@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
+import {
+  IconSidebar, IconToc, IconUndo, IconRedo, IconBack, IconForward, IconSwap,
+  IconPrev, IconNext,
+} from './icons';
 
 const btn = 'px-2.5 py-1 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
 const input = 'bg-inputbg text-fgapp border border-borderapp rounded-md px-2 py-1 outline-none focus:border-accent';
 const sep = <span className="w-px h-5 bg-borderapp mx-1" />;
+const iconBtn = `${btn} inline-flex items-center justify-center h-7 px-2`;
 
 export default function Toolbar({
   snap,
@@ -41,13 +46,13 @@ export default function Toolbar({
 
   return (
     <header id="toolbar" className="flex items-center gap-1.5 h-10 px-2.5 bg-toolbar border-b border-borderapp select-none overflow-hidden whitespace-nowrap">
-      <button className={btn} title="Toggle sidebar (t)" onClick={onToggleSidebar}>&#9776;</button>
+      <button className={iconBtn} title="Toggle sidebar (t)" onClick={onToggleSidebar}><IconSidebar /></button>
       <button
         id="btnNavToggle"
-        className={`${btn} ${navOpen ? 'text-accent' : ''}`}
+        className={`${iconBtn} ${navOpen ? 'text-accent' : ''}`}
         title="Toggle outline / pages panel"
         onClick={onToggleNav}
-      >&#9707;</button>
+      ><IconToc /></button>
       <button className={btn} title="Open a PDF or reading-progress file (o)" onClick={() => void controller.pickFile()}>Open</button>
       <button id="btnSave" className={`${btn} inline-flex items-center`} disabled={!snap.docOpen}
         title={saveTitle}
@@ -71,26 +76,26 @@ export default function Toolbar({
       {snap.docOpen && (
         <button
           id="btnReplacePdf"
-          className={`${btn} text-dim`}
+          className={`${iconBtn} text-dim`}
           title="Replace the PDF with another file, keeping your reading history (e.g. a revised version)"
           onClick={() => void controller.requestReplacePdf()}
-        >&#8644;</button>
+        ><IconSwap /></button>
       )}
       <span className="flex-1" />
 
-      <button id="btnUndo" className={btn} disabled={!snap.canUndo}
+      <button id="btnUndo" className={iconBtn} disabled={!snap.canUndo}
         title={`Undo the last history change (${MOD}+Z)`}
-        onClick={() => controller.undoHist()}>&#8630;</button>
-      <button id="btnRedo" className={btn} disabled={!snap.canRedo}
+        onClick={() => controller.undoHist()}><IconUndo /></button>
+      <button id="btnRedo" className={iconBtn} disabled={!snap.canRedo}
         title={`Redo (${MOD}+Shift+Z)`}
-        onClick={() => controller.redoHist()}>&#8631;</button>
+        onClick={() => controller.redoHist()}><IconRedo /></button>
       {sep}
-      <button id="btnBack" className={btn} disabled={!snap.canBack}
+      <button id="btnBack" className={iconBtn} disabled={!snap.canBack}
         title="Back — pop up the stack (Backspace / Alt+←)"
-        onClick={() => controller.goBack()}>&larr;</button>
-      <button id="btnFwd" className={btn} disabled={!snap.canForward}
+        onClick={() => controller.goBack()}><IconBack /></button>
+      <button id="btnFwd" className={iconBtn} disabled={!snap.canForward}
         title="Forward — down again (Shift+Backspace / Alt+→)"
-        onClick={() => controller.goForward()}>&rarr;</button>
+        onClick={() => controller.goForward()}><IconForward /></button>
       {sep}
 
       <input
@@ -146,8 +151,8 @@ export default function Toolbar({
         }}
       />
       <span id="searchCount" className="text-dim min-w-13 text-center">{snap.searchCount}</span>
-      <button className={btn} title="Previous match (Shift+Enter)" onClick={() => void controller.gotoMatch(-1)}>&#9650;</button>
-      <button className={btn} title="Next match (Enter)" onClick={() => void controller.gotoMatch(1)}>&#9660;</button>
+      <button className={iconBtn} title="Previous match (Shift+Enter)" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
+      <button className={iconBtn} title="Next match (Enter)" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
     </header>
   );
 }
