@@ -94,6 +94,14 @@ export class NavStacks {
     this.emit();
   }
 
+  renameEntry(i: number, label: string): void {
+    const e = this.active.entries[i];
+    if (!e || !label.trim() || e.label === label.trim()) return;
+    this.recordUndo();
+    e.label = label.trim();
+    this.emit();
+  }
+
   get active(): HistStack {
     return this.stacks.find((s) => s.id === this.activeId) ?? this.stacks[0];
   }

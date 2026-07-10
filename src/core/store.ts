@@ -26,8 +26,11 @@ export const Store = {
 
 export interface UiPrefs {
   stacksW?: number;
-  sidebarW?: number;
+  sideW?: number;
   previewH?: number;
+  navW?: number;
+  navOpen?: boolean;
+  navTab?: 'outline' | 'pages';
 }
 
 export function loadUI(): UiPrefs {

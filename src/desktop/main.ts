@@ -82,6 +82,7 @@ function buildMenu(): void {
         { label: 'Fit Width', accelerator: 'CmdOrCtrl+0', click: () => send('fit') },
         { type: 'separator' },
         { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => send('toggle-sidebar') },
+        { label: 'Toggle Outline / Pages Panel', accelerator: 'CmdOrCtrl+Shift+B', click: () => send('toggle-nav') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],

@@ -5,23 +5,24 @@ import Toolbar from './Toolbar';
 import Sidebar from './Sidebar';
 import Welcome from './Welcome';
 
-// Minimum widths that keep every panel usable.
-const STACKS_MIN = 80;
-const SIDECOL_MIN = 150;
+// Each panel owns its width independently: resizing, closing, or opening
+// one panel never changes the others' sizes — neighbors just shift and the
+// viewer absorbs the difference.
+const MIN_W = { nav: 90, stacks: 80, side: 150 } as const;
 const VIEWER_MIN = 260;
 
 const clampW = (v: number, min: number, max: number) =>
   Math.min(Math.max(min, max), Math.max(min, v));
 
-function initialWidths() {
+type Widths = { nav: number; stacks: number; side: number };
+
+function initialWidths(): Widths {
   const ui = loadUI();
-  const sidebar = clampW(
-    ui.sidebarW ?? 440,
-    STACKS_MIN + SIDECOL_MIN,
-    Math.max(320, window.innerWidth - VIEWER_MIN),
-  );
-  const stacks = clampW(ui.stacksW ?? 150, STACKS_MIN, sidebar - SIDECOL_MIN);
-  return { stacks, sidebar };
+  return {
+    nav: clampW(ui.navW ?? 150, MIN_W.nav, 500),
+    stacks: clampW(ui.stacksW ?? 150, MIN_W.stacks, 500),
+    side: clampW(ui.sideW ?? 290, MIN_W.side, 800),
+  };
 }
 
 export default function App() {
@@ -33,6 +34,17 @@ export default function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [widths, setWidths] = useState(initialWidths);
   const [dragOver, setDragOver] = useState(false);
+  const [navOpen, setNavOpen] = useState(() => loadUI().navOpen ?? true);
+  const [navTab, setNavTab] = useState<'outline' | 'pages'>(() => loadUI().navTab ?? 'outline');
+
+  const toggleNav = () => setNavOpen((v) => {
+    saveUI({ navOpen: !v });
+    return !v;
+  });
+  const pickNavTab = (t: 'outline' | 'pages') => {
+    saveUI({ navTab: t });
+    setNavTab(t);
+  };
 
   // Attach the imperative core once.
   useEffect(() => {
@@ -122,6 +134,7 @@ export default function App() {
           searchRef.current?.select();
           break;
         case 'toggle-sidebar': setSidebarVisible((v) => !v); break;
+        case 'toggle-nav': toggleNav(); break;
         case 'clear-history': controller.clearHistory(); break;
         case 'help':
           controller.showToast(
@@ -177,8 +190,10 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Panel resizing (both dividers), with mutual constraints.
-  const startResize = (which: 'stacks' | 'sidebar', e: React.PointerEvent) => {
+  // Panel resizing: each divider resizes exactly one panel; the others keep
+  // their widths and shift. The only global constraint is that the viewer
+  // keeps a minimum width.
+  const startResize = (which: 'nav' | 'stacks' | 'side', e: React.PointerEvent) => {
     e.preventDefault();
     const handle = e.currentTarget as HTMLElement;
     handle.setPointerCapture(e.pointerId);
@@ -186,18 +201,13 @@ export default function App() {
     document.body.classList.add('resizing');
     const startX = e.clientX;
     const start = { ...widths };
-    const bounds = which === 'stacks'
-      ? { min: STACKS_MIN, max: start.sidebar - SIDECOL_MIN }
-      : { min: start.stacks + SIDECOL_MIN, max: Math.max(320, window.innerWidth - VIEWER_MIN) };
+    const othersSum = (navOpen && which !== 'nav' ? start.nav : 0)
+      + (which !== 'stacks' ? start.stacks : 0)
+      + (which !== 'side' ? start.side : 0);
+    const max = Math.max(MIN_W[which], window.innerWidth - VIEWER_MIN - othersSum);
     const move = (ev: PointerEvent) => {
-      const w = clampW(
-        (which === 'stacks' ? start.stacks : start.sidebar) + ev.clientX - startX,
-        bounds.min,
-        bounds.max,
-      );
-      setWidths((prev) => (which === 'stacks'
-        ? { ...prev, stacks: w }
-        : { ...prev, sidebar: w }));
+      const w = clampW(start[which] + ev.clientX - startX, MIN_W[which], max);
+      setWidths((prev) => ({ ...prev, [which]: w }));
     };
     const up = () => {
       handle.removeEventListener('pointermove', move);
@@ -205,7 +215,11 @@ export default function App() {
       handle.classList.remove('bg-[rgba(79,140,255,0.35)]');
       document.body.classList.remove('resizing');
       setWidths((prev) => {
-        saveUI({ stacksW: Math.round(prev.stacks), sidebarW: Math.round(prev.sidebar) });
+        saveUI({
+          navW: Math.round(prev.nav),
+          stacksW: Math.round(prev.stacks),
+          sideW: Math.round(prev.side),
+        });
         return prev;
       });
       controller.refitIfNeeded();
@@ -216,10 +230,24 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full">
-      <Toolbar snap={snap} searchRef={searchRef} onToggleSidebar={() => setSidebarVisible((v) => !v)} />
+      <Toolbar
+        snap={snap}
+        searchRef={searchRef}
+        onToggleSidebar={() => setSidebarVisible((v) => !v)}
+        navOpen={navOpen}
+        onToggleNav={toggleNav}
+      />
       <div className="flex flex-1 min-h-0">
         {sidebarVisible && (
-          <Sidebar snap={snap} widths={widths} onStartResize={startResize} />
+          <Sidebar
+            snap={snap}
+            widths={widths}
+            navOpen={navOpen}
+            navTab={navTab}
+            onNavTab={pickNavTab}
+            onNavClose={toggleNav}
+            onStartResize={startResize}
+          />
         )}
         <div
           ref={containerRef}

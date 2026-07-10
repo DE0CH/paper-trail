@@ -172,7 +172,8 @@ async function run(): Promise<void> {
     } catch { /* hlCount stays 0 */ }
     check('search finds 4 matches with highlights', hlCount >= 1, `highlights: ${hlCount}`);
 
-    // --- panel resizing: extreme drags must not break the layout ---
+    // --- panel resizing: each divider resizes exactly one panel; the
+    // others keep their widths (they only shift) ---
     async function dragHandle(sel: string, toX: number): Promise<void> {
       const box = (await page.locator(sel).boundingBox())!;
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -181,28 +182,88 @@ async function run(): Promise<void> {
       await page.mouse.up();
     }
     const widths = () => page.evaluate(() => ({
-      sidebar: document.getElementById('sidebar')!.getBoundingClientRect().width,
+      nav: document.getElementById('navCol')?.getBoundingClientRect().width ?? 0,
       stacks: document.getElementById('stacksCol')!.getBoundingClientRect().width,
-      sideCol: document.getElementById('sideCol')!.getBoundingClientRect().width,
+      side: document.getElementById('sideCol')!.getBoundingClientRect().width,
       win: window.innerWidth,
     }));
-    await dragHandle('#resizeSidebar', 0);
+    const near = (a: number, b: number) => Math.abs(a - b) < 1.5;
+
+    let w0 = await widths();
+    await dragHandle('#resizeNav', 0);
     let w = await widths();
-    check('sidebar drag to far left keeps panels usable',
-      w.stacks >= 79 && w.sideCol >= 140 && w.sidebar >= w.stacks + 140, JSON.stringify(w));
+    check('nav drag far left: clamped, neighbors unchanged',
+      w.nav >= 89 && near(w.stacks, w0.stacks) && near(w.side, w0.side), JSON.stringify(w));
     await dragHandle('#resizeStacks', 0);
+    w0 = w;
     w = await widths();
-    check('stacks drag to far left keeps a usable column',
-      w.stacks >= 79 && w.sideCol >= 140, JSON.stringify(w));
-    await dragHandle('#resizeStacks', 1300);
+    check('stacks drag far left: clamped, neighbors unchanged',
+      w.stacks >= 79 && near(w.nav, w0.nav) && near(w.side, w0.side), JSON.stringify(w));
+    await dragHandle('#resizeStacks', 1390);
+    w0 = w;
     w = await widths();
-    check('stacks drag to far right leaves room for history',
-      w.sideCol >= 140 && w.stacks <= w.sidebar - 140, JSON.stringify(w));
+    check('stacks drag far right: viewer keeps room, neighbors unchanged',
+      w.nav + w.stacks + w.side <= w.win - 250 && near(w.nav, w0.nav) && near(w.side, w0.side),
+      JSON.stringify(w));
     await dragHandle('#resizeSidebar', 1390);
+    w0 = w;
     w = await widths();
-    check('sidebar drag to far right leaves room for the viewer',
-      w.sidebar <= w.win - 250, JSON.stringify(w));
-    await dragHandle('#resizeSidebar', 440);
+    check('history drag far right: viewer keeps room, neighbors unchanged',
+      w.nav + w.stacks + w.side <= w.win - 250 && near(w.nav, w0.nav) && near(w.stacks, w0.stacks),
+      JSON.stringify(w));
+    // Closing the nav panel must not resize the others.
+    w0 = w;
+    await page.click('#btnNavClose');
+    w = await widths();
+    check('closing nav panel leaves other panels unchanged',
+      w.nav === 0 && near(w.stacks, w0.stacks) && near(w.side, w0.side), JSON.stringify(w));
+    await page.click('#btnNavToggle');
+    // Restore sane sizes for the remaining tests.
+    w = await widths();
+    await dragHandle('#resizeStacks', w.nav + 150);
+    w = await widths();
+    await dragHandle('#resizeSidebar', w.nav + w.stacks + 290);
+
+    // --- renaming: history entries, and strange characters in names ---
+    await page.locator('#historyPanel .histItem .lbl').first().dblclick();
+    await page.fill('#historyPanel .histItem input.rename', '  my renamed entry  ');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    const renamed = await page.evaluate(() =>
+      (window as never as { __psr: PsrHooks }).__psr.hist.active.entries[0].label);
+    check('history entries are renamable (trimmed)', renamed === 'my renamed entry', renamed);
+
+    // --- nav panel: outline + page thumbnails, closable ---
+    const navVisible = await page.locator('#navCol').count();
+    check('nav panel is visible by default', navVisible === 1);
+    const outlineItems = await page.locator('#navCol .outlineItem').count();
+    check('outline lives in the nav panel', outlineItems > 3, `${outlineItems} items`);
+    await page.click('#navCol button:has-text("Pages")');
+    await page.waitForSelector('#thumbList [data-thumb-page="1"] canvas', { timeout: 15000 });
+    check('page thumbnails render lazily', true);
+    const before = await page.evaluate(() => {
+      const h = (window as never as { __psr: PsrHooks }).__psr.hist.active;
+      return { index: h.index };
+    });
+    await page.locator('#thumbList .thumb').nth(2).click();
+    await page.waitForTimeout(400);
+    const afterThumb = await page.evaluate(() => {
+      const psr = (window as never as { __psr: PsrHooks }).__psr;
+      return {
+        page: psr.viewer.currentPosition().page,
+        n: psr.hist.active.entries.length,
+        label: psr.hist.active.entries[psr.hist.active.index].label,
+      };
+    });
+    // A jump truncates above the cursor, so the new length is cursor+2.
+    check('clicking a thumbnail jumps and pushes history',
+      afterThumb.page === 3 && afterThumb.n === before.index + 2 && /p\.\s*3/.test(afterThumb.label),
+      JSON.stringify(afterThumb));
+    await page.click('#btnNavClose');
+    check('nav panel closes', (await page.locator('#navCol').count()) === 0);
+    await page.click('#btnNavToggle');
+    check('nav panel reopens from the toolbar', (await page.locator('#navCol').count()) === 1);
+    await page.click('#navCol button:has-text("Outline")');
 
     // --- undo/redo of history mutations ---
     const stU = await page.evaluate(async () => {

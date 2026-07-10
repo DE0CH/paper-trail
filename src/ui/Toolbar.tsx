@@ -9,10 +9,14 @@ export default function Toolbar({
   snap,
   searchRef,
   onToggleSidebar,
+  navOpen,
+  onToggleNav,
 }: {
   snap: Snapshot;
   searchRef: RefObject<HTMLInputElement | null>;
   onToggleSidebar: () => void;
+  navOpen: boolean;
+  onToggleNav: () => void;
 }) {
   const [pageText, setPageText] = useState('');
   const pageFocused = useRef(false);
@@ -33,6 +37,12 @@ export default function Toolbar({
   return (
     <header id="toolbar" className="flex items-center gap-1.5 h-10 px-2.5 bg-toolbar border-b border-borderapp select-none overflow-hidden whitespace-nowrap">
       <button className={btn} title="Toggle sidebar (t)" onClick={onToggleSidebar}>&#9776;</button>
+      <button
+        id="btnNavToggle"
+        className={`${btn} ${navOpen ? 'text-accent' : ''}`}
+        title="Toggle outline / pages panel"
+        onClick={onToggleNav}
+      >&#9707;</button>
       <button className={btn} title="Open a PDF or reading-progress file (o)" onClick={() => void controller.pickFile()}>Open</button>
       <button id="btnSave" className={btn} disabled={!snap.docOpen}
         title={snap.saveBound

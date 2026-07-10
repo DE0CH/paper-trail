@@ -398,6 +398,11 @@ export class Controller {
     this.notify(); // restore the row even if the name was rejected
   }
 
+  entryRename(i: number, label: string): void {
+    this.hist.renameEntry(i, label);
+    this.notify();
+  }
+
   clearHistory(): void {
     if (!this.docOpen) return;
     this.hist.clearAll();

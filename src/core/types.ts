@@ -69,7 +69,7 @@ export type MenuAction =
   | 'open' | 'save' | 'back' | 'forward'
   | 'undo' | 'redo'
   | 'zoom-in' | 'zoom-out' | 'fit' | 'find'
-  | 'toggle-sidebar' | 'clear-history' | 'help';
+  | 'toggle-sidebar' | 'toggle-nav' | 'clear-history' | 'help';
 
 // ---- global augmentations (File System Access API bits missing from lib.dom,
 // and the Electron shell bridge) ----
