@@ -27,8 +27,8 @@ https://github.com/user-attachments/assets/24bb31cc-d155-4e21-a88f-c9e1e270d2c0
 - **Or download the desktop app** (native menus, works offline):
   grab the `.dmg` (macOS) or installer (Windows) from the
   [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
-  The builds are currently unsigned — on macOS, right-click → Open the
-  first time.
+  The macOS build is signed and notarized; the Windows build is
+  currently unsigned, so SmartScreen may warn the first time.
 
 Then open a PDF with the **Open** button or drop it anywhere in the
 window. (Building from source is covered in
