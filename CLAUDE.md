@@ -32,6 +32,9 @@ re-litigate without asking.
   dead ends. Out-of-range positions land at the top.
 - Mismatch banner: dismiss is per-occurrence; "Use this PDF" adopts the
   open file into the session.
+- Auto-save must never trigger a browser permission prompt: if silent
+  write permission isn't granted, the timer skips (state stays dirty)
+  and the prompt happens only on a user-initiated save.
 
 ## Engineering practice
 - TypeScript (strict) + React + Vite + Tailwind; Python for scripts

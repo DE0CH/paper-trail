@@ -442,6 +442,35 @@ async function run(): Promise<void> {
       return out;
     });
     check('jump marks session dirty', st4.dirtyAfterJump === true);
+
+    // --- auto-save never triggers a permission prompt: without silent
+    // write permission the timer skips (stays dirty); with it, it saves ---
+    const autoSave = await page.evaluate(async () => {
+      const psr = (window as never as { __psr: PsrHooks & { jumpVia(p: unknown, l: string): void } }).__psr;
+      let writes = 0;
+      let permission = 'prompt';
+      psr.session.handle = {
+        name: 'perm.trail',
+        queryPermission: async () => permission,
+        createWritable: async () => ({ write: async () => { writes++; }, close: async () => {} }),
+      } as never;
+      psr.jumpVia({ page: 2, yRatio: 0 }, 'auto probe 1');
+      await new Promise((r) => setTimeout(r, 2200)); // past the 1.5s debounce
+      const skipped = { writes, dirty: psr.session.dirty };
+      permission = 'granted';
+      psr.jumpVia({ page: 3, yRatio: 0 }, 'auto probe 2');
+      await new Promise((r) => setTimeout(r, 2200));
+      const saved = { writes, dirty: psr.session.dirty };
+      psr.session.handle = null;
+      psr.session.dirty = false;
+      return { skipped, saved };
+    });
+    check('auto-save skips (stays dirty) when a prompt would be needed',
+      autoSave.skipped.writes === 0 && autoSave.skipped.dirty === true,
+      JSON.stringify(autoSave.skipped));
+    check('auto-save writes silently once permission is granted',
+      autoSave.saved.writes >= 1 && autoSave.saved.dirty === false,
+      JSON.stringify(autoSave.saved));
     check('save writes line-oriented progress file and clears dirty',
       st4.dirtyAfterSave === false
         && st4.savedJson!.type === 'paper-trail-session v1'

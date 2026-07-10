@@ -177,7 +177,7 @@ export class Controller {
       if (document.visibilityState === 'hidden' && this.docOpen) {
         if (this.currentFp) Store.saveDoc(this.currentFp, this.serializeState());
         if (this.session.handle && this.session.dirty) {
-          this.writeProgress().catch(() => { /* dirty flag stays honest */ });
+          this.writeProgressAuto().catch(() => { /* dirty flag stays honest */ });
         }
       }
     });
@@ -297,9 +297,31 @@ export class Controller {
       // Bound to a progress file: auto-save continuously (debounced).
       clearTimeout(this.fileSaveTimer);
       this.fileSaveTimer = setTimeout(() => {
-        this.writeProgress().catch((e) => console.warn('auto-save failed', e));
+        this.writeProgressAuto().catch((e) => console.warn('auto-save failed', e));
       }, 1500);
     }
+  }
+
+  /**
+   * True when writing won't trigger a browser permission prompt. Timer
+   * saves must never pop a prompt out of nowhere; if permission needs
+   * asking, it waits for the next user-initiated save.
+   */
+  private async canWriteSilently(): Promise<boolean> {
+    const h = this.session.handle;
+    if (!h) return false;
+    if (!h.queryPermission) return true; // API absent (Electron auto-grants, tests fake)
+    try {
+      return (await h.queryPermission({ mode: 'readwrite' })) === 'granted';
+    } catch {
+      return true;
+    }
+  }
+
+  /** Auto-save path: write only when it can happen without a prompt. */
+  private async writeProgressAuto(): Promise<void> {
+    if (!(await this.canWriteSilently())) return; // stays dirty; saved on next explicit save
+    await this.writeProgress();
   }
 
   private restoreStateFrom(d: SerializedState | null): boolean {
@@ -364,6 +386,20 @@ export class Controller {
 
   async saveProgress(): Promise<void> {
     if (!this.docOpen) return;
+    if (this.session.handle) {
+      // User-initiated save: the right moment for a permission prompt if
+      // one is needed (auto-save never prompts).
+      try {
+        if (this.session.handle.queryPermission
+            && (await this.session.handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+          const r = await this.session.handle.requestPermission?.({ mode: 'readwrite' });
+          if (r !== 'granted') {
+            this.showToast('Write permission denied \u2014 session not saved');
+            return;
+          }
+        }
+      } catch { /* proceed; writeProgress surfaces real failures */ }
+    }
     if (!this.session.handle) {
       if (!window.showSaveFilePicker) {
         this.showToast('Saving progress files requires a Chromium-based browser');
