@@ -9,10 +9,10 @@ jump on a **reading trail**, so you can always pop back to the exact spot
 you left, branch off side explorations, and save the whole thing to a
 file you can come back to (or keep in git next to the paper).
 
-Following references, popping back, jumping around the history, and
-branching into a new trail:
+**[▶ Watch the demo](docs/media/demo.mp4)** — following references, popping
+back, jumping around the history, and branching into a new trail:
 
-https://github.com/DE0CH/paper-trail/releases/download/v0.3.1/demo.mp4
+[![Demo video](docs/media/main.png)](docs/media/demo.mp4)
 
 <p align="center">
   <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after branching with cmd+click">
