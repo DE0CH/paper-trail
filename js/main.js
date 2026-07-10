@@ -3,6 +3,7 @@
 import { Viewer } from './viewer.js';
 import { NavTree, renderTree } from './navtree.js';
 import { SearchController } from './search.js';
+import { Store, putRecent, getRecents, ensureReadPermission } from './store.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -95,9 +96,85 @@ function updateCurrentBadge() {
   if (badge && tree.current) badge.textContent = 'p.' + tree.current.pos.page;
 }
 
-// Persistence hooks — filled in by the persistence feature.
-function scheduleSave() {}
-function restoreState() { return false; }
+// ---------- persistence ----------
+
+let saveTimer = 0;
+
+function serializeState() {
+  return {
+    v: 1,
+    name: currentName,
+    scale: viewer.scale,
+    fitWidth: viewer.fitWidth,
+    tree: tree.serialize(),
+    pos: viewer.currentPosition(),
+    ts: Date.now(),
+  };
+}
+
+function scheduleSave() {
+  if (!docOpen || !currentFp) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    Store.saveDoc(currentFp, serializeState());
+  }, 800);
+}
+
+// Flush state when the tab is hidden or closing.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && docOpen && currentFp) {
+    Store.saveDoc(currentFp, serializeState());
+  }
+});
+
+function restoreState() {
+  if (!currentFp) return false;
+  const d = Store.loadDoc(currentFp);
+  if (!d || d.v !== 1) return false;
+  if (typeof d.scale === 'number') {
+    viewer.setScale(d.scale, { fitWidth: !!d.fitWidth });
+  }
+  if (d.tree) tree.load(d.tree);
+  const pos = (tree.current && tree.current.pos) || d.pos;
+  if (pos) viewer.scrollTo(pos);
+  return true;
+}
+
+// ---------- recent files ----------
+
+async function renderRecents() {
+  const entries = await getRecents();
+  els.recent.replaceChildren();
+  if (!entries.length) return;
+  const h = document.createElement('h3');
+  h.textContent = 'Recent';
+  els.recent.appendChild(h);
+  for (const entry of entries) {
+    const row = document.createElement('div');
+    row.className = 'recentItem';
+    row.textContent = entry.name;
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = new Date(entry.ts).toLocaleDateString();
+    row.appendChild(when);
+    row.addEventListener('click', async () => {
+      if (entry.handle) {
+        if (await ensureReadPermission(entry.handle)) {
+          try {
+            const file = await entry.handle.getFile();
+            await openFile(file, entry.handle);
+            return;
+          } catch (e) {
+            console.warn('reopen via handle failed', e);
+          }
+        }
+      }
+      toast('Please locate \u201c' + entry.name + '\u201d again');
+      pickFile();
+    });
+    els.recent.appendChild(row);
+  }
+}
 
 // ---------- navigation semantics ----------
 
@@ -226,7 +303,7 @@ async function buildOutline() {
 
 // ---------- opening documents ----------
 
-async function openData(data, name) {
+async function openData(data, name, { handle = null } = {}) {
   toast('Loading \u201c' + name + '\u201d\u2026', 1500);
   try {
     const doc = await viewer.open({ data });
@@ -252,19 +329,38 @@ async function openData(data, name) {
     buildOutline();
     restoreState();
     els.viewerContainer.focus();
+    if (currentFp) {
+      putRecent({ fp: currentFp, name, ts: Date.now(), handle: handle || undefined });
+    }
   } catch (e) {
     console.error(e);
     toast('Failed to open PDF: ' + (e && e.message ? e.message : e));
   }
 }
 
-async function openFile(file) {
+async function openFile(file, handle = null) {
   if (!file) return;
   const buf = await file.arrayBuffer();
-  await openData(new Uint8Array(buf), file.name);
+  await openData(new Uint8Array(buf), file.name, { handle });
 }
 
-function pickFile() {
+async function pickFile() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{
+          description: 'PDF documents',
+          accept: { 'application/pdf': ['.pdf'] },
+        }],
+        excludeAcceptAllOption: false,
+      });
+      if (handle) await openFile(await handle.getFile(), handle);
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // user cancelled
+      console.warn('showOpenFilePicker failed, falling back', e);
+    }
+  }
   els.fileInput.value = '';
   els.fileInput.click();
 }
@@ -394,12 +490,19 @@ window.addEventListener('dragleave', (e) => {
     els.dropOverlay.classList.add('hidden');
   }
 });
-window.addEventListener('drop', (e) => {
+window.addEventListener('drop', async (e) => {
   e.preventDefault();
   dragDepth = 0;
   els.dropOverlay.classList.add('hidden');
-  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (f) openFile(f);
+  if (!e.dataTransfer) return;
+  const item = e.dataTransfer.items && e.dataTransfer.items[0];
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  let handle = null;
+  try {
+    if (item && item.getAsFileSystemHandle) handle = await item.getAsFileSystemHandle();
+  } catch { /* handle stays null */ }
+  openFile(f, handle);
 });
 
 // refit on window resize
@@ -417,6 +520,7 @@ window.addEventListener('resize', () => {
 
 renderHistory();
 updateNavButtons();
+renderRecents();
 
 const params = new URLSearchParams(location.search);
 const fileParam = params.get('file');
