@@ -3,6 +3,17 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.1
+
+- Fixed: PDFs written with CJK (Chinese, Japanese, Korean) fonts that
+  don't embed their font data showed no text at all and couldn't be
+  searched. The character maps and standard fonts pdf.js needs for
+  them now ship inside the app, so such documents work fully offline
+  in the desktop app too.
+- Windows: the toolbar's thin bottom border now continues underneath
+  the minimize/maximize/close buttons instead of stopping where they
+  start.
+
 ## 0.5.0
 
 - The desktop apps now **update themselves**: new releases download in
