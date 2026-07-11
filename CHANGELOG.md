@@ -3,6 +3,24 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.4.2
+
+- Every keyboard shortcut now uses a modifier, like a normal app —
+  plain typing never triggers anything. Back/Forward are `Alt+←`/`Alt+→`
+  (or `Cmd/Ctrl+[`/`]`), mark is `Cmd/Ctrl+D`, re-anchor is
+  `Cmd/Ctrl+E`, trails switch with `Alt+[`/`Alt+]`, the sidebar toggles
+  with `Cmd/Ctrl+B`.
+- Press `?` for a proper shortcut cheat-sheet overlay.
+- Right-click menus everywhere, and they feel native: full edit menus
+  with spell-check in text fields, Copy / Look Up / "Search Document
+  for …" on selections, and context actions on links (follow, branch),
+  history entries (jump, rename, re-anchor), trails (switch, rename,
+  duplicate, close), and the page (back, forward, mark, zoom).
+- Windows: the window buttons are integrated into the toolbar and the
+  menu bar is gone — everything is in the app itself.
+- macOS: the traffic lights are now exactly centered in the toolbar.
+- The README explains what trails and branches are up front.
+
 ## 0.4.1
 
 - Session files are now fully transparent: they identify the PDF by
