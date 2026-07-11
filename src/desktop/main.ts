@@ -217,23 +217,18 @@ function sendFileTo(win: BrowserWindow, filePath: string): void {
   });
 }
 
-/** Open an OS-provided file: into `target`, a still-empty window, or a new one. */
+/**
+ * Open an OS-provided file (Open With…, Dock drops, Open dialog). Always
+ * in a new window — except at launch, where the file goes into the
+ * freshly created first window (`target`).
+ */
 function openPath(filePath: string, target?: BrowserWindow): void {
   if (!app.isReady()) {
     pendingPaths.push(filePath);
     return;
   }
-  let win = target && !target.isDestroyed() ? target : null;
-  if (!win) {
-    const focused = focusedWindow();
-    // A window that still shows the welcome screen keeps the bare app
-    // title; one that is still loading has nothing in it either.
-    if (focused && !focused.isDestroyed()
-      && (focused.webContents.isLoading() || focused.getTitle() === 'Paper Trail')) {
-      win = focused;
-    }
-  }
-  sendFileTo(win ?? createWindow(), filePath);
+  const win = target && !target.isDestroyed() ? target : createWindow();
+  sendFileTo(win, filePath);
 }
 
 // macOS: Open With…, drag onto the Dock icon, recent documents.
@@ -253,10 +248,11 @@ app.on('second-instance', (_event, argv) => {
 });
 
 function openDialog(): void {
+  // PDFs only: sessions load through the separate Load Session action.
   void dialog.showOpenDialog({
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'PDF or reading session', extensions: ['pdf', 'ptl'] },
+      { name: 'PDF document', extensions: ['pdf'] },
     ],
   }).then(({ canceled, filePaths }) => {
     if (canceled) return;

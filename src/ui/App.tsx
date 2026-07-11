@@ -248,14 +248,20 @@ export default function App() {
     });
   }, []);
 
-  // Drag & drop.
+  // Drag & drop. With a document already open, dropping a PDF is
+  // deliberately a no-op (open another window for another paper) — but
+  // dropping a session file still loads it.
   useEffect(() => {
     let depth = 0;
+    const pdfOnlyDrag = (dt: DataTransfer) => {
+      const items = [...dt.items].filter((i) => i.kind === 'file');
+      return items.length > 0 && items.every((i) => i.type === 'application/pdf');
+    };
     const enter = (e: DragEvent) => {
       if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
       e.preventDefault();
       depth++;
-      setDragOver(true);
+      setDragOver(!(controller.getSnapshot().docOpen && pdfOnlyDrag(e.dataTransfer)));
     };
     const over = (e: DragEvent) => e.preventDefault();
     const leave = (e: DragEvent) => {
@@ -266,7 +272,13 @@ export default function App() {
       e.preventDefault();
       depth = 0;
       setDragOver(false);
-      if (e.dataTransfer) void controller.openDropped(e.dataTransfer);
+      if (!e.dataTransfer) return;
+      if (controller.getSnapshot().docOpen) {
+        const session = [...e.dataTransfer.files].find((f) => /\.ptl$/i.test(f.name));
+        if (session) void controller.openFile(session);
+        return;
+      }
+      void controller.openDropped(e.dataTransfer);
     };
     window.addEventListener('dragenter', enter);
     window.addEventListener('dragover', over);
@@ -406,7 +418,7 @@ export default function App() {
 
       {dragOver && (
         <div className="fixed inset-0 z-100 flex items-center justify-center text-[26px] bg-[rgba(20,22,26,0.8)] border-4 border-dashed border-accent pointer-events-none">
-          Drop PDF to open
+          {snap.docOpen ? 'Drop a session file to load it' : 'Drop PDF to open'}
         </div>
       )}
 

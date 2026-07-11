@@ -994,16 +994,18 @@ export class Controller {
     this.pickViaInput();
   }
 
+  /**
+   * Pick a PDF. Sessions are loaded through the separate Load Session
+   * action — deliberately two distinct pickers. (A .ptl chosen through
+   * the "all files" escape hatch still routes correctly via openFile.)
+   */
   async pickFile(): Promise<void> {
     if (window.showOpenFilePicker) {
       try {
         const [handle] = await window.showOpenFilePicker({
           types: [{
-            description: 'PDF or reading progress',
-            accept: {
-              'application/pdf': ['.pdf'],
-              'text/plain': [PROGRESS_EXT],
-            },
+            description: 'PDF document',
+            accept: { 'application/pdf': ['.pdf'] },
           }],
           excludeAcceptAllOption: false,
         });
@@ -1021,7 +1023,7 @@ export class Controller {
     if (!this.fileInput) {
       this.fileInput = document.createElement('input');
       this.fileInput.type = 'file';
-      this.fileInput.accept = 'application/pdf,.pdf,.ptl';
+      this.fileInput.accept = 'application/pdf,.pdf';
       this.fileInput.hidden = true;
       document.body.appendChild(this.fileInput);
       this.fileInput.addEventListener('change', () => {

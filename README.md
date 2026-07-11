@@ -28,10 +28,9 @@ https://github.com/user-attachments/assets/dcff790c-ce33-457b-9f59-79731156e724
   grab the `.dmg` (macOS) or installer (Windows) from the
   [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
 
-Then open a PDF — **File ▸ Open** in the desktop app, the **Open**
-button in the browser, or just drop the file anywhere in the window.
-(Building from source is covered in
-[CONTRIBUTING.md](CONTRIBUTING.md).)
+Then open a PDF — the **Choose a PDF…** button on the welcome screen,
+`Cmd/Ctrl+O`, or just drop the file anywhere in the window. (Building
+from source is covered in [CONTRIBUTING.md](CONTRIBUTING.md).)
 
 ## Trails: how it works
 

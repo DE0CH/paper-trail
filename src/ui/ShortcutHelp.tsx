@@ -5,6 +5,7 @@ import { IS_MAC, MOD } from '../core/platform';
 import { IconClose } from './icons';
 
 const ALT = IS_MAC ? '\u2325' : 'Alt';
+const DESKTOP = typeof window !== 'undefined' && !!window.ptDesktop;
 
 function Key({ k }: { k: string }) {
   return (
@@ -55,7 +56,9 @@ const GROUPS: Array<{ title: string; rows: Array<{ keys: string[]; label: string
     title: 'Files',
     rows: [
       { keys: [`${MOD}+S`], label: 'Save session' },
-      { keys: [`${MOD}+O`], label: 'Open a file' },
+      { keys: [`${MOD}+O`], label: 'Open a PDF' },
+      { keys: [`${MOD}+⇧+O`], label: 'Load a session file' },
+      ...(DESKTOP ? [{ keys: [`${MOD}+N`], label: 'New window' }] : []),
     ],
   },
   {

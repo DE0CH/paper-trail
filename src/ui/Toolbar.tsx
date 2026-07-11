@@ -52,10 +52,6 @@ export default function Toolbar({
         title="Toggle outline / pages panel"
         onClick={onToggleNav}
       ><IconToc /></button>
-      {/* Desktop reaches Open via the File menu; the toolbar stays lean. */}
-      {!window.ptDesktop && (
-        <button className={btn} title="Open a PDF or reading-session file" onClick={() => void controller.pickFile()}>Open</button>
-      )}
       <button id="btnSave" className={`${btn} inline-flex items-center`} disabled={!snap.docOpen}
         title={saveTitle}
         onClick={() => controller.saveProgressSafe()}>
