@@ -290,6 +290,7 @@ function buildMenu(): void {
         // field has focus the renderer re-inserts the character instead.
         { label: 'Mark This Spot', accelerator: 'M', click: () => send('mark') },
         { label: 'Mark in a New Trail', accelerator: 'Shift+M', click: () => send('mark-branch') },
+        { label: 'Set Current Entry to This Position', accelerator: 'R', click: () => send('reanchor') },
         { type: 'separator' },
         { label: 'Clear History', click: () => send('clear-history') },
       ],

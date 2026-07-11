@@ -100,6 +100,7 @@ export default function App() {
         case '0': controller.fitWidth(); break;
         case 't': setSidebarVisible((v) => !v); break;
         case 'm': controller.markPosition(e.shiftKey); break;
+        case 'r': controller.reanchorCurrent(); break;
         case 'o': void controller.pickFile(); break;
         default: break;
       }
@@ -169,6 +170,10 @@ export default function App() {
         case 'mark-branch':
           if (typeInEditable('M')) break;
           controller.markPosition(true);
+          break;
+        case 'reanchor':
+          if (typeInEditable('r')) break;
+          controller.reanchorCurrent();
           break;
         case 'clear-history': controller.clearHistory(); break;
         case 'help':

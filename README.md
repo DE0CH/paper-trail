@@ -53,7 +53,8 @@ window. (Building from source is covered in
 - **Undo** (`Cmd/Ctrl+Z`) reverts history changes — an overwritten
   forward tail, a branch, a closed or renamed trail, even a replaced PDF.
 - Entries never move on their own: scrolling doesn't touch them.
-  Re-anchor one deliberately with the ⌖ button on its row (hover).
+  Re-anchor one deliberately with the ⌖ button on its row (hover), or
+  press `r` for the current entry.
 
 The leftmost panel shows the document **Outline** and **Pages**
 (thumbnails); close it with ×, reopen it from the toolbar. All panels
@@ -82,6 +83,7 @@ diffs cleanly, so versioning it in git alongside the paper works well.
 | `Shift+Backspace` / `Alt+→` | Forward |
 | `Cmd/Ctrl+click` / middle-click a link | Branch into a new trail |
 | `m` (`Shift+M` to branch) | Mark the current position |
+| `r` | Re-anchor the current entry to this exact position |
 | `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` | Undo / redo history changes |
 | `/` or `Cmd/Ctrl+F` | Search (`Enter` / `Shift+Enter` for matches) |
 | `+` / `-` / `0` | Zoom in / out / fit width (trackpad pinch works) |

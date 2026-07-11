@@ -153,14 +153,20 @@ export default function Toolbar({
       <span id="searchCount" className="text-dim min-w-13 text-center">{snap.searchCount}</span>
       <button className={iconBtn} title="Previous match (Shift+Enter)" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
       <button className={iconBtn} title="Next match (Enter)" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
-      {sep}
-      <a
-        className={`${iconBtn} text-dim hover:text-fgapp`}
-        href="https://github.com/DE0CH/paper-trail"
-        target="_blank"
-        rel="noreferrer"
-        title="Source code on GitHub"
-      ><IconGitHub /></a>
+      {/* Web-only: the desktop app behaves like an offline app and should
+          not open browser windows from its chrome. */}
+      {!window.ptDesktop && (
+        <>
+          {sep}
+          <a
+            className={`${iconBtn} text-dim hover:text-fgapp`}
+            href="https://github.com/DE0CH/paper-trail"
+            target="_blank"
+            rel="noreferrer"
+            title="Source code on GitHub"
+          ><IconGitHub /></a>
+        </>
+      )}
     </header>
   );
 }

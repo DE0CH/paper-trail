@@ -888,6 +888,12 @@ export class Controller {
     this.hist.setEntryPos(i, this.viewer.currentPosition());
   }
 
+  /** Re-anchor the CURRENT entry to the reading position (keyboard: r). */
+  reanchorCurrent(): void {
+    if (!this.docOpen) return;
+    this.entrySetPos(this.hist.active.index);
+  }
+
   /**
    * Replace the open PDF with another file while keeping the whole reading
    * state (all trails, cursor, zoom, session binding). Used e.g. when a

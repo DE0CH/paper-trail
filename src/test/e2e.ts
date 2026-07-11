@@ -786,6 +786,23 @@ async function run(): Promise<void> {
         && JSON.stringify(labels.parsedEdited) === '["my special place"]',
       JSON.stringify({ line: labels.namedLine, parsed: labels.parsedEdited }));
 
+    // --- "r" re-anchors the current entry from the keyboard ---
+    await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      pt.hist.jumpTo(0); // the automatic-label entry
+      pt.viewer.scrollTo({ page: 15, yRatio: 0.2 });
+    });
+    await page.waitForTimeout(500);
+    await page.keyboard.press('r');
+    await page.waitForTimeout(200);
+    const rKey = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const cur = pt.hist.active.entries[pt.hist.active.index];
+      return { page: cur.pos.page, label: cur.label };
+    });
+    check('r re-anchors the current entry to the reading position',
+      rKey.page === 15 && rKey.label === 'p. 15', JSON.stringify(rKey));
+
     // --- manually mark the current position onto the trail ---
     await page.evaluate(() => {
       (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 7, yRatio: 0.6 });
