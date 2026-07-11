@@ -82,13 +82,11 @@ resize by dragging their edges — each keeps its own width.
 zoom — to a small plain-text file (`<pdf>.ptl`) wherever you choose. It
 diffs cleanly, so versioning it in git alongside the paper works well.
 
-- Open the PDF first and use **Load session…**, or open the session file
-  first — the app shows which PDF it belongs to and asks for it. It's
-  always these two explicit steps; the app never opens a file by itself.
 - Once saved, the session **auto-saves continuously**; a dot on the Save
-  button means unsaved changes, and closing warns if anything is unsaved.
+  button means unsaved changes.
 - Got a revised version of the paper? **⇄ Replace PDF** swaps the file
   and keeps your whole reading history.
+- To restore a session after closing the app, click "Load Session...".
 
 ## Keyboard shortcuts
 
