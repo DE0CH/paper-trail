@@ -6,10 +6,9 @@ TypeScript (strict) throughout. React + Vite + Tailwind CSS v4 for the
 UI; pdf.js (`pdfjs-dist` v6) for rendering; Electron for the desktop
 shell; Python for the helper scripts. No hand-vendored code.
 
-Naming convention: technical terms (stack, fork, session internals) stay
-in the code; the UI and docs say *trail*, *branch*, *reading session*.
-The user-facing product name is **Paper Trail**; the package keeps the
-internal name.
+Naming: user-facing copy (UI strings, README) says *trail*, *branch*,
+*reading session*; data-structure terms like *stack* and *fork* belong
+in code and in this file only.
 
 ## Architecture
 
@@ -21,8 +20,8 @@ src/core/                    framework-agnostic app core:
   history.ts                   NavStacks: list of history stacks + snapshot undo
   search.ts                    full-text search, Range-based highlights
   preview.ts                   hover preview popup
-  progressFormat.ts            .trail serializer/parser
-  store.ts                     localStorage state, IndexedDB recents/handles
+  progressFormat.ts            .ptl serializer/parser
+  store.ts                     UI prefs (localStorage), IndexedDB recents/handles
   controller.ts                everything wired together; owns all state
 src/ui/                      React components; subscribe to the controller
                              snapshot via useSyncExternalStore
@@ -97,7 +96,7 @@ name comparison drives the mismatch banner. Older files with
 `pdf.relPath` / `pdf.fingerprint` / `pdf.size` lines still parse; those
 keys are ignored.
 
-## pdf.js v6 embedding gotchas (hard-won)
+## pdf.js v6 embedding gotchas
 
 - The text layer is sized by CSS rules over per-span custom properties
   (`--font-height`, `--scale-x`) against `--total-scale-factor`; see
@@ -118,8 +117,9 @@ keys are ignored.
   pages stay blank.
 - Smooth zoom = CSS transform during the gesture (anchor held fixed),
   re-render on commit, stale canvases kept stretched as placeholders.
-  Inter-page gaps scale with `--scale-factor` so transform and layout
-  agree — constant gaps caused an ~800px jump at pinch release.
+  Inter-page gaps must scale with `--scale-factor` so the transform and
+  the committed layout agree exactly; fixed-size gaps make the document
+  jump when the gesture ends.
 
 ## Undo design and performance
 
@@ -131,9 +131,8 @@ action). `npm run perf` proves this is the right call: a snapshot costs
 shows up in the CPU profile — rendering the unvirtualized history list
 dominates long before the data structure matters.
 
-Measured limits (documented, not enforced): localStorage auto-resume
-hard-fails beyond ~63k total entries (quota; session files unaffected);
-interactions soften past ~20k entries in the active trail.
+Measured limit (documented, not enforced): interactions soften past
+~20k entries in the active trail.
 
 PDF replacement has its own single-slot document-level undo: the
 previous document is retained as a cheap re-readable source (File /

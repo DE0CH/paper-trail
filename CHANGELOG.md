@@ -14,9 +14,13 @@ matching section into the GitHub Release notes.
   name is kept. New `r` shortcut re-anchors the current entry.
 - macOS: the traffic lights sit properly centered in a native-height
   toolbar.
+- Trails: a + button starts a fresh trail, every trail can be
+  duplicated from its row, and `[` / `]` switch between trails.
+- Press `?` for the shortcut cheat-sheet.
 - The Recent list on the welcome screen has a × to remove entries.
-- The desktop app no longer shows a GitHub link in the toolbar (the web
-  version still does).
+- Desktop: standard right-click menus, a leaner toolbar (Open and the
+  GitHub link live in the menus / web version), and properly centered
+  traffic lights on macOS.
 - Paper Trail is now MIT licensed.
 
 ## 0.4.0
