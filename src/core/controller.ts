@@ -8,7 +8,7 @@ import { NavStacks } from './history';
 import { SearchController } from './search';
 import { Preview } from './preview';
 import {
-  putRecent, getRecents, ensureReadPermission,
+  putRecent, getRecents, removeRecent, ensureReadPermission,
 } from './store';
 import { parseProgress, serializeProgress, PROGRESS_EXT } from './progressFormat';
 import type {
@@ -329,6 +329,12 @@ export class Controller {
   private async refreshRecents(): Promise<void> {
     this.recents = await getRecents();
     this.notify();
+  }
+
+  /** Remove one entry from the welcome screen's Recent list. */
+  async removeRecent(fp: string): Promise<void> {
+    await removeRecent(fp);
+    await this.refreshRecents();
   }
 
   // ---------- reading-progress session files ----------

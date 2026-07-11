@@ -1,5 +1,6 @@
 import { controller, type Snapshot } from '../core/controller';
 import { MOD } from '../core/platform';
+import { IconClose } from './icons';
 
 export default function Welcome({ snap }: { snap: Snapshot }) {
   if (snap.docOpen) return null;
@@ -57,13 +58,25 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
             {snap.recents.map((r) => (
               <div
                 key={r.fp}
-                className="recentItem px-2.5 py-1.5 rounded-md cursor-pointer text-fgapp hover:bg-hoverrow overflow-hidden text-ellipsis whitespace-nowrap"
+                className="recentItem group flex items-center px-2.5 py-1.5 rounded-md cursor-pointer text-fgapp hover:bg-hoverrow"
                 onClick={() => void controller.openRecent(r)}
               >
-                {r.name}
-                <span className="text-dim text-[11px] ml-2">
-                  {new Date(r.ts).toLocaleDateString()}
+                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                  {r.name}
+                  <span className="text-dim text-[11px] ml-2">
+                    {new Date(r.ts).toLocaleDateString()}
+                  </span>
                 </span>
+                <button
+                  className="removeRecent flex-none inline-flex items-center justify-center w-5 h-5 ml-1 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+                  title="Remove from this list"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void controller.removeRecent(r.fp);
+                  }}
+                >
+                  <IconClose />
+                </button>
               </div>
             ))}
           </div>

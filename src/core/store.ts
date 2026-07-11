@@ -74,6 +74,20 @@ export async function putRecent(entry: Partial<RecentEntry> & { fp: string }): P
   }
 }
 
+export async function removeRecent(fp: string): Promise<void> {
+  try {
+    const db = await idb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(RECENTS, 'readwrite');
+      tx.objectStore(RECENTS).delete(fp);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn('removeRecent failed', e);
+  }
+}
+
 export async function getRecent(fp: string): Promise<RecentEntry | null> {
   try {
     const db = await idb();
