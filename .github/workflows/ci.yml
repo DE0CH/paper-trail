@@ -61,14 +61,21 @@ jobs:
         shell: bash
         run: node build-node/test/installerWin.js
 
+      - name: Upload the installer for the ARM job
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-setup
+          path: dist-electron/*Setup*.exe
+
       - name: List artifacts
         shell: bash
         run: ls -la dist-electron/*.exe dist-electron/*.zip
 
-  # The one Setup.exe serves x64 and ARM machines; this job checks the
-  # ARM half actually installs a working app (the x64 job can't — it
-  # would silently get the x64 payload).
+  # The one Setup.exe serves x64 and ARM machines; this job installs the
+  # exact installer the x64 job built (the same shape a release ships)
+  # on an ARM machine, which is the only way to exercise the ARM payload.
   windows-arm:
+    needs: windows
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@v5
@@ -79,10 +86,14 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run build
+      - name: Compile the node-side tests
+        run: npx tsc -p tsconfig.node.json
 
-      - name: Package Windows app (unsigned)
-        run: npx electron-builder --win --publish never
+      - name: Fetch the installer built by the x64 job
+        uses: actions/download-artifact@v4
+        with:
+          name: win-setup
+          path: dist-electron
 
       - name: Installer test (install, shortcuts, smoke, uninstall)
         shell: bash

@@ -98,6 +98,12 @@ async function run(): Promise<void> {
     // THE regression: a shortcut that points at nothing
     check('desktop shortcut target exists on disk',
       exe !== '' && fs.existsSync(exe), exe || '(empty target)');
+    if (exe && !fs.existsSync(exe)) {
+      const dir = path.dirname(exe);
+      console.log('install dir contents:', fs.existsSync(dir)
+        ? fs.readdirSync(dir).join(', ') || '(empty)'
+        : '(directory does not exist)');
+    }
   }
   if (fs.existsSync(startLnk)) {
     const t = shortcutTarget(startLnk);
