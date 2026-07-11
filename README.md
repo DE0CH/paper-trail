@@ -24,11 +24,9 @@ https://github.com/user-attachments/assets/dcff790c-ce33-457b-9f59-79731156e724
 - **Use it in the browser**: https://paper-trail-green.vercel.app
   (a Chromium-based browser — Chrome, Edge, Brave — is needed for saving
   session files)
-- **Or download the desktop app** (native menus, works offline):
+- **Or download the desktop app** (works offline):
   grab the `.dmg` (macOS) or installer (Windows) from the
   [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
-  The macOS build is signed and notarized; the Windows build is
-  currently unsigned, so SmartScreen may warn the first time.
 
 Then open a PDF with the **Open** button or drop it anywhere in the
 window. (Building from source is covered in
