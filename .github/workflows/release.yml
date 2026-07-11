@@ -58,6 +58,11 @@ jobs:
           node build-node/test/e2e.js
 
       - name: Package (unsigned)
+        env:
+          # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
+          # which the NSIS extractor plugin can't decode — installs on ARM
+          # machines silently dropped every exe/dll. BCJ2 is understood.
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
         run: npx electron-builder --win --publish never
       - name: Smoke-test the packaged app
         shell: bash
