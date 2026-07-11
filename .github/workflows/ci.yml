@@ -62,6 +62,10 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopOffline.js
 
+      - name: Full e2e suite against the desktop app, offline
+        shell: bash
+        run: node build-node/test/desktopE2e.js
+
       - name: Desktop auto-save regression (Recents re-arm auto-save)
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js

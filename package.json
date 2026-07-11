@@ -10,6 +10,7 @@
     "start": "node build-node/node/server.js",
     "desktop": "electron build-node/desktop/main.js",
     "test": "node build-node/test/e2e.js",
+    "test:e2e:desktop": "node build-node/test/desktopE2e.js",
     "test:unit": "node --test build-node/test/unit.js",
     "test:desktop": "electron build-node/test/desktopSave.js",
     "test:offline": "electron build-node/test/desktopOffline.js",

@@ -456,8 +456,14 @@ function registerAppProtocol(): void {
     const url = new URL(request.url);
     let pathname = decodeURIComponent(url.pathname);
     if (pathname === '/' || pathname === '') pathname = '/index.html';
-    const filePath = path.normalize(path.join(WEB_ROOT, pathname));
-    if (filePath !== WEB_ROOT && !filePath.startsWith(WEB_ROOT + path.sep)) {
+    // Dev/test builds also serve /sample/* from the project root, like
+    // the node server does, so the desktop e2e suite can load its
+    // fixtures over the app protocol. Packaged apps have no sample dir.
+    const root = (!app.isPackaged && pathname.startsWith('/sample/'))
+      ? path.resolve(WEB_ROOT, '..')
+      : WEB_ROOT;
+    const filePath = path.normalize(path.join(root, pathname));
+    if (filePath !== root && !filePath.startsWith(root + path.sep)) {
       return new Response('bad path', { status: 400 });
     }
     try {

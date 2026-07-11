@@ -12,5 +12,5 @@
     "rootDir": "src",
     "outDir": "build-node"
   },
-  "include": ["src/node", "src/desktop", "src/test"]
+  "include": ["src/node", "src/desktop", "src/test", "src/tools"]
 }

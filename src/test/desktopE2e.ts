@@ -1,0 +1,1495 @@
+// The end-to-end suite run against the DESKTOP APP: the same checks as
+// e2e.ts (kept as an independent copy — test code is duplicated, never
+// shared), driving the real Electron shell over paper-trail:// with
+// every HTTP(S) request cancelled and recorded, so a passing run also
+// proves the desktop app works entirely offline.
+//
+// Differences from the browser suite: a second PDF opens in a new
+// WINDOW (not a tab); the auto-save timer MAY request write permission
+// (the shell has no permission UI, so requests are invisible); the
+// retina/deviceScaleFactor-2 sharpness section is browser-only and has
+// no counterpart here.
+//
+// Prereq: the app must be built (npm run build).
+// Usage: node build-node/test/desktopE2e.js
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { _electron, type Page } from 'playwright-core';
+
+const BASE = 'paper-trail://app';
+
+interface Result { name: string; ok: boolean; detail: string }
+const results: Result[] = [];
+function check(name: string, ok: boolean, detail = ''): void {
+  results.push({ name, ok, detail });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
+}
+
+const LINK_SEL = '.page[data-page="1"] .annotLayer .pdfLink:not(.external)';
+// The platform's primary modifier for synthesized shortcuts.
+const MODK = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+async function run(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const electronPath = require('electron') as unknown as string;
+  const eApp = await _electron.launch({
+    executablePath: electronPath,
+    args: [path.resolve(__dirname, '..', 'desktop', 'main.js')],
+    env: {
+      ...process.env as Record<string, string>,
+      PT_USERDATA: fs.mkdtempSync(path.join(os.tmpdir(), 'pt-e2e-')),
+      PT_SHOT: '1', // show windows without stealing focus
+    },
+  });
+  try {
+    // Cancel and record every HTTP(S) request: the suite must pass with
+    // the network entirely unreachable.
+    await eApp.evaluate(({ app, session }) => {
+      const attempts: string[] = [];
+      (globalThis as { __ptNetAttempts?: string[] }).__ptNetAttempts = attempts;
+      const hook = (s: Electron.Session) => s.webRequest.onBeforeRequest(
+        { urls: ['http://*/*', 'https://*/*'] },
+        (details, cb) => {
+          attempts.push(details.url);
+          cb({ cancel: true });
+        },
+      );
+      hook(session.defaultSession);
+      app.on('web-contents-created', (_event, wc) => hook(wc.session));
+    });
+    // Native dialogs would hang a scripted run. Stub them the way the
+    // browser suite auto-accepts beforeunload prompts: 1 is "Don't
+    // Save" in the close prompt, which lets navigations proceed.
+    await eApp.evaluate(({ dialog }) => {
+      dialog.showMessageBoxSync = (() => 1) as typeof dialog.showMessageBoxSync;
+      dialog.showMessageBox = (async () => ({
+        response: 1, checkboxChecked: false,
+      })) as typeof dialog.showMessageBox;
+      dialog.showSaveDialog = (async () => ({
+        canceled: true, filePath: '',
+      })) as typeof dialog.showSaveDialog;
+      dialog.showOpenDialog = (async () => ({
+        canceled: true, filePaths: [],
+      })) as typeof dialog.showOpenDialog;
+    });
+    const page: Page = await eApp.firstWindow();
+    await page.setViewportSize({ width: 1400, height: 900 });
+    page.on('pageerror', (e) => check('no page errors', false, String(e)));
+    // Accept renderer dialogs; they can also be dismissed natively by
+    // the shell first, so a late accept() must not crash the run.
+    page.on('dialog', (d) => d.accept().catch(() => { /* already handled */ }));
+
+    // fresh state
+    await page.goto(BASE + '/');
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('pt:'))
+        .forEach((k) => localStorage.removeItem(k));
+      indexedDB.deleteDatabase('paper-trail');
+    });
+
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+    check('PDF loads and page 1 links render', true);
+
+    // --- link click pushes a labelled entry ---
+    await page.locator(LINK_SEL).nth(3).click();
+    await page.waitForTimeout(600);
+    const st1 = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return {
+        entries: pt.hist.active.entries.map((e) => e.label),
+        index: pt.hist.active.index,
+        page: pt.viewer.currentPosition().page,
+      };
+    });
+    check('link click pushes entry', st1.entries.length === 2 && st1.index === 1,
+      JSON.stringify(st1.entries));
+    check('entry label extracted', /Definition 4\.1/.test(st1.entries[1]), st1.entries[1]);
+    check('jumped to destination page', st1.page === 22, `page ${st1.page}`);
+
+    // --- back restores exact position, preserves forward tail ---
+    const posBefore = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries[0].pos);
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.waitForTimeout(400);
+    const st2 = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return {
+        index: pt.hist.active.index,
+        n: pt.hist.active.entries.length,
+        pos: pt.viewer.currentPosition(),
+      };
+    });
+    check('back pops the cursor, stack preserved', st2.index === 0 && st2.n === 2);
+    check('back restores exact position',
+      st2.pos.page === posBefore.page && Math.abs(st2.pos.yRatio - posBefore.yRatio) < 0.01,
+      JSON.stringify(st2.pos));
+
+    // --- forward ---
+    await page.keyboard.press('Alt+ArrowRight');
+    await page.waitForTimeout(400);
+    const idx = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.index);
+    check('forward descends again', idx === 1);
+
+    // --- cmd+click forks the whole history into a new stack ---
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.waitForTimeout(400);
+    await page.waitForSelector(LINK_SEL, { timeout: 10000 });
+    await page.locator(LINK_SEL).nth(0).click({ modifiers: ['Meta'] });
+    await page.waitForTimeout(600);
+    const st3 = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return {
+        stacks: pt.hist.stacks.map((s) => ({ name: s.name, n: s.entries.length, idx: s.index })),
+        active: pt.hist.active.name,
+        entries: pt.hist.active.entries.map((e) => e.label),
+      };
+    });
+    check('meta+click forks into a new stack',
+      st3.stacks.length === 2 && st3.active === 'Untitled 2', JSON.stringify(st3.stacks));
+    check('fork copies history and pushes jump',
+      st3.entries.length === 2 && st3.entries[0] === 'Start', JSON.stringify(st3.entries));
+    check('original stack untouched',
+      st3.stacks[0].n === 2 && st3.stacks[0].idx === 0, JSON.stringify(st3.stacks[0]));
+
+    // --- stack panel UI ---
+    const stackRows = await page.locator('#stacksPanel .stackRow').count();
+    check('stacks panel lists stacks', stackRows === 2, String(stackRows));
+
+    // --- trails header +: fresh trail; row button: duplicate ---
+    const trailBtns = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks & {
+        controller: { stackNew(): void; stackDuplicate(id: number): void; undoHist(): void };
+      } }).__pt;
+      (document.getElementById('btnNewTrail') as HTMLElement).click();
+      const fresh = {
+        n: pt.hist.stacks.length,
+        entries: pt.hist.active.entries.length,
+        label: pt.hist.active.entries[0].label,
+      };
+      const src = pt.hist.stacks[0];
+      pt.controller.stackDuplicate(src.id);
+      const dup = {
+        n: pt.hist.stacks.length,
+        name: pt.hist.active.name,
+        entries: pt.hist.active.entries.map((e) => e.label),
+        srcEntries: src.entries.map((e) => e.label),
+        counterShown: !!document.querySelector('#stacksPanel .stackRow .cnt'),
+      };
+      pt.controller.undoHist(); // drop the duplicate
+      pt.controller.undoHist(); // drop the fresh trail
+      return { fresh, dup, after: pt.hist.stacks.length };
+    });
+    check('trails + starts a fresh active trail',
+      trailBtns.fresh.n === 3 && trailBtns.fresh.entries === 1
+        && trailBtns.fresh.label === 'Start',
+      JSON.stringify(trailBtns.fresh));
+    check('a trail can be duplicated (entries copied, becomes active)',
+      trailBtns.dup.n === 4 && / copy$/.test(trailBtns.dup.name)
+        && JSON.stringify(trailBtns.dup.entries) === JSON.stringify(trailBtns.dup.srcEntries)
+        && !trailBtns.dup.counterShown,
+      JSON.stringify(trailBtns.dup));
+    check('new/duplicated trails are undoable', trailBtns.after === 2,
+      String(trailBtns.after));
+
+    // --- Alt+[ / Alt+] cycle trails; ? opens the cheat-sheet overlay ---
+    const activeName = () => page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.name);
+    const beforeCycle = await activeName();
+    await page.keyboard.press('Alt+]');
+    const next = await activeName();
+    await page.keyboard.press('Alt+[');
+    const back2 = await activeName();
+    check('Alt+[ and Alt+] switch between trails',
+      next !== beforeCycle && back2 === beforeCycle,
+      JSON.stringify({ beforeCycle, next, back2 }));
+    const dupBefore = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.stacks.length);
+    await page.keyboard.press('Alt+Shift+D');
+    await page.waitForTimeout(200);
+    const dupState = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks & { controller: { undoHist(): void } } }).__pt;
+      const out = { n: pt.hist.stacks.length, name: pt.hist.active.name };
+      pt.controller.undoHist();
+      return out;
+    });
+    check('Alt+Shift+D duplicates the current trail',
+      dupState.n === dupBefore + 1 && / copy$/.test(dupState.name),
+      JSON.stringify(dupState));
+    await page.keyboard.press('Shift+/');
+    await page.waitForSelector('#shortcutOverlay', { timeout: 3000 });
+    const helpInfo = await page.evaluate(() => ({
+      kbd: document.querySelectorAll('#shortcutOverlay kbd').length,
+      hasMark: /Mark the current position/.test(
+        document.getElementById('shortcutOverlay')?.textContent ?? ''),
+    }));
+    check('? opens the shortcut cheat-sheet overlay',
+      helpInfo.kbd > 12 && helpInfo.hasMark, JSON.stringify(helpInfo));
+    await page.keyboard.press('Escape');
+    check('Escape closes the cheat-sheet',
+      (await page.locator('#shortcutOverlay').count()) === 0);
+
+    // --- hover preview ---
+    await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      pt.hist.jumpTo(0);
+      pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+    });
+    await page.waitForSelector(LINK_SEL, { timeout: 10000 });
+    await page.locator(LINK_SEL).nth(3).hover();
+    try {
+      await page.waitForSelector('#preview:not(.hidden)', { timeout: 4000 });
+      // pages render lazily into their holders
+      await page.waitForFunction(
+        () => !!document.querySelector('#preview .previewContent canvas'),
+        undefined, { timeout: 5000 },
+      );
+      const pv = await page.evaluate(() => {
+        const el = document.getElementById('preview')!;
+        const c = el.querySelector('canvas')!;
+        const ctx = c.getContext('2d')!;
+        const d = ctx.getImageData(0, 0, c.width, Math.min(c.height, 300)).data;
+        let ink = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] < 200) ink++;
+        const r = el.getBoundingClientRect();
+        const pr = document.querySelector('.page')!.getBoundingClientRect();
+        return {
+          label: el.querySelector('.previewPage')!.textContent,
+          ink,
+          alignedLeft: Math.abs(r.left - pr.left) < 3,
+          sameWidth: Math.abs(r.width - pr.width) < 3,
+          scrollable: !!el.querySelector('.previewScroll'),
+        };
+      });
+      check('hover preview appears with rendered content',
+        pv.ink > 100 && /p\.\s*22/.test(pv.label ?? ''), JSON.stringify({ label: pv.label, ink: pv.ink }));
+      check('preview is page-width and aligned with the PDF',
+        pv.alignedLeft && pv.sameWidth && pv.scrollable,
+        JSON.stringify({ alignedLeft: pv.alignedLeft, sameWidth: pv.sameWidth }));
+
+      // Regression: the preview spans the WHOLE document (one holder per
+      // page) and scrolling to the far end renders those pages too.
+      const span = await page.evaluate(async () => {
+        const scroller = document.querySelector('#preview .previewScroll')!;
+        const holders = document.querySelectorAll('#preview .previewPageHolder');
+        scroller.scrollTop = scroller.scrollHeight; // jump to the last page
+        await new Promise((r) => setTimeout(r, 600));
+        const last = holders[holders.length - 1]!;
+        return {
+          holders: holders.length,
+          lastRendered: !!last.querySelector('canvas'),
+          label: document.querySelector('#preview .previewPage')!.textContent,
+        };
+      });
+      check('preview scrolls through the entire document',
+        span.holders === 41 && span.lastRendered && /p\.\s*41/.test(span.label ?? ''),
+        JSON.stringify(span));
+
+      // The top edge resizes the popup too (bottom edge stays put).
+      const pvBox = (await page.locator('#preview').boundingBox())!;
+      // 30px, not the browser suite's 60: the desktop toolbar is
+      // shorter, the popup starts higher, and a 60px drag would hit
+      // the 8px viewport clamp instead of measuring the resize.
+      await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y + 1);
+      await page.mouse.down();
+      await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y - 29, { steps: 6 });
+      await page.mouse.up();
+      const pvBox2 = (await page.locator('#preview').boundingBox())!;
+      check('dragging the preview top edge resizes it upward',
+        Math.abs((pvBox2.height - pvBox.height) - 30) < 6
+          && Math.abs((pvBox.y - pvBox2.y) - 30) < 6
+          && Math.abs((pvBox2.y + pvBox2.height) - (pvBox.y + pvBox.height)) < 3,
+        JSON.stringify({ before: pvBox, after: pvBox2 }));
+
+      // Regression: an oversized remembered preview height in a smaller
+      // window must never cover the hovered link (it blocked clicking).
+      await page.mouse.move(10, 500); // close the popup
+      await page.waitForTimeout(500);
+      await page.setViewportSize({ width: 1400, height: 560 });
+      await page.evaluate(() => {
+        localStorage.setItem('pt:ui',
+          JSON.stringify({ ...JSON.parse(localStorage.getItem('pt:ui') ?? '{}'), previewH: 900 }));
+        (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+      });
+      await page.reload();
+      await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+      await page.locator(LINK_SEL).nth(3).hover();
+      await page.waitForSelector('#preview:not(.hidden)', { timeout: 5000 });
+      const linkBox = (await page.locator(LINK_SEL).nth(3).boundingBox())!;
+      const popBox = (await page.locator('#preview').boundingBox())!;
+      const overlaps = linkBox.x < popBox.x + popBox.width
+        && popBox.x < linkBox.x + linkBox.width
+        && linkBox.y < popBox.y + popBox.height
+        && popBox.y < linkBox.y + linkBox.height;
+      check('preview never covers the hovered link (small window, tall preview)',
+        !overlaps, JSON.stringify({ linkBox, popBox }));
+      await page.mouse.move(10, 500);
+      await page.setViewportSize({ width: 1400, height: 900 });
+      await page.evaluate(() => {
+        (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+      });
+      await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+      await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+      // the reload dropped the forked stack; later tests expect two
+      await page.evaluate(() => {
+        const pt = (window as never as { __pt: PtHooks }).__pt;
+        pt.jumpVia({ page: 22, yRatio: 0 }, 'Definition 4.1');
+        pt.jumpVia({ page: 38, yRatio: 0 }, 'GLR85', true);
+        pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+      });
+      await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+      await page.locator(LINK_SEL).nth(3).hover();
+      await page.waitForSelector('#preview:not(.hidden)', { timeout: 5000 });
+      await page.waitForFunction(
+        () => !!document.querySelector('#preview .previewContent canvas'),
+        undefined, { timeout: 5000 },
+      );
+
+      // Regression: preview canvases are device-pixel exact (no resample blur).
+      const sharp = await page.evaluate(() => {
+        const c = document.querySelector('#preview .previewPageHolder canvas') as HTMLCanvasElement;
+        const r = c.getBoundingClientRect();
+        return { backing: c.width, css: r.width, dpr: window.devicePixelRatio };
+      });
+      check('preview canvas is device-pixel exact',
+        Math.abs(sharp.backing / sharp.css - sharp.dpr) < 0.001, JSON.stringify(sharp));
+    } catch {
+      check('hover preview appears with rendered content', false, 'never became visible');
+    }
+    await page.mouse.move(10, 500);
+    await page.waitForTimeout(500);
+    const previewHidden = await page.evaluate(() =>
+      document.getElementById('preview')!.classList.contains('hidden'));
+    check('preview hides on mouseleave', previewHidden);
+
+    // --- search ---
+    await page.keyboard.press(`${MODK}+f`); // the search bar exists on demand
+    await page.waitForSelector('#searchInput', { timeout: 3000 });
+    await page.fill('#searchInput', 'equivariant');
+    await page.waitForFunction(
+      () => document.getElementById('searchCount')!.textContent!.includes('/ 4'),
+      undefined,
+      { timeout: 15000 },
+    );
+    let hlCount = 0;
+    try {
+      await page.waitForSelector('.searchHl', { timeout: 10000 });
+      hlCount = await page.evaluate(() => document.querySelectorAll('.searchHl').length);
+    } catch { /* hlCount stays 0 */ }
+    check('search finds 4 matches with highlights', hlCount >= 1, `highlights: ${hlCount}`);
+
+    // mod+F toggles: pressing it with the bar open closes it and clears
+    // the highlights.
+    await page.keyboard.press(`${MODK}+f`);
+    await page.waitForTimeout(400);
+    const searchClosed = await page.evaluate(() => ({
+      bar: !!document.getElementById('searchBar'),
+      hl: document.querySelectorAll('.searchHl').length,
+    }));
+    check('mod+F closes an open search bar and clears highlights',
+      !searchClosed.bar && searchClosed.hl === 0, JSON.stringify(searchClosed));
+
+    // --- panel resizing: each divider resizes exactly one panel; the
+    // others keep their widths (they only shift) ---
+    async function dragHandle(sel: string, toX: number): Promise<void> {
+      const box = (await page.locator(sel).boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(toX, box.y + box.height / 2, { steps: 10 });
+      await page.mouse.up();
+    }
+    const widths = () => page.evaluate(() => ({
+      nav: document.getElementById('navCol')?.getBoundingClientRect().width ?? 0,
+      stacks: document.getElementById('stacksCol')!.getBoundingClientRect().width,
+      side: document.getElementById('sideCol')!.getBoundingClientRect().width,
+      win: window.innerWidth,
+    }));
+    const near = (a: number, b: number) => Math.abs(a - b) < 1.5;
+
+    let w0 = await widths();
+    await dragHandle('#resizeNav', 0);
+    let w = await widths();
+    check('nav drag far left: clamped, neighbors unchanged',
+      w.nav >= 89 && near(w.stacks, w0.stacks) && near(w.side, w0.side), JSON.stringify(w));
+    await dragHandle('#resizeStacks', 0);
+    w0 = w;
+    w = await widths();
+    check('stacks drag far left: clamped, neighbors unchanged',
+      w.stacks >= 79 && near(w.nav, w0.nav) && near(w.side, w0.side), JSON.stringify(w));
+    await dragHandle('#resizeStacks', 1390);
+    w0 = w;
+    w = await widths();
+    check('stacks drag far right: viewer keeps room, neighbors unchanged',
+      w.nav + w.stacks + w.side <= w.win - 250 && near(w.nav, w0.nav) && near(w.side, w0.side),
+      JSON.stringify(w));
+    await dragHandle('#resizeSidebar', 1390);
+    w0 = w;
+    w = await widths();
+    check('history drag far right: viewer keeps room, neighbors unchanged',
+      w.nav + w.stacks + w.side <= w.win - 250 && near(w.nav, w0.nav) && near(w.stacks, w0.stacks),
+      JSON.stringify(w));
+    // Closing the nav panel must not resize the others.
+    w0 = w;
+    await page.click('#btnNavClose');
+    w = await widths();
+    check('closing nav panel leaves other panels unchanged',
+      w.nav === 0 && near(w.stacks, w0.stacks) && near(w.side, w0.side), JSON.stringify(w));
+    await page.click('#btnNavToggle');
+    // Restore sane sizes for the remaining tests.
+    w = await widths();
+    await dragHandle('#resizeStacks', w.nav + 150);
+    w = await widths();
+    await dragHandle('#resizeSidebar', w.nav + w.stacks + 290);
+
+    // --- renaming: history entries, and strange characters in names ---
+    await page.locator('#historyPanel .histItem .lbl').first().dblclick();
+    await page.fill('#historyPanel .histItem input.rename', '  my renamed entry  ');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    const renamed = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries[0].label);
+    check('history entries are renamable (trimmed)', renamed === 'my renamed entry', renamed);
+
+    // --- nav panel: outline + page thumbnails, closable ---
+    const navVisible = await page.locator('#navCol').count();
+    check('nav panel is visible by default', navVisible === 1);
+    const outlineItems = await page.locator('#navCol .outlineItem').count();
+    check('outline lives in the nav panel', outlineItems > 3, `${outlineItems} items`);
+
+    // --- collapsible outline: chevrons only on sections with children ---
+    const toggles = await page.locator('#navCol .outlineToggle').count();
+    check('outline shows toggles exactly on sections with subsections',
+      toggles === 3 && outlineItems === 11, `${toggles} toggles, ${outlineItems} items`);
+    await page.locator('#navCol .outlineToggle').first().click();
+    const afterCollapse = await page.locator('#navCol .outlineItem').count();
+    check('collapsing a section hides its subsections',
+      afterCollapse === outlineItems - 3, `${afterCollapse} items`);
+    // the collapsed section still jumps when its own row is clicked
+    await page.locator('#navCol .outlineItem', { hasText: 'The inner product' }).click();
+    await page.waitForTimeout(400);
+    const outlineJumpPage = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.viewer.currentPosition().page);
+    check('collapsed section row still navigates', outlineJumpPage === 9,
+      `page ${outlineJumpPage}`);
+    await page.locator('#navCol .outlineToggle').first().click();
+    const afterExpand = await page.locator('#navCol .outlineItem').count();
+    check('expanding restores the subsections', afterExpand === outlineItems,
+      `${afterExpand} items`);
+    await page.click('#btnOutlineCollapse');
+    await page.waitForTimeout(200);
+    const allCollapsed = await page.locator('#navCol .outlineItem').count();
+    await page.click('#btnOutlineExpand');
+    await page.waitForTimeout(200);
+    const allExpanded = await page.locator('#navCol .outlineItem').count();
+    check('collapse-all and expand-all fold every section',
+      allCollapsed === outlineItems - 4 && allExpanded === outlineItems,
+      JSON.stringify({ allCollapsed, allExpanded }));
+
+    // Regression: after Collapse All, expanding one section must not
+    // flash its deeper levels (children used to mount open for a paint
+    // before the collapse broadcast reached them).
+    await page.click('#btnOutlineCollapse');
+    await page.waitForTimeout(200);
+    const flash = await page.evaluate(() => new Promise<{ flashed: boolean; final: number }>((resolve) => {
+      // With the bug, re-mounted children default to open, so the very
+      // DOM commit that inserts them already contains their own nested
+      // lists — visible as a flash before the collapse state catches up.
+      // Mutation records catch that commit deterministically, regardless
+      // of paint timing.
+      let flashed = false;
+      const mo = new MutationObserver((muts) => {
+        for (const m of muts) {
+          for (const n of m.addedNodes) {
+            // A commit that inserts a subtree already containing a nested
+            // list means a deeper level mounted open: that's the flash.
+            // (querySelector only matches strict descendants of n.)
+            if (n instanceof HTMLElement && n.querySelector?.(':scope .outlineTree')) {
+              flashed = true;
+            }
+          }
+        }
+      });
+      mo.observe(document.getElementById('outlinePanel')!, { childList: true, subtree: true });
+      (document.querySelector('#navCol .outlineToggle') as HTMLElement).click();
+      setTimeout(() => {
+        mo.disconnect();
+        resolve({ flashed, final: document.querySelectorAll('#navCol .outlineItem').length });
+      }, 400);
+    }));
+    check('expanding a collapsed section never flashes deeper levels',
+      !flash.flashed && flash.final === 9, JSON.stringify(flash));
+    await page.click('#btnOutlineExpand');
+    await page.waitForTimeout(200);
+    await page.click('#navCol button:has-text("Pages")');
+    await page.waitForSelector('#thumbList [data-thumb-page="1"] canvas', { timeout: 15000 });
+    check('page thumbnails render lazily', true);
+    const before = await page.evaluate(() => {
+      const h = (window as never as { __pt: PtHooks }).__pt.hist.active;
+      return { index: h.index };
+    });
+    await page.locator('#thumbList .thumb').nth(2).click();
+    await page.waitForTimeout(400);
+    const afterThumb = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return {
+        page: pt.viewer.currentPosition().page,
+        n: pt.hist.active.entries.length,
+        label: pt.hist.active.entries[pt.hist.active.index].label,
+      };
+    });
+    // A jump truncates above the cursor, so the new length is cursor+2.
+    check('clicking a thumbnail jumps and pushes history',
+      afterThumb.page === 3 && afterThumb.n === before.index + 2 && /p\.\s*3/.test(afterThumb.label),
+      JSON.stringify(afterThumb));
+    await page.click('#btnNavClose');
+    check('nav panel closes', (await page.locator('#navCol').count()) === 0);
+    await page.click('#btnNavToggle');
+    check('nav panel reopens from the toolbar', (await page.locator('#navCol').count()) === 1);
+    await page.click('#navCol button:has-text("Outline")');
+
+    // --- text selection: emulate a person dragging across a line ---
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+    });
+    await page.waitForSelector('.page[data-page="1"] .textLayer span', { timeout: 10000 });
+    const p1box = (await page.locator('.page[data-page="1"]').boundingBox())!;
+    const selY = p1box.y + p1box.height * 0.215; // the title line
+    await page.mouse.move(p1box.x + p1box.width * 0.3, selY);
+    await page.mouse.down();
+    await page.mouse.move(p1box.x + p1box.width * 0.72, selY, { steps: 8 });
+    await page.mouse.up();
+    const selection = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+    check('dragging the mouse selects text', selection.trim().length >= 4,
+      JSON.stringify(selection.slice(0, 50)));
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+    // --- weird characters in user-controlled names must survive the save
+    // format (names/labels are free text) ---
+    const weird = 'entry 3 0.5 tricky | "quo\'tes" \\ § 数学 🙂 <b>tag</b>';
+    await page.evaluate((w) => {
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const activeId = pt.hist.stacks.find((s) => s.name === pt.hist.active.name);
+      void activeId;
+      // rename the ACTIVE stack and its first entry
+      const active = pt.hist.stacks.find((s) => s.entries === pt.hist.active.entries)!;
+      pt.hist.renameStack(active.id, w);
+      pt.hist.renameEntry(0, w + ' as a label\nwith newline');
+    }, weird);
+    await page.waitForTimeout(300); // let React render
+    const weirdRes = await page.evaluate((w) => {
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const parsed = pt.parseProgressText(pt.progressText());
+      const stack = parsed?.state.hist.stacks.find((s) => s.name === w);
+      const uiNames = [...document.querySelectorAll('#stacksPanel .stackRow .name')]
+        .map((el) => el.textContent);
+      return {
+        ok: !!parsed,
+        name: stack?.name,
+        label: stack?.entries[0].label,
+        uiHasWeird: uiNames.includes(w),
+      };
+    }, weird);
+    check('weird characters survive the save-format round trip',
+      weirdRes.ok && weirdRes.name === weird
+        && weirdRes.label === weird + ' as a label with newline', // newline flattened
+      JSON.stringify(weirdRes));
+    check('weird characters render in the UI', weirdRes.uiHasWeird === true);
+
+    // --- undo/redo of history mutations ---
+    const stU = await page.evaluate(async () => {
+      const pt = (window as never as { __pt: PtUndoHooks }).__pt;
+      const out: Record<string, unknown> = {};
+      // Overwrite scenario: mid-stack, jump somewhere -> tail overwritten.
+      pt.hist.jumpTo(0);
+      const tailBefore = pt.hist.active.entries.map((e) => e.label);
+      pt.jumpVia({ page: 5, yRatio: 0 }, 'overwriter');
+      out.afterOverwrite = pt.hist.active.entries.map((e) => e.label);
+      pt.controller.undoHist();
+      out.afterUndo = pt.hist.active.entries.map((e) => e.label);
+      out.tailRestored =
+        JSON.stringify(out.afterUndo) === JSON.stringify(tailBefore);
+      pt.controller.redoHist();
+      out.afterRedo = pt.hist.active.entries.map((e) => e.label);
+      // Close-stack scenario + redo cleared by a new action.
+      const stackCount = pt.hist.stacks.length;
+      pt.hist.closeStack(pt.hist.stacks[pt.hist.stacks.length - 1].id);
+      out.closed = pt.hist.stacks.length === stackCount - 1;
+      pt.controller.undoHist();
+      out.closeUndone = pt.hist.stacks.length === stackCount;
+      out.canRedoBefore = pt.hist.canRedo();
+      pt.jumpVia({ page: 2, yRatio: 0 }, 'redo-killer');
+      out.redoClearedByNewAction = !pt.hist.canRedo();
+      return out;
+    });
+    check('undo restores overwritten forward tail', stU.tailRestored === true,
+      JSON.stringify({ before: stU.afterUndo, after: stU.afterOverwrite }));
+    check('redo reapplies the overwrite',
+      Array.isArray(stU.afterRedo)
+        && (stU.afterRedo as string[]).at(-1) === 'overwriter');
+    check('undo restores a closed stack',
+      stU.closed === true && stU.closeUndone === true);
+    check('redo is cleared by a new action',
+      stU.canRedoBefore === true && stU.redoClearedByNewAction === true);
+
+    // --- undo depth is capped at 50; the oldest snapshot is dropped ---
+    const capProbe = await page.evaluate(() => {
+      const pt = (window as never as {
+        __pt: PtUndoHooks & { controller: { clearHistory(): void } };
+      }).__pt;
+      pt.controller.clearHistory(); // fresh single-entry stack (undoable itself)
+      const base = pt.hist.active.entries.length; // 1 ("Start")
+      for (let i = 0; i < 55; i++) {
+        pt.jumpVia({ page: 1 + (i % 5), yRatio: 0 }, `fill ${i}`);
+      }
+      let undos = 0;
+      while (undos < 200) {
+        pt.controller.undoHist();
+        undos++;
+        if (!(pt.hist as never as { canUndo(): boolean }).canUndo()) break;
+      }
+      const res = { base, undos, len: pt.hist.active.entries.length };
+      // restore a two-stack state for the checks further down
+      (pt.jumpVia as (p: unknown, l: string, f?: boolean) => void)(
+        { page: 2, yRatio: 0 }, 'branch', true,
+      );
+      return res;
+    });
+    // 55 pushes recorded 55 snapshots; the cap keeps the latest 50, so undo
+    // can rewind to the state after the 5th push (1 + 5 entries).
+    check('undo cap drops the oldest snapshots (50 deep)',
+      capProbe.undos === 50 && capProbe.len === capProbe.base + 5,
+      JSON.stringify(capProbe));
+
+    // --- save button: fixed width, dot indicator for unsaved changes ---
+    await page.waitForTimeout(900); // let pending scroll-settle timers fire
+    await page.evaluate(() => {
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { dismissMismatch(): void } };
+      }).__pt;
+      pt.session.dirty = false;
+      pt.controller.dismissMismatch(); // also forces a re-render
+    });
+    await page.waitForTimeout(150);
+    const wClean = (await page.locator('#btnSave').boundingBox())!.width;
+    const dotClean = await page.locator('#saveDirtyDot').count();
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt
+        .jumpVia({ page: 4, yRatio: 0 }, 'dirty probe');
+    });
+    await page.waitForTimeout(250);
+    const wDirty = (await page.locator('#btnSave').boundingBox())!.width;
+    const dotDirty = await page.locator('#saveDirtyDot').count();
+    check('unsaved-changes dot appears without shifting the toolbar',
+      dotClean === 0 && dotDirty === 1 && Math.abs(wClean - wDirty) < 0.5,
+      JSON.stringify({ wClean, wDirty, dotClean, dotDirty }));
+
+    // --- progress session: dirty flag + fake-handle save ---
+    const st4 = await page.evaluate(async () => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const out: {
+        dirtyAfterJump: boolean | null;
+        dirtyAfterSave: boolean | null;
+        savedJson: { type: string; name: string; hidden: boolean; stacks: number } | null;
+      } = { dirtyAfterJump: null, dirtyAfterSave: null, savedJson: null };
+      pt.jumpVia({ page: 3, yRatio: 0 }, 'probe');
+      await new Promise((r) => setTimeout(r, 100));
+      out.dirtyAfterJump = pt.session.dirty;
+      let captured = '';
+      pt.session.handle = {
+        name: 't.ptl',
+        createWritable: async () => {
+          let data = '';
+          return {
+            write: async (d: string) => { data = d; },
+            close: async () => { captured = data; },
+          };
+        },
+      } as never;
+      await pt.writeProgress();
+      out.dirtyAfterSave = pt.session.dirty;
+      const lines = captured.split('\n');
+      const get = (k: string) =>
+        (lines.find((l) => l.startsWith(k + ' ')) ?? '').slice(k.length + 1);
+      out.savedJson = {
+        type: lines[0],
+        name: get('pdf.name'),
+        hidden: /pdf\.(fingerprint|relPath|size)/.test(captured),
+        stacks: lines.filter((l) => l.startsWith('stack ')).length,
+      };
+      pt.session.handle = null;
+      pt.session.dirty = false;
+      return out;
+    });
+    check('jump marks session dirty', st4.dirtyAfterJump === true);
+
+    // --- auto-save never triggers a permission prompt: without silent
+    // write permission the timer skips (stays dirty); with it, it saves ---
+    const autoSave = await page.evaluate(async () => {
+      const pt = (window as never as { __pt: PtHooks & { jumpVia(p: unknown, l: string): void } }).__pt;
+      let writes = 0;
+      let permission = 'prompt';
+      pt.session.handle = {
+        name: 'perm.ptl',
+        queryPermission: async () => permission,
+        createWritable: async () => ({ write: async () => { writes++; }, close: async () => {} }),
+      } as never;
+      pt.jumpVia({ page: 2, yRatio: 0 }, 'auto probe 1');
+      await new Promise((r) => setTimeout(r, 2200)); // past the 1.5s debounce
+      const skipped = { writes, dirty: pt.session.dirty };
+      permission = 'granted';
+      pt.jumpVia({ page: 3, yRatio: 0 }, 'auto probe 2');
+      await new Promise((r) => setTimeout(r, 2200));
+      const saved = { writes, dirty: pt.session.dirty };
+      pt.session.handle = null;
+      pt.session.dirty = false;
+      return { skipped, saved };
+    });
+    check('auto-save skips (stays dirty) when a prompt would be needed',
+      autoSave.skipped.writes === 0 && autoSave.skipped.dirty === true,
+      JSON.stringify(autoSave.skipped));
+    check('auto-save writes silently once permission is granted',
+      autoSave.saved.writes >= 1 && autoSave.saved.dirty === false,
+      JSON.stringify(autoSave.saved));
+    check('save writes line-oriented progress file and clears dirty',
+      st4.dirtyAfterSave === false
+        && st4.savedJson!.type === 'paper-trail-session v1'
+        && st4.savedJson!.name === 'WStarCats.pdf'
+        && st4.savedJson!.stacks === 2,
+      JSON.stringify(st4.savedJson));
+    check('session file holds only the PDF name — no hidden identifiers',
+      st4.savedJson!.hidden === false, JSON.stringify(st4.savedJson));
+    const noIds = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const text = pt.progressText();
+      return {
+        stackLinesPlainNames: text.split('\n')
+          .filter((l) => l.startsWith('stack '))
+          .every((l) => !/^stack \d+ /.test(l)),
+        activeLine: text.split('\n').find((l) => l.startsWith('active ')),
+      };
+    });
+    check('save format has no internal stack ids',
+      noIds.stackLinesPlainNames && /^active \d+$/.test(noIds.activeLine ?? ''),
+      JSON.stringify(noIds));
+
+    // --- opening a plain PDF always starts fresh: reading state only ever
+    // comes from an explicit session file (no localStorage auto-resume) ---
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForTimeout(400);
+    const fresh = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { stacks: pt.hist.stacks.length, entries: pt.hist.active.entries.length };
+    });
+    check('opening a PDF starts fresh (no auto-resumed session)',
+      fresh.stacks === 1 && fresh.entries === 1, JSON.stringify(fresh));
+
+    // --- a second PDF opened while one is showing goes to a NEW
+    // WINDOW (the desktop counterpart of the browser's new tab),
+    // leaving the current one untouched ---
+    const [childPage] = await Promise.all([
+      eApp.waitForEvent('window'),
+      page.evaluate(async () => {
+        const pt = (window as never as {
+          __pt: { controller: { openFile(f: File): Promise<void> } };
+        }).__pt;
+        const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+        void pt.controller.openFile(new File([bytes], 'SecondPaper.pdf'));
+      }),
+    ]);
+    await childPage.waitForSelector('.page canvas', { timeout: 30000 });
+    const secondTab = {
+      child: await childPage.title(),
+      parent: await page.title(),
+    };
+    await childPage.close();
+    check('a second PDF opens in a new window; the current one is untouched',
+      secondTab.child.startsWith('SecondPaper.pdf')
+        && secondTab.parent.startsWith('WStarCats.pdf'),
+      JSON.stringify(secondTab));
+
+    // --- progress file round trip: opening a session is ALWAYS two
+    // explicit steps — the app never fetches the PDF on its own ---
+    await page.goto(BASE + '/?file=sample/WStarCats.ptl');
+    await page.waitForSelector('#sessionPrompt', { timeout: 20000 });
+    const twoStep = await page.evaluate(() => ({
+      docOpen: !!document.querySelector('.page canvas'),
+      promptNames: document.getElementById('sessionPrompt')?.textContent ?? '',
+    }));
+    check('opening a session never auto-loads the PDF (two-step flow)',
+      !twoStep.docOpen && /WStarCats\.pdf/.test(twoStep.promptNames),
+      JSON.stringify(twoStep));
+    await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
+      const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await pt.controller.openFile(new File([bytes], 'WStarCats.pdf'));
+    });
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForTimeout(800);
+    const st5 = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return {
+        stack: pt.hist.active.name,
+        labels: pt.hist.active.entries.map((e) => e.label),
+        pos: pt.viewer.currentPosition(),
+        bound: !!pt.session.handle,
+      };
+    });
+    check('progress file restores stack and position',
+      st5.stack === 'RoundTrip' && st5.pos.page === 17 && !st5.bound, JSON.stringify(st5));
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+
+    // --- corrupt progress file degrades to a clear error ---
+    await page.goto(BASE + '/?file=sample/corrupt.ptl');
+    await page.waitForSelector('#toast', { timeout: 10000 });
+    const corruptToast = await page.evaluate(() =>
+      document.getElementById('toast')?.textContent ?? '');
+    check('corrupt progress file shows a clear error',
+      /not a progress file|Could not load/i.test(corruptToast), corruptToast);
+
+    // --- missing PDF: session is kept pending; opening the PDF manually
+    // restores it ---
+    await page.goto(BASE + '/?file=sample/sub/missing-pdf.ptl');
+    await page.waitForSelector('#toast', { timeout: 10000 });
+    const missToast = await page.evaluate(() =>
+      document.getElementById('toast')?.textContent ?? '');
+    check('missing PDF asks the user for it',
+      /open the PDF manually/i.test(missToast), missToast);
+    // The sidebar previews the loaded session while waiting for the PDF,
+    // and clicking around must be inert (no anchor corruption).
+    const preview = await page.evaluate(() => {
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { histEntryClick(i: number): void } };
+      }).__pt;
+      const stackNames = [...document.querySelectorAll('#stacksPanel .stackRow .name')]
+        .map((el) => el.textContent);
+      const entryLabels = [...document.querySelectorAll('#historyPanel .histItem .lbl')]
+        .map((el) => el.textContent);
+      const before = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
+      pt.controller.histEntryClick(0); // must be a no-op without a PDF
+      const after = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
+      return { stackNames, entryLabels, inert: before === after };
+    });
+    check('pending session previews its trails in the sidebar',
+      preview.stackNames.includes('Recovered session')
+        && preview.entryLabels.includes('Lemma recovery-marker'),
+      JSON.stringify(preview));
+    check('preview clicks are inert and do not corrupt anchors', preview.inert);
+    await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
+      const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await pt.controller.openFile(new File([bytes], 'WStarCats.pdf'));
+    });
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForTimeout(600);
+    const recovered = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return {
+        stack: pt.hist.active.name,
+        label: pt.hist.active.entries[pt.hist.active.index]?.label,
+        page: pt.viewer.currentPosition().page,
+      };
+    });
+    check('manually opening the PDF restores the pending session',
+      recovered.stack === 'Recovered session'
+        && recovered.label === 'Lemma recovery-marker'
+        && recovered.page === 12,
+      JSON.stringify(recovered));
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+
+    // --- mismatching PDF name: banner + adopt + out-of-range clamp ---
+    const openPdfManually = async () => {
+      await page.evaluate(async () => {
+        const pt = (window as never as {
+          __pt: { controller: { openFile(f: File): Promise<void> } };
+        }).__pt;
+        const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+        await pt.controller.openFile(new File([bytes], 'WStarCats.pdf'));
+      });
+    };
+    await page.goto(BASE + '/?file=sample/sub/mismatch.ptl');
+    await page.waitForSelector('#sessionPrompt', { timeout: 20000 });
+    await openPdfManually();
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForSelector('#mismatchBanner', { timeout: 5000 });
+    const mm = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return {
+        page: pt.viewer.currentPosition().page,
+        bannerText: document.getElementById('mismatchBanner')?.textContent ?? '',
+      };
+    });
+    check('mismatch banner names both PDFs',
+      /SomeOtherPaper\.pdf/.test(mm.bannerText) && /WStarCats\.pdf/.test(mm.bannerText),
+      mm.bannerText.slice(0, 90));
+    check('out-of-range saved position clamps to the top', mm.page === 1, `page ${mm.page}`);
+    await page.click('#btnMismatchDismiss');
+    check('mismatch banner can be dismissed',
+      (await page.locator('#mismatchBanner').count()) === 0);
+    // reload -> banner reappears (dismiss is once per occurrence); adopt fixes it
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+    await page.goto(BASE + '/?file=sample/sub/mismatch.ptl');
+    await page.waitForSelector('#sessionPrompt', { timeout: 20000 });
+    await openPdfManually();
+    await page.waitForSelector('#mismatchBanner', { timeout: 20000 });
+    await page.click('#btnAdoptPdf');
+    const adopted = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtFormatHooks }).__pt;
+      const text = pt.progressText();
+      return {
+        bannerGone: !document.getElementById('mismatchBanner'),
+        nameLine: text.split('\n').find((l) => l.startsWith('pdf.name ')),
+        noHidden: !/pdf\.(fingerprint|relPath|size)/.test(text),
+      };
+    });
+    check('"Use this PDF" adopts the open PDF into the session',
+      adopted.bannerGone && adopted.nameLine === 'pdf.name WStarCats.pdf' && adopted.noHidden,
+      JSON.stringify(adopted));
+
+    // --- loading a session into an already open PDF asks for confirmation ---
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+    await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
+      pt.jumpVia({ page: 3, yRatio: 0 }, 'existing history');
+      const text = await (await fetch('/sample/WStarCats.ptl')).text();
+      await pt.controller.openFile(new File([text], 'WStarCats.ptl'));
+    });
+    await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
+    check('loading a session over existing history asks first', true);
+    await page.click('#btnSessionCancel');
+    const cancelled = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries.at(-1)?.label);
+    check('cancel keeps the current history', cancelled === 'existing history', String(cancelled));
+    await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
+      const text = await (await fetch('/sample/WStarCats.ptl')).text();
+      await pt.controller.openFile(new File([text], 'WStarCats.ptl'));
+    });
+    await page.waitForSelector('#sessionConfirm', { timeout: 5000 });
+    await page.click('#btnSessionReplace');
+    await page.waitForTimeout(400);
+    const replaced = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { stack: pt.hist.active.name, page: pt.viewer.currentPosition().page };
+    });
+    check('replace applies the loaded session',
+      replaced.stack === 'RoundTrip' && replaced.page === 17, JSON.stringify(replaced));
+
+    // --- re-anchor an entry to the current position ---
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 5, yRatio: 0.3 });
+    });
+    await page.waitForTimeout(700);
+    await page.locator('#historyPanel .histItem').first().hover();
+    await page.locator('#historyPanel .histItem .setPos').first().click({ force: true });
+    await page.waitForTimeout(200);
+    const anchored = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries[0].pos);
+    check('entry can be re-anchored to the current position',
+      anchored.page === 5 && Math.abs(anchored.yRatio - 0.3) < 0.02,
+      JSON.stringify(anchored));
+
+    // --- re-anchoring and labels: automatic labels follow the anchor,
+    // hand-renamed ones stay; an unchanged rename is not an edit ---
+    const labels = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks & PtFormatHooks & {
+        hist: { setEntryPos(i: number, pos: { page: number; yRatio: number }): void };
+      } }).__pt;
+      const auto = pt.hist.active.entries[0].label; // re-anchored above
+      pt.hist.renameEntry(1, 'my special place');
+      pt.hist.setEntryPos(1, { page: 9, yRatio: 0.1 });
+      const renamed = pt.hist.active.entries[1].label;
+      pt.hist.renameEntry(0, pt.hist.active.entries[0].label); // no-op rename
+      pt.hist.setEntryPos(0, { page: 11, yRatio: 0 });
+      const still = pt.hist.active.entries[0].label;
+      const text = pt.progressText();
+      const parsed = pt.parseProgressText(text);
+      const parsedEdited = parsed?.state.hist.stacks.flatMap((st) => st.entries)
+        .filter((e) => (e as { edited?: boolean }).edited).map((e) => e.label);
+      return {
+        auto,
+        renamed,
+        still,
+        namedLine: text.split('\n').find((l) => l.startsWith('named ')),
+        parsedEdited,
+      };
+    });
+    check('re-anchoring refreshes an automatic label', labels.auto === 'p. 5',
+      JSON.stringify(labels));
+    check('re-anchoring keeps a hand-renamed label',
+      labels.renamed === 'my special place', JSON.stringify(labels));
+    check('a rename that changes nothing stays automatic',
+      labels.still === 'p. 11', JSON.stringify(labels));
+    check('hand-named entries round-trip via named lines',
+      /^named 9 0.1 my special place$/.test(labels.namedLine ?? '')
+        && JSON.stringify(labels.parsedEdited) === '["my special place"]',
+      JSON.stringify({ line: labels.namedLine, parsed: labels.parsedEdited }));
+
+    // --- mod+G re-anchors the current entry from the keyboard ---
+    await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      pt.hist.jumpTo(0); // the automatic-label entry
+      pt.viewer.scrollTo({ page: 15, yRatio: 0.2 });
+    });
+    await page.waitForTimeout(500);
+    await page.keyboard.press(`${MODK}+g`);
+    await page.waitForTimeout(200);
+    const rKey = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const cur = pt.hist.active.entries[pt.hist.active.index];
+      return { page: cur.pos.page, label: cur.label };
+    });
+    check('mod+G re-anchors the current entry to the reading position',
+      rKey.page === 15 && rKey.label === 'p. 15', JSON.stringify(rKey));
+
+    // --- an entry's × removes just that entry (hover-revealed) ---
+    const rmBefore = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { labels: pt.hist.active.entries.map((e) => e.label), index: pt.hist.active.index };
+    });
+    await page.locator('#historyPanel .histItem').nth(1).hover();
+    await page.locator('#historyPanel .histItem .rmEntry').nth(1).click({ force: true });
+    await page.waitForTimeout(200);
+    const rmAfter = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { labels: pt.hist.active.entries.map((e) => e.label), index: pt.hist.active.index };
+    });
+    check('the × on a history row removes exactly that entry',
+      rmAfter.labels.length === rmBefore.labels.length - 1
+        && JSON.stringify(rmAfter.labels)
+          === JSON.stringify(rmBefore.labels.filter((_, i) => i !== 1)),
+      JSON.stringify({ rmBefore, rmAfter }));
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks & { controller: { undoHist(): void } } })
+        .__pt.controller.undoHist();
+    });
+    const rmUndone = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries.length);
+    check('removing an entry is undoable', rmUndone === rmBefore.labels.length,
+      String(rmUndone));
+
+    // --- manually mark the current position onto the trail ---
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 7, yRatio: 0.6 });
+    });
+    await page.waitForTimeout(700);
+    const beforeMark = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const cur = pt.hist.active.entries[pt.hist.active.index];
+      return { n: pt.hist.active.entries.length, curPos: { ...cur.pos } };
+    });
+    const markBefore = beforeMark.n;
+    await page.click('#viewerContainer'); // focus outside inputs
+    await page.keyboard.press(`${MODK}+d`);
+    await page.waitForTimeout(300);
+    const marked = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const cur = pt.hist.active.entries[pt.hist.active.index];
+      const prev = pt.hist.active.entries[pt.hist.active.index - 1];
+      return {
+        n: pt.hist.active.entries.length,
+        label: cur.label,
+        pos: cur.pos,
+        prevPos: prev?.pos,
+      };
+    });
+    // Regression: marking must not rewrite the anchor of the entry you
+    // were on — anchors only move through explicit re-anchoring.
+    check('marking never moves the previous entry\u2019s anchor',
+      marked.prevPos?.page === beforeMark.curPos.page
+        && Math.abs((marked.prevPos?.yRatio ?? -1) - beforeMark.curPos.yRatio) < 1e-9,
+      JSON.stringify({ before: beforeMark.curPos, after: marked.prevPos }));
+    check('mod+D marks the current position as a trail entry',
+      marked.label === 'Marked p.7' && marked.pos.page === 7
+        && Math.abs(marked.pos.yRatio - 0.6) < 0.05,
+      JSON.stringify({ markBefore, marked }));
+    const stacksBeforeMarkFork = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.stacks.length);
+    await page.click('#btnMark', { modifiers: ['Meta'] });
+    await page.waitForTimeout(300);
+    const markFork = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { stacks: pt.hist.stacks.length };
+    });
+    check('cmd+click on + branches the mark into a new trail',
+      markFork.stacks === stacksBeforeMarkFork + 1,
+      JSON.stringify({ before: stacksBeforeMarkFork, after: markFork.stacks }));
+
+    // --- scrolling must NOT move entry anchors (explicit actions only) ---
+    const scrollProbe = await page.evaluate(async () => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const before = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
+      pt.viewer.scrollTo({ page: 20, yRatio: 0.5 });
+      await new Promise((r) => setTimeout(r, 900)); // past the settle debounce
+      const after = JSON.stringify(pt.hist.active.entries.map((e) => e.pos));
+      return { same: before === after };
+    });
+    check('scrolling does not move history entry anchors', scrollProbe.same);
+
+    // --- replace the PDF while keeping the reading state ---
+    const rep = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: PtFormatHooks & {
+          controller: { replaceWithFile(f: File): Promise<void> };
+        };
+      }).__pt;
+      const before = pt.hist.active.entries.map((e) => e.label);
+      const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await pt.controller.replaceWithFile(new File([bytes], 'RevisedCopy.pdf'));
+      await new Promise((r) => setTimeout(r, 800));
+      return {
+        before,
+        after: pt.hist.active.entries.map((e) => e.label),
+        nameLine: pt.progressText().split('\n').find((l) => l.startsWith('pdf.name ')),
+        banner: !!document.getElementById('mismatchBanner'),
+      };
+    });
+    check('replacing the PDF keeps the reading history',
+      JSON.stringify(rep.before) === JSON.stringify(rep.after)
+        && rep.nameLine === 'pdf.name RevisedCopy.pdf'
+        && !rep.banner,
+      JSON.stringify(rep));
+
+    // --- replacing the PDF is undoable (and redoable) ---
+    const repUndo = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: PtFormatHooks & {
+          controller: { undoHist(): void; redoHist(): void };
+          hist: { active: { entries: Array<{ label: string }> } };
+        };
+      }).__pt;
+      const historyBefore = pt.hist.active.entries.map((e) => e.label);
+      pt.controller.undoHist();
+      await new Promise((r) => setTimeout(r, 1200));
+      const afterUndo = {
+        title: document.title,
+        history: pt.hist.active.entries.map((e) => e.label),
+      };
+      pt.controller.redoHist();
+      await new Promise((r) => setTimeout(r, 1200));
+      const afterRedo = { title: document.title };
+      return { historyBefore, afterUndo, afterRedo };
+    });
+    check('undo restores the previous PDF with history intact',
+      repUndo.afterUndo.title.startsWith('WStarCats.pdf')
+        && JSON.stringify(repUndo.afterUndo.history) === JSON.stringify(repUndo.historyBefore),
+      JSON.stringify(repUndo.afterUndo));
+    check('redo re-applies the replacement',
+      repUndo.afterRedo.title.startsWith('RevisedCopy.pdf'),
+      JSON.stringify(repUndo.afterRedo));
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+
+    // --- Recent entries reopen the remembered PDF + session pair, all or
+    // nothing: if either file is gone, NEITHER loads and the state is
+    // untouched ---
+    type RecentOut = {
+      title: string; entries: number; stack: string; pending: boolean;
+      toast: string; page: number;
+    };
+    const openRecentWith = (brokenPdf: boolean, brokenSession: boolean, pdfName: string) =>
+      page.evaluate(async ({ brokenPdf, brokenSession, pdfName }) => {
+        const pt = (window as never as {
+          __pt: PtHooks & { controller: { openRecent(e: unknown): Promise<void> } };
+        }).__pt;
+        const granted = async () => 'granted';
+        const gone = () => {
+          throw new DOMException('A requested file or directory could not be found', 'NotFoundError');
+        };
+        const pdfBytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+        const ptlText = await (await fetch('/sample/WStarCats.ptl')).text();
+        const pdfHandle = brokenPdf
+          ? { name: pdfName, queryPermission: granted, getFile: async () => gone() }
+          : { name: pdfName, queryPermission: granted, getFile: async () => new File([pdfBytes], pdfName) };
+        const sessionHandle = brokenSession
+          ? { name: 'gone.ptl', queryPermission: granted, getFile: async () => gone() }
+          : { name: 'WStarCats.ptl', queryPermission: granted, getFile: async () => new File([ptlText], 'WStarCats.ptl') };
+        await pt.controller.openRecent({
+          fp: 'recent-test', name: pdfName, ts: Date.now(),
+          handle: pdfHandle, progressHandle: sessionHandle,
+        });
+        await new Promise((r) => setTimeout(r, 800));
+        return {
+          title: document.title,
+          entries: pt.hist.active.entries.length,
+          stack: pt.hist.active.name,
+          pending: !!document.getElementById('sessionPrompt'),
+          toast: document.getElementById('toast')?.textContent ?? '',
+          page: pt.viewer.currentPosition().page,
+        };
+      }, { brokenPdf, brokenSession, pdfName });
+
+    const beforeRecent = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { title: document.title, entries: pt.hist.active.entries.length };
+    });
+    const missingPdf = await openRecentWith(true, false, 'GonePaper.pdf') as RecentOut;
+    check('recent with a missing PDF loads nothing and says so',
+      missingPdf.title === beforeRecent.title
+        && missingPdf.entries === beforeRecent.entries
+        && !missingPdf.pending
+        && /the PDF is missing/.test(missingPdf.toast)
+        && !/session/.test(missingPdf.toast),
+      JSON.stringify({ beforeRecent, missingPdf }));
+    const missingSession = await openRecentWith(false, true, 'RecentCopy.pdf') as RecentOut;
+    check('recent with a missing session loads nothing (not even the PDF) and says so',
+      missingSession.title === beforeRecent.title
+        && missingSession.entries === beforeRecent.entries
+        && !missingSession.pending
+        && /session file is missing/.test(missingSession.toast),
+      JSON.stringify({ beforeRecent, missingSession }));
+    const bothGood = await openRecentWith(false, false, 'WStarCats.pdf') as RecentOut;
+    check('recent with both files present opens the PDF with its session',
+      bothGood.title.startsWith('WStarCats.pdf')
+        && bothGood.stack === 'RoundTrip' && bothGood.page === 17,
+      JSON.stringify(bothGood));
+    // No session was ever saved for this PDF: the recent still records
+    // and reopens the PDF alone, starting fresh.
+    const pdfOnly = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { openRecent(e: unknown): Promise<void> } };
+      }).__pt;
+      pt.session.dirty = false;
+      const pdfBytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await pt.controller.openRecent({
+        fp: 'recent-pdf-only', name: 'SoloPaper.pdf', ts: Date.now(),
+        handle: {
+          name: 'SoloPaper.pdf',
+          queryPermission: async () => 'granted',
+          getFile: async () => new File([pdfBytes], 'SoloPaper.pdf'),
+        },
+      });
+      await new Promise((r) => setTimeout(r, 800));
+      return {
+        title: document.title,
+        stacks: pt.hist.stacks.length,
+        entries: pt.hist.active.entries.length,
+      };
+    });
+    check('recent without a saved session still opens the PDF, fresh',
+      pdfOnly.title.startsWith('SoloPaper.pdf')
+        && pdfOnly.stacks === 1 && pdfOnly.entries === 1,
+      JSON.stringify(pdfOnly));
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+
+    // --- on the desktop the auto-save timer asks for write permission
+    // itself: the shell has no permission UI, so the request is
+    // invisible and the save lands (the browser suite pins the
+    // opposite: a browser timer must never prompt) ---
+    const silentSave = await page.evaluate(async () => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      let requested = false;
+      const state: Record<string, string> = { read: 'granted', readwrite: 'prompt' };
+      pt.session.handle = {
+        kind: 'file', name: 'x.ptl',
+        queryPermission: async (d?: { mode?: string }) => state[d?.mode ?? 'read'],
+        requestPermission: async (d?: { mode?: string }) => {
+          requested = true;
+          state[d?.mode ?? 'read'] = 'granted';
+          return 'granted';
+        },
+        createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+      };
+      pt.jumpVia({ page: 2, yRatio: 0.1 }, 'silent-save probe');
+      await new Promise((r) => setTimeout(r, 2500)); // past the 1.5s debounce
+      const out = { requested, dirty: pt.session.dirty };
+      pt.session.handle = null;
+      pt.session.dirty = false;
+      return out;
+    });
+    check('desktop auto-save asks for permission itself and saves',
+      silentSave.requested && !silentSave.dirty, JSON.stringify(silentSave));
+
+    // --- CJK documents work offline: pdf.js needs its cMaps to decode
+    // CID-encoded text and its standard fonts for non-embedded fonts, so
+    // both ship with the app instead of being fetched from a CDN ---
+    const cjkAssets = await page.evaluate(async () => {
+      const probe = async (u: string) => (await fetch(u)).ok;
+      return {
+        cmap: await probe('/pdfjs/cmaps/UniGB-UCS2-H.bcmap'),
+        font: await probe('/pdfjs/standard_fonts/FoxitSerif.pfb'),
+      };
+    });
+    check('pdf.js cMaps and standard fonts ship with the app',
+      cjkAssets.cmap && cjkAssets.font, JSON.stringify(cjkAssets));
+
+    // the fixture's only font is CID-encoded (UniGB-UCS2-H) with no
+    // embedded font program: without the cMaps nothing decodes at all.
+    // Wait for the decoded text to appear rather than sampling after a
+    // fixed delay — CI runners paint slowly and a fixed wait was flaky.
+    await page.goto(BASE + '/?file=sample/cjk.pdf');
+    await page.waitForSelector('.page[data-page="1"] canvas', { timeout: 20000 });
+    const cjkDecoded = await page.waitForFunction(() =>
+      [...document.querySelectorAll('.textLayer')]
+        .map((el) => el.textContent ?? '').join('').includes('你好世界'),
+    undefined, { timeout: 15000 }).then(() => true).catch(() => false);
+    check('CID-encoded (CJK) text decodes through the bundled cMaps', cjkDecoded);
+    const cjkSearch = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: { controller: {
+          runSearch(q: string): Promise<void>;
+          getSnapshot(): { searchCount: string };
+        } };
+      }).__pt;
+      await pt.controller.runSearch('你好');
+      await new Promise((r) => setTimeout(r, 800));
+      return pt.controller.getSnapshot().searchCount;
+    });
+    check('search finds CJK text', /2/.test(cjkSearch), cjkSearch);
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+
+    // (The deviceScaleFactor-2 sharpness checks from the browser suite
+    // have no desktop counterpart: an Electron window renders at the
+    // real display's scale factor, which can't be faked from a test.)
+
+    // --- trackpad pinch (ctrl+wheel): smooth CSS feedback during the
+    // gesture, crisp re-render on commit, never a blank page ---
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector('.page[data-page="1"] canvas', { timeout: 20000 });
+    const pinch = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: { viewer: { scale: number; setScale(s: number, o?: unknown): void } };
+      }).__pt;
+      pt.viewer.setScale(1.2);
+      await new Promise((r) => setTimeout(r, 400));
+      const before = pt.viewer.scale;
+      const target = document.getElementById('viewerContainer')!;
+      const viewerEl = document.getElementById('viewer')!;
+      let liveTransform = '';
+      for (let i = 0; i < 5; i++) {
+        target.dispatchEvent(new WheelEvent('wheel', {
+          ctrlKey: true, deltaY: -40, clientX: 700, clientY: 450,
+          bubbles: true, cancelable: true,
+        }));
+        liveTransform = viewerEl.style.transform; // instant feedback?
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      const midGesture = /scale\(/.test(liveTransform);
+      await new Promise((r) => setTimeout(r, 500)); // commit fires
+      const committed = viewerEl.style.transform === '';
+      // placeholder canvas must exist immediately after a scale change
+      pt.viewer.setScale(pt.viewer.scale * 1.3);
+      const placeholder = !!document.querySelector('.page[data-page="1"] canvas');
+      await new Promise((r) => setTimeout(r, 800));
+      return { before, after: pt.viewer.scale, midGesture, committed, placeholder };
+    });
+    check('pinch gives instant visual feedback and commits a re-render',
+      pinch.after > pinch.before * 1.5 && pinch.midGesture && pinch.committed,
+      JSON.stringify(pinch));
+    check('scale changes keep a placeholder canvas (no blank flash)',
+      pinch.placeholder === true);
+
+    // --- releasing a pinch must not make the content jump (regression:
+    // constant inter-page gaps + approximate anchor math caused an
+    // ~800px jump deep in the document) ---
+    const jump = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: {
+          viewer: {
+            scale: number;
+            setScale(s: number, o?: unknown): void;
+            scrollTo(p: { page: number; yRatio: number }): void;
+          };
+        };
+      }).__pt;
+      pt.viewer.setScale(1.2);
+      pt.viewer.scrollTo({ page: 20, yRatio: 0.4 });
+      await new Promise((r) => setTimeout(r, 900));
+      const target = document.getElementById('viewerContainer')!;
+      const landmark = () =>
+        document.querySelector('.page[data-page="20"]')!.getBoundingClientRect().top;
+      for (let i = 0; i < 5; i++) {
+        target.dispatchEvent(new WheelEvent('wheel', {
+          ctrlKey: true, deltaY: -30, clientX: 700, clientY: 450,
+          bubbles: true, cancelable: true,
+        }));
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      const during = landmark();
+      await new Promise((r) => setTimeout(r, 450)); // commit
+      const after = landmark();
+      return { delta: Math.abs(after - during) };
+    });
+    check('pinch release does not jump (deep in the document)',
+      jump.delta < 4, `delta ${jump.delta.toFixed(1)}px`);
+
+    // --- the whole suite ran with HTTP(S) unreachable; the app must
+    // also never have TRIED to reach the network ---
+    const attempted = await eApp.evaluate(() =>
+      (globalThis as { __ptNetAttempts?: string[] }).__ptNetAttempts ?? []);
+    check('the desktop app never touched the network', attempted.length === 0,
+      attempted.slice(0, 5).join(' '));
+  } finally {
+    await eApp.close();
+  }
+
+  const failed = results.filter((r) => !r.ok);
+  console.log(`\n${results.length - failed.length}/${results.length} passed`);
+  process.exit(failed.length ? 1 : 0);
+}
+
+interface PtUndoHooks extends PtHooks {
+  controller: { undoHist(): void; redoHist(): void };
+}
+
+interface PtFormatHooks extends PtHooks {
+  progressText(): string;
+  parseProgressText(t: string): {
+    state: { hist: { stacks: Array<{ name: string; entries: Array<{ label: string }> }> } };
+  } | null;
+}
+
+// Shape of the window.__pt test hooks (see core/controller.ts).
+interface PtHooks {
+  hist: {
+    active: { name: string; index: number; entries: Array<{ label: string; pos: { page: number; yRatio: number } }> };
+    stacks: Array<{ id: number; name: string; index: number; entries: Array<{ label: string }> }>;
+    jumpTo(i: number): unknown;
+    closeStack(id: number): boolean;
+    canRedo(): boolean;
+    renameStack(id: number, name: string): void;
+    renameEntry(i: number, label: string): void;
+  };
+  viewer: {
+    currentPosition(): { page: number; yRatio: number };
+    scrollTo(pos: { page: number; yRatio: number }): void;
+  };
+  session: { dirty: boolean; handle: unknown };
+  jumpVia(pos: { page: number; yRatio: number }, label: string, fork?: boolean): void;
+  writeProgress(): Promise<void>;
+}
+
+run().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
