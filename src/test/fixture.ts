@@ -132,46 +132,47 @@ async function run(): Promise<void> {
   text(16, 'Providing an equivariant map d1 -> d2 is equivalent to a transformation.', 72, H - 300, 11);
   text(29, 'The construction is manifestly equivariant in both variables.', 72, H - 300, 11);
 
-  // ---- outline (7 top-level entries, two of them with subsections — the
-  // collapsible-outline tests depend on this shape) ----
-  const titles: Array<[string, number, Array<[string, number]>]> = [
-    ['Introduction', 0, []],
-    ['Hilbert spaces and algebras', 2, []],
-    ['W-categories: basics', 4, []],
-    ['The inner product', 8, [['Definition and examples', 9], ['Functoriality', 12]]],
-    ['Positive cones', 15, []],
-    ['Small W-categories', 21, [['Generators', 24]]],
-    ['Tensor categories', 28, []],
+  // ---- outline (7 top-level entries, two with subsections and one
+  // sub-subsection — the collapsible-outline tests depend on this shape:
+  // 11 nodes total, 3 collapsible, 3 levels deep) ----
+  interface ONode { title: string; page: number; kids: ONode[] }
+  const o = (title: string, page: number, kids: ONode[] = []): ONode => ({ title, page, kids });
+  const outlineNodes: ONode[] = [
+    o('Introduction', 0),
+    o('Hilbert spaces and algebras', 2),
+    o('W-categories: basics', 4),
+    o('The inner product', 8, [
+      o('Definition and examples', 9, [o('Bilinear forms', 10)]),
+      o('Functoriality', 12),
+    ]),
+    o('Positive cones', 15),
+    o('Small W-categories', 21, [o('Generators', 24)]),
+    o('Tensor categories', 28),
   ];
   const outlinesRef = doc.context.nextRef();
-  const itemRefs = titles.map(() => doc.context.nextRef());
-  titles.forEach(([title, pageIdx, kids], i) => {
-    const kidRefs = kids.map(() => doc.context.nextRef());
-    kids.forEach(([kTitle, kPage], k) => {
-      doc.context.assign(kidRefs[k], doc.context.obj({
-        Title: PDFString.of(kTitle),
-        Parent: itemRefs[i],
-        Dest: [pages[kPage].ref, 'XYZ', null, H, null],
-        ...(k > 0 ? { Prev: kidRefs[k - 1] } : {}),
-        ...(k < kidRefs.length - 1 ? { Next: kidRefs[k + 1] } : {}),
+  const writeLevel = (nodes: ONode[], parentRef: ReturnType<typeof doc.context.nextRef>) => {
+    const refs = nodes.map(() => doc.context.nextRef());
+    nodes.forEach((node, i) => {
+      const kidRefs = node.kids.length ? writeLevel(node.kids, refs[i]) : [];
+      doc.context.assign(refs[i], doc.context.obj({
+        Title: PDFString.of(node.title),
+        Parent: parentRef,
+        Dest: [pages[node.page].ref, 'XYZ', null, H, null],
+        ...(i > 0 ? { Prev: refs[i - 1] } : {}),
+        ...(i < nodes.length - 1 ? { Next: refs[i + 1] } : {}),
+        ...(kidRefs.length
+          ? { First: kidRefs[0], Last: kidRefs[kidRefs.length - 1], Count: kidRefs.length }
+          : {}),
       }));
     });
-    doc.context.assign(itemRefs[i], doc.context.obj({
-      Title: PDFString.of(title),
-      Parent: outlinesRef,
-      Dest: [pages[pageIdx].ref, 'XYZ', null, H, null],
-      ...(i > 0 ? { Prev: itemRefs[i - 1] } : {}),
-      ...(i < titles.length - 1 ? { Next: itemRefs[i + 1] } : {}),
-      ...(kidRefs.length
-        ? { First: kidRefs[0], Last: kidRefs[kidRefs.length - 1], Count: kidRefs.length }
-        : {}),
-    }));
-  });
+    return refs;
+  };
+  const topRefs = writeLevel(outlineNodes, outlinesRef);
   doc.context.assign(outlinesRef, doc.context.obj({
     Type: 'Outlines',
-    First: itemRefs[0],
-    Last: itemRefs[itemRefs.length - 1],
-    Count: titles.length,
+    First: topRefs[0],
+    Last: topRefs[topRefs.length - 1],
+    Count: outlineNodes.length,
   }));
   doc.catalog.set(PDFName.of('Outlines'), outlinesRef);
 

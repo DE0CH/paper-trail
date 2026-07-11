@@ -402,11 +402,11 @@ async function run(): Promise<void> {
     // --- collapsible outline: chevrons only on sections with children ---
     const toggles = await page.locator('#navCol .outlineToggle').count();
     check('outline shows toggles exactly on sections with subsections',
-      toggles === 2 && outlineItems === 10, `${toggles} toggles, ${outlineItems} items`);
+      toggles === 3 && outlineItems === 11, `${toggles} toggles, ${outlineItems} items`);
     await page.locator('#navCol .outlineToggle').first().click();
     const afterCollapse = await page.locator('#navCol .outlineItem').count();
     check('collapsing a section hides its subsections',
-      afterCollapse === outlineItems - 2, `${afterCollapse} items`);
+      afterCollapse === outlineItems - 3, `${afterCollapse} items`);
     // the collapsed section still jumps when its own row is clicked
     await page.locator('#navCol .outlineItem', { hasText: 'The inner product' }).click();
     await page.waitForTimeout(400);
@@ -425,8 +425,44 @@ async function run(): Promise<void> {
     await page.waitForTimeout(200);
     const allExpanded = await page.locator('#navCol .outlineItem').count();
     check('collapse-all and expand-all fold every section',
-      allCollapsed === outlineItems - 3 && allExpanded === outlineItems,
+      allCollapsed === outlineItems - 4 && allExpanded === outlineItems,
       JSON.stringify({ allCollapsed, allExpanded }));
+
+    // Regression: after Collapse All, expanding one section must not
+    // flash its deeper levels (children used to mount open for a paint
+    // before the collapse broadcast reached them).
+    await page.click('#btnOutlineCollapse');
+    await page.waitForTimeout(200);
+    const flash = await page.evaluate(() => new Promise<{ flashed: boolean; final: number }>((resolve) => {
+      // With the bug, re-mounted children default to open, so the very
+      // DOM commit that inserts them already contains their own nested
+      // lists — visible as a flash before the collapse state catches up.
+      // Mutation records catch that commit deterministically, regardless
+      // of paint timing.
+      let flashed = false;
+      const mo = new MutationObserver((muts) => {
+        for (const m of muts) {
+          for (const n of m.addedNodes) {
+            // A commit that inserts a subtree already containing a nested
+            // list means a deeper level mounted open: that's the flash.
+            // (querySelector only matches strict descendants of n.)
+            if (n instanceof HTMLElement && n.querySelector?.(':scope .outlineTree')) {
+              flashed = true;
+            }
+          }
+        }
+      });
+      mo.observe(document.getElementById('outlinePanel')!, { childList: true, subtree: true });
+      (document.querySelector('#navCol .outlineToggle') as HTMLElement).click();
+      setTimeout(() => {
+        mo.disconnect();
+        resolve({ flashed, final: document.querySelectorAll('#navCol .outlineItem').length });
+      }, 400);
+    }));
+    check('expanding a collapsed section never flashes deeper levels',
+      !flash.flashed && flash.final === 9, JSON.stringify(flash));
+    await page.click('#btnOutlineExpand');
+    await page.waitForTimeout(200);
     await page.click('#navCol button:has-text("Pages")');
     await page.waitForSelector('#thumbList [data-thumb-page="1"] canvas', { timeout: 15000 });
     check('page thumbnails render lazily', true);

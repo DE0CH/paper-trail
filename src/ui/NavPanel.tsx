@@ -11,9 +11,16 @@ export type NavTab = 'outline' | 'pages';
 type ForceAll = { v: number; open: boolean };
 
 function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
-  const [open, setOpen] = useState(true);
+  // Initial state honors the last broadcast: items mounting under a
+  // collapsed-all tree start closed. (Initializing open and correcting
+  // in an effect painted a fully-expanded flash first.)
+  const [open, setOpen] = useState(forceAll.v === 0 || forceAll.open);
+  const applied = useRef(forceAll.v);
   useEffect(() => {
-    if (forceAll.v > 0) setOpen(forceAll.open);
+    if (forceAll.v !== applied.current) {
+      applied.current = forceAll.v;
+      setOpen(forceAll.open);
+    }
   }, [forceAll]);
   const hasKids = n.children.length > 0;
   return (
