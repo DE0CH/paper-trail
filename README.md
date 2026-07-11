@@ -12,7 +12,7 @@ file you can come back to (or keep in git next to the paper).
 Following references, popping back, jumping around the history, and
 branching into a new trail:
 
-https://github.com/user-attachments/assets/6187932e-93a4-47c5-818e-5f75c0527860
+https://github.com/user-attachments/assets/c6796ec2-f5a7-42d8-b961-6a563fa2d73e
 
 <p align="center">
   <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after branching with cmd+click">
