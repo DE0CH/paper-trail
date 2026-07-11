@@ -3,6 +3,22 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.4.3
+
+- Opening a PDF and loading a session are now fully separate actions:
+  `Cmd/Ctrl+O` (and File ▸ Open) picks PDFs only, `Cmd/Ctrl+Shift+O`
+  (and Load session…) picks session files only, and the toolbar Open
+  button is gone — opening lives on the welcome screen, the shortcut,
+  and drag-and-drop.
+- With a document open, dropping a PDF no longer replaces it (open
+  another window for another paper); dropping a session file still
+  loads it.
+- Desktop: files opened from the OS (Open With…, dropping onto the app
+  icon) always get their own window, and the cheat-sheet includes
+  desktop shortcuts such as `Cmd/Ctrl+N`.
+- The hover preview can be resized from its top edge too, and it never
+  covers the link you're hovering, even in small windows.
+
 ## 0.4.2
 
 - Every keyboard shortcut now uses a modifier, like a normal app —
