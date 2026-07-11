@@ -109,12 +109,14 @@ function createWindow(): BrowserWindow {
       titleBarStyle: 'hiddenInset' as const,
     } : {
       titleBarStyle: 'hidden' as const,
-      // No explicit height: the platform-recommended caption size. The
-      // renderer sizes the toolbar from the titlebar-area-* CSS env vars
-      // so the two always agree.
+      // 48px follows Fluent's guidance for title bars with interactive
+      // content (what Outlook/Teams/Edge use); the bare 32px caption is
+      // cramped for a toolbar. The renderer sizes the toolbar from the
+      // titlebar-area-* CSS env vars so the two always agree.
       titleBarOverlay: {
         color: '#1e1f22',
         symbolColor: '#9a9aa2',
+        height: 48,
       },
     }),
     webPreferences: {
