@@ -18,4 +18,9 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   // the main process shows the menu and returns the chosen action id.
   showContextMenu: (ctx: unknown): Promise<string | null> =>
     ipcRenderer.invoke('pt-context-menu', ctx) as Promise<string | null>,
+  // Unsaved-changes indicator for the native window chrome (the dot in
+  // the macOS close button).
+  setDocumentEdited: (edited: boolean) => {
+    ipcRenderer.send('pt-document-edited', edited);
+  },
 });

@@ -85,7 +85,7 @@ diffs cleanly, so versioning it in git alongside the paper works well.
   button means unsaved changes.
 - Got a revised version of the paper? **⇄ Replace PDF** swaps the file
   and keeps your whole reading history.
-- To restore a session after closing the app, click "Load Session...".
+- To restore a session after closing the app, click **Load session…**.
 
 ## Keyboard shortcuts
 

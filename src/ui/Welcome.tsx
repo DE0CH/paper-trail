@@ -20,7 +20,7 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
             className="mt-4 bg-accent text-white text-sm px-4.5 py-2 rounded-lg cursor-pointer hover:brightness-110"
             onClick={() => void controller.pickFile()}
           >
-            Open the PDF&hellip;
+            Choose the PDF&hellip;
           </button>
           <p className="text-xs mt-2">or drop it anywhere</p>
           <button

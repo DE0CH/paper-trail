@@ -147,6 +147,11 @@ export default function App() {
     });
   }, []);
 
+  // The native close button's dot mirrors unsaved session changes.
+  useEffect(() => {
+    window.ptDesktop?.setDocumentEdited?.(snap.save === 'dirty');
+  }, [snap.save]);
+
   // Native right-click menus (desktop): classify what was clicked, let the
   // shell pop a native menu, then run the chosen action. Text fields and
   // selections are NOT intercepted — electron-context-menu shows the full

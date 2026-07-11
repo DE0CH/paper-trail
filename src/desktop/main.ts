@@ -214,6 +214,8 @@ function sendFileTo(win: BrowserWindow, filePath: string): void {
       data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
     });
     app.addRecentDocument(filePath);
+    // macOS: title-bar proxy for the real file behind this window.
+    if (isMac && /\.pdf$/i.test(filePath)) win.setRepresentedFilename(filePath);
   }).catch((e) => {
     console.warn('could not read', filePath, e);
   });
@@ -444,6 +446,11 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
   });
 });
 
+// The dot in the macOS close button mirrors unsaved session changes.
+ipcMain.on('pt-document-edited', (event, edited: boolean) => {
+  BrowserWindow.fromWebContents(event.sender)?.setDocumentEdited(!!edited);
+});
+
 ipcMain.on('pt-open-file-ready', (event) => {
   dbg('renderer ready', event.sender.id);
   readyWindows.add(event.sender.id);
@@ -461,6 +468,22 @@ void app.whenReady().then(() => {
   else Menu.setApplicationMenu(null);
 
   const win = createWindow();
+
+  // Standard app-level niceties.
+  app.setAboutPanelOptions({
+    applicationName: 'Paper Trail',
+    applicationVersion: app.getVersion(),
+    copyright: 'MIT licensed \u2014 github.com/DE0CH/paper-trail',
+  });
+  if (isMac) {
+    app.dock?.setMenu(Menu.buildFromTemplate([
+      { label: 'New Window', click: () => void createWindow() },
+    ]));
+  } else {
+    // Windows taskbar Jump List: recent documents (uses the installer's
+    // file associations).
+    app.setJumpList([{ type: 'recent' }]);
+  }
 
   // Files double-clicked before the app finished launching, and (on
   // Windows / dev runs) file arguments on the command line.
