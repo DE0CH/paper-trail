@@ -1090,35 +1090,48 @@ export class Controller {
    * a clear message with everything left as it was.
    */
   async openRecent(entry: RecentEntry): Promise<void> {
+    const fail = (what: string) =>
+      this.showToast(`Couldn\u2019t reopen \u201c${entry.name}\u201d \u2014 ${what}.`, 6000);
+
+    // Read BOTH files completely before touching any state.
+    let pdfFile: File;
+    let pdfBytes: Uint8Array;
     try {
       if (!entry.handle || !(await ensureReadPermission(entry.handle))) {
         throw new Error('PDF handle unavailable');
       }
-      // Read BOTH files completely before touching any state.
-      const pdfFile = await entry.handle.getFile();
-      const pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
-      let progress: ProgressFile | null = null;
-      if (entry.progressHandle) {
+      pdfFile = await entry.handle.getFile();
+      pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
+    } catch (e) {
+      console.warn('openRecent: PDF unreadable', e);
+      fail('the PDF is missing');
+      return;
+    }
+    let progress: ProgressFile | null = null;
+    if (entry.progressHandle) {
+      let sessionText: string;
+      try {
         if (!(await ensureReadPermission(entry.progressHandle))) {
           throw new Error('session handle unavailable');
         }
-        const sessionFile = await entry.progressHandle.getFile();
-        progress = parseProgress(await sessionFile.text());
-        if (!progress) throw new Error('session file unreadable');
+        sessionText = await (await entry.progressHandle.getFile()).text();
+      } catch (e) {
+        console.warn('openRecent: session unreadable', e);
+        fail('its saved session file is missing');
+        return;
       }
-      await this.openData(pdfBytes, pdfFile.name, {
-        handle: entry.handle,
-        source: entry.handle,
-        progress,
-        progressHandle: progress ? entry.progressHandle ?? null : null,
-      });
-    } catch (e) {
-      console.warn('openRecent failed', e);
-      this.showToast(
-        `Couldn\u2019t reopen \u201c${entry.name}\u201d \u2014 the PDF or its session file is missing. Nothing was loaded.`,
-        6000,
-      );
+      progress = parseProgress(sessionText);
+      if (!progress) {
+        fail('its saved session file is unreadable');
+        return;
+      }
     }
+    await this.openData(pdfBytes, pdfFile.name, {
+      handle: entry.handle,
+      source: entry.handle,
+      progress,
+      progressHandle: progress ? entry.progressHandle ?? null : null,
+    });
   }
 
   private async bootFromQuery(): Promise<void> {

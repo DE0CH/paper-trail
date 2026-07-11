@@ -1165,18 +1165,19 @@ async function run(): Promise<void> {
       return { title: document.title, entries: pt.hist.active.entries.length };
     });
     const missingPdf = await openRecentWith(true, false, 'GonePaper.pdf') as RecentOut;
-    check('recent with a missing PDF loads nothing',
+    check('recent with a missing PDF loads nothing and says so',
       missingPdf.title === beforeRecent.title
         && missingPdf.entries === beforeRecent.entries
         && !missingPdf.pending
-        && /missing|nothing was loaded/i.test(missingPdf.toast),
+        && /the PDF is missing/.test(missingPdf.toast)
+        && !/session/.test(missingPdf.toast),
       JSON.stringify({ beforeRecent, missingPdf }));
     const missingSession = await openRecentWith(false, true, 'RecentCopy.pdf') as RecentOut;
-    check('recent with a missing session loads nothing (not even the PDF)',
+    check('recent with a missing session loads nothing (not even the PDF) and says so',
       missingSession.title === beforeRecent.title
         && missingSession.entries === beforeRecent.entries
         && !missingSession.pending
-        && /missing|nothing was loaded/i.test(missingSession.toast),
+        && /session file is missing/.test(missingSession.toast),
       JSON.stringify({ beforeRecent, missingSession }));
     const bothGood = await openRecentWith(false, false, 'WStarCats.pdf') as RecentOut;
     check('recent with both files present opens the PDF with its session',
