@@ -16,6 +16,15 @@ GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
+// pdf.js side data, bundled with the app (see vite.config.ts) so that
+// CID-encoded (CJK) text and the 14 standard fonts work without any
+// network access — the desktop app must run entirely offline.
+const PDF_ASSETS = {
+  cMapUrl: new URL('pdfjs/cmaps/', document.baseURI).href,
+  cMapPacked: true,
+  standardFontDataUrl: new URL('pdfjs/standard_fonts/', document.baseURI).href,
+};
+
 const RENDER_MARGIN = 900; // px beyond viewport to pre-render
 const DESTROY_MARGIN = 3200; // px beyond viewport to tear pages down
 const PROBE_OFFSET = 8; // px used to define "current position"
@@ -93,7 +102,7 @@ export class Viewer {
   async open(src: { data?: Uint8Array; url?: string }): Promise<PDFDocumentProxy | null> {
     this.close();
     const epoch = ++this.epoch;
-    const task = getDocument(src);
+    const task = getDocument({ ...src, ...PDF_ASSETS });
     const doc = await task.promise;
     if (epoch !== this.epoch) {
       void task.destroy();

@@ -9,6 +9,10 @@
 //     extraction yields "Definition 4.1")
 //   - the word "equivariant" appearing exactly 4 times
 //   - a 7-entry document outline
+// Also generates sample/cjk.pdf: a one-page document whose text uses a
+// CID font with the predefined UniGB-UCS2-H encoding and NO embedded
+// font program, so pdf.js cannot decode or render it without the
+// bundled cMaps — the regression fixture for offline CJK rendering.
 // Usage: node build-node/test/fixture.js [--force]
 
 import { PDFDocument, PDFName, PDFArray, PDFString, StandardFonts, rgb } from 'pdf-lib';
@@ -17,18 +21,76 @@ import * as path from 'node:path';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = path.join(ROOT, 'sample', 'WStarCats.pdf');
+const CJK_OUT = path.join(ROOT, 'sample', 'cjk.pdf');
 
 const W = 612;
 const H = 792;
 const INK = rgb(0.1, 0.1, 0.12);
 const DIM = rgb(0.35, 0.35, 0.4);
 
+// The CJK fixture is built by hand at the object level: pdf-lib cannot
+// author non-embedded CID fonts, but the whole point is that the file
+// carries no font program — only /Encoding /UniGB-UCS2-H — so text
+// decoding entirely depends on pdf.js loading the bundled cMaps.
+async function writeCjk(): Promise<void> {
+  if (fs.existsSync(CJK_OUT) && !process.argv.includes('--force')) {
+    console.log('fixture exists:', CJK_OUT);
+    return;
+  }
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([W, H]);
+  const ctx = doc.context;
+  const fdRef = ctx.register(ctx.obj({
+    Type: 'FontDescriptor',
+    FontName: 'STSong-Light',
+    Flags: 4,
+    FontBBox: [-25, -254, 1000, 880],
+    ItalicAngle: 0,
+    Ascent: 880,
+    Descent: -254,
+    CapHeight: 737,
+    StemV: 58,
+  }));
+  const cidRef = ctx.register(ctx.obj({
+    Type: 'Font',
+    Subtype: 'CIDFontType0',
+    BaseFont: 'STSong-Light',
+    CIDSystemInfo: ctx.obj({
+      Registry: PDFString.of('Adobe'),
+      Ordering: PDFString.of('GB1'),
+      Supplement: 4,
+    }),
+    FontDescriptor: fdRef,
+    DW: 1000,
+  }));
+  const f0Ref = ctx.register(ctx.obj({
+    Type: 'Font',
+    Subtype: 'Type0',
+    BaseFont: 'STSong-Light-UniGB-UCS2-H',
+    Encoding: 'UniGB-UCS2-H',
+    DescendantFonts: [cidRef],
+  }));
+  page.node.set(PDFName.of('Resources'), ctx.obj({ Font: { F0: f0Ref } }));
+  // UCS-2 hex strings: 你好世界 / 中文测试：你好 ("你好" appears twice,
+  // which the search test counts on).
+  const content = [
+    'BT /F0 24 Tf 72 712 Td <4F60597D4E16754C> Tj ET',
+    'BT /F0 14 Tf 72 672 Td <4E2D65876D4B8BD5FF1A4F60597D> Tj ET',
+  ].join('\n');
+  page.node.set(PDFName.of('Contents'), ctx.register(ctx.stream(content)));
+  doc.setTitle('CJK rendering fixture');
+  const bytes = await doc.save({ useObjectStreams: false });
+  fs.writeFileSync(CJK_OUT, bytes);
+  console.log('wrote', CJK_OUT, `${Math.round(bytes.length / 1024)}KB, 1 page`);
+}
+
 async function run(): Promise<void> {
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  await writeCjk();
   if (fs.existsSync(OUT) && !process.argv.includes('--force')) {
     console.log('fixture exists:', OUT);
     return;
   }
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
 
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.TimesRoman);

@@ -1,6 +1,6 @@
 {
   "name": "paper-trail",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "A PDF reader with a list of navigation history stacks: browser-style back/forward plus cmd+click forking.",
   "type": "commonjs",
@@ -12,6 +12,7 @@
     "test": "node build-node/test/e2e.js",
     "test:unit": "node --test build-node/test/unit.js",
     "test:desktop": "electron build-node/test/desktopSave.js",
+    "test:offline": "electron build-node/test/desktopOffline.js",
     "perf": "node build-node/test/perf.js",
     "media": "node build-node/test/media.js",
     "dist:mac": "electron-builder --mac --publish never",
@@ -34,7 +35,8 @@
     "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
-    "vite": "^8.1.4"
+    "vite": "^8.1.4",
+    "vite-plugin-static-copy": "^4.1.1"
   },
   "main": "build-node/desktop/main.js",
   "author": "DE0CH",

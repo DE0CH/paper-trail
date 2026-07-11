@@ -1249,6 +1249,50 @@ async function run(): Promise<void> {
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
 
+    // --- CJK documents work offline: pdf.js needs its cMaps to decode
+    // CID-encoded text and its standard fonts for non-embedded fonts, so
+    // both ship with the app instead of being fetched from a CDN ---
+    const cjkAssets = await page.evaluate(async () => {
+      const probe = async (u: string) => (await fetch(u)).ok;
+      return {
+        cmap: await probe('/pdfjs/cmaps/UniGB-UCS2-H.bcmap'),
+        font: await probe('/pdfjs/standard_fonts/FoxitSerif.pfb'),
+      };
+    });
+    check('pdf.js cMaps and standard fonts ship with the app',
+      cjkAssets.cmap && cjkAssets.font, JSON.stringify(cjkAssets));
+
+    // the fixture's only font is CID-encoded (UniGB-UCS2-H) with no
+    // embedded font program: without the cMaps nothing decodes at all
+    await page.goto(BASE + '/?file=sample/cjk.pdf');
+    await page.waitForSelector('.page[data-page="1"]', { timeout: 20000 });
+    await page.waitForTimeout(2000);
+    const cjkText = await page.evaluate(() => {
+      const text = [...document.querySelectorAll('.textLayer')]
+        .map((el) => el.textContent ?? '').join('');
+      return {
+        hasLine: text.includes('你好世界'),
+        canvas: !!document.querySelector('.page[data-page="1"] canvas'),
+      };
+    });
+    check('CID-encoded (CJK) text decodes through the bundled cMaps',
+      cjkText.hasLine && cjkText.canvas, JSON.stringify(cjkText));
+    const cjkSearch = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: { controller: {
+          runSearch(q: string): Promise<void>;
+          getSnapshot(): { searchCount: string };
+        } };
+      }).__pt;
+      await pt.controller.runSearch('你好');
+      await new Promise((r) => setTimeout(r, 800));
+      return pt.controller.getSnapshot().searchCount;
+    });
+    check('search finds CJK text', /2/.test(cjkSearch), cjkSearch);
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+
     // --- rendering sharpness on a retina display (deviceScaleFactor 2) ---
     const retina = await browser.newPage({
       viewport: { width: 1400, height: 900 },
