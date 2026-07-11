@@ -8,9 +8,9 @@
 // profile of the heaviest scenario via the DevTools protocol to show where
 // the time actually goes.
 //
-// Prereq: npm run build && npm start.  Usage: node build-node/test/perf.js
+// Prereq: npm run build && npm start.  Usage: node build-node/tools/perf.js
 
-import { findBrowser } from './browsers';
+import { findBrowser } from '../test/browsers';
 import { chromium, type Page } from 'playwright-core';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8377';

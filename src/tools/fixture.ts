@@ -13,7 +13,7 @@
 // CID font with the predefined UniGB-UCS2-H encoding and NO embedded
 // font program, so pdf.js cannot decode or render it without the
 // bundled cMaps — the regression fixture for offline CJK rendering.
-// Usage: node build-node/test/fixture.js [--force]
+// Usage: node build-node/tools/fixture.js [--force]
 
 import { PDFDocument, PDFName, PDFArray, PDFString, StandardFonts, rgb } from 'pdf-lib';
 import * as fs from 'node:fs';

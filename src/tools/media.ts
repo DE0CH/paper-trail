@@ -6,7 +6,7 @@
 // Prereq: app built and server running (npm start); ffmpeg on PATH for the
 // GIF conversion. Usage: npm run media   → writes docs/media/*
 
-import { findBrowser } from './browsers';
+import { findBrowser } from '../test/browsers';
 import { chromium, type Page } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';

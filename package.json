@@ -13,12 +13,15 @@
     "test:unit": "node --test build-node/test/unit.js",
     "test:desktop": "electron build-node/test/desktopSave.js",
     "test:offline": "electron build-node/test/desktopOffline.js",
-    "perf": "node build-node/test/perf.js",
-    "media": "node build-node/test/media.js",
+    "test:autosave": "electron build-node/test/desktopAutosave.js",
+    "test:install:win": "node build-node/test/installerWin.js",
+    "test:install:mac": "node build-node/test/installerMac.js",
+    "perf": "node build-node/tools/perf.js",
+    "media": "node build-node/tools/media.js",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never",
-    "icons": "node build-node/test/icons.js",
-    "pretest": "node build-node/test/fixture.js"
+    "icons": "node build-node/tools/icons.js",
+    "pretest": "node build-node/tools/fixture.js"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",

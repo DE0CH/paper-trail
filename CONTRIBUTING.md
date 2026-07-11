@@ -34,8 +34,10 @@ src/ui/                      React components; subscribe to the controller
 src/node/server.ts           static server for browser use (127.0.0.1 only)
 src/desktop/                 Electron shell: paper-trail:// protocol, native menus,
                              minimal contextBridge (menu actions + OS file opens)
-src/test/e2e.ts              end-to-end suite        (npm test)
-src/test/perf.ts             performance profiler    (npm run perf)
+src/test/                    test suites (browser e2e, desktop shell
+                             harnesses, installer tests, unit tests)
+src/tools/                   generators and profiling: fixture PDFs,
+                             icons, README media, perf (not tests)
 desktop/launch.py            build-if-needed + serve + open browser
 desktop/make_app.py          generate the macOS .app bundle
 ```
@@ -57,6 +59,12 @@ npm run test:unit  # fast unit tests for the pure core modules
 npm test           # e2e suite — needs `npm start` running
 npm run perf       # performance profile + limit search
 ```
+
+CI additionally runs the desktop-shell harnesses (`test:desktop`,
+`test:offline`, `test:autosave`) and the installer tests
+(`test:install:win` on x64 and ARM machines, `test:install:mac` on
+Intel and Apple silicon), which install the packaged artifacts the way
+a user would and smoke-test the result.
 
 The unit tests (node:test, no extra dependencies) cover the pure core
 modules — the navigation history and the session-file format — and run

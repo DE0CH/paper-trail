@@ -8,7 +8,7 @@
 // The generated binaries are committed so CI never needs macOS tooling.
 // Usage: npm run icons
 
-import { findBrowser } from './browsers';
+import { findBrowser } from '../test/browsers';
 import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
