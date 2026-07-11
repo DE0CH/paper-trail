@@ -110,14 +110,17 @@ function createWindow(): BrowserWindow {
       titleBarStyle: 'hiddenInset' as const,
     } : {
       titleBarStyle: 'hidden' as const,
-      // 48px follows Fluent's guidance for title bars with interactive
-      // content (what Outlook/Teams/Edge use); the bare 32px caption is
-      // cramped for a toolbar. The renderer sizes the toolbar from the
-      // titlebar-area-* CSS env vars so the two always agree.
+      // 48px total follows Fluent's guidance for title bars with
+      // interactive content (what Outlook/Teams/Edge use); the bare 32px
+      // caption is cramped for a toolbar. The overlay is one pixel short
+      // of that so the toolbar's bottom border shows through underneath
+      // the window buttons instead of stopping where they start; the
+      // renderer sizes the toolbar from the titlebar-area-* CSS env vars
+      // plus that pixel, so the two always agree.
       titleBarOverlay: {
         color: '#1e1f22',
         symbolColor: '#9a9aa2',
-        height: 48,
+        height: 47,
       },
     }),
     webPreferences: {
@@ -309,8 +312,8 @@ function loadSessionDialog(): void {
  * also offers an explicit check. Dev/test builds never update.
  */
 function setupAutoUpdates(): void {
-  if (SMOKE || !app.isPackaged) return;
   autoUpdater.autoDownload = true;
+  if (SMOKE || !app.isPackaged) return;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('update-downloaded', (info) => {
     for (const w of BrowserWindow.getAllWindows()) {

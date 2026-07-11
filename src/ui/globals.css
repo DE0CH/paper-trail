@@ -161,9 +161,12 @@ body.desktopWin #toolbar :is(button, input) {
    right end of the toolbar row (titleBarOverlay at the platform's
    recommended caption size). The titlebar-area-* environment variables
    describe exactly the space the overlay leaves us, so the toolbar can
-   never run underneath the buttons. */
+   never run underneath the buttons. The overlay is one pixel shorter
+   than the toolbar (47px vs 48px, see desktop/main.ts) so the toolbar's
+   bottom border line runs underneath the window buttons too instead of
+   stopping where they start. */
 body.desktopWin #toolbar {
-  height: env(titlebar-area-height, 36px);
+  height: calc(env(titlebar-area-height, 36px) + 1px);
   padding-right: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 8px);
   -webkit-app-region: drag;
 }
