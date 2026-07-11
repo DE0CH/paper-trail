@@ -106,6 +106,7 @@ declare global {
       onOpenFile: (cb: (file: { name: string; data: ArrayBuffer }) => void) => void;
       showContextMenu: (ctx: ContextMenuRequest) => Promise<string | null>;
       setDocumentEdited: (edited: boolean) => void;
+      saveSessionFallback: (text: string, suggestedName: string) => Promise<string | null>;
     };
     __pt?: unknown;
   }

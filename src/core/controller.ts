@@ -388,10 +388,11 @@ export class Controller {
         this.showToast('Saving progress files requires a Chromium-based browser');
         return;
       }
+      const suggestedName = this.currentName.replace(/\.pdf$/i, '') + PROGRESS_EXT;
       let handle: FileSystemFileHandle;
       try {
         handle = await window.showSaveFilePicker({
-          suggestedName: this.currentName.replace(/\.pdf$/i, '') + PROGRESS_EXT,
+          suggestedName,
           types: [{
             description: 'Reading progress',
             accept: { 'text/plain': [PROGRESS_EXT] },
@@ -399,6 +400,19 @@ export class Controller {
         });
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return;
+        // Menu items carry no user activation, so the picker throws in
+        // the desktop shell; let the shell save the file instead. (The
+        // session stays unbound — auto-save needs an in-app save.)
+        if ((e as Error)?.name === 'SecurityError' && window.ptDesktop?.saveSessionFallback) {
+          const saved = await window.ptDesktop.saveSessionFallback(
+            serializeProgress(this.progressFileObject()), suggestedName);
+          if (saved) {
+            this.session.dirty = false;
+            this.showToast('Session saved');
+            this.notify();
+          }
+          return;
+        }
         throw e;
       }
       this.session.handle = handle;
@@ -1069,18 +1083,42 @@ export class Controller {
     void this.openFile(f, handle);
   }
 
+  /**
+   * A Recent row remembers a PDF and (when one was saved) its session
+   * file, and reopens them as a pair — all or nothing. If either file is
+   * gone or unreadable, NEITHER loads: no partial state, no picker, just
+   * a clear message with everything left as it was.
+   */
   async openRecent(entry: RecentEntry): Promise<void> {
-    if (entry.handle && await ensureReadPermission(entry.handle)) {
-      try {
-        const file = await entry.handle.getFile();
-        await this.openFile(file, entry.handle);
-        return;
-      } catch (e) {
-        console.warn('reopen via handle failed', e);
+    try {
+      if (!entry.handle || !(await ensureReadPermission(entry.handle))) {
+        throw new Error('PDF handle unavailable');
       }
+      // Read BOTH files completely before touching any state.
+      const pdfFile = await entry.handle.getFile();
+      const pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
+      let progress: ProgressFile | null = null;
+      if (entry.progressHandle) {
+        if (!(await ensureReadPermission(entry.progressHandle))) {
+          throw new Error('session handle unavailable');
+        }
+        const sessionFile = await entry.progressHandle.getFile();
+        progress = parseProgress(await sessionFile.text());
+        if (!progress) throw new Error('session file unreadable');
+      }
+      await this.openData(pdfBytes, pdfFile.name, {
+        handle: entry.handle,
+        source: entry.handle,
+        progress,
+        progressHandle: progress ? entry.progressHandle ?? null : null,
+      });
+    } catch (e) {
+      console.warn('openRecent failed', e);
+      this.showToast(
+        `Couldn\u2019t reopen \u201c${entry.name}\u201d \u2014 the PDF or its session file is missing. Nothing was loaded.`,
+        6000,
+      );
     }
-    this.showToast(`Please locate \u201c${entry.name}\u201d again`);
-    await this.pickFile();
   }
 
   private async bootFromQuery(): Promise<void> {

@@ -49,6 +49,10 @@ jobs:
         run: |
           "./dist-electron/win-unpacked/Paper Trail.exe" --smoke
 
+      - name: Desktop save regression (menu actions without user activation)
+        shell: bash
+        run: npx electron build-node/test/desktopSave.js
+
       - name: List artifacts
         shell: bash
         run: ls -la dist-electron/*.exe dist-electron/*.zip

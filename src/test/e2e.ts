@@ -1120,6 +1120,73 @@ async function run(): Promise<void> {
     await page.evaluate(() => {
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
+
+    // --- Recent entries reopen the remembered PDF + session pair, all or
+    // nothing: if either file is gone, NEITHER loads and the state is
+    // untouched ---
+    type RecentOut = {
+      title: string; entries: number; stack: string; pending: boolean;
+      toast: string; page: number;
+    };
+    const openRecentWith = (brokenPdf: boolean, brokenSession: boolean, pdfName: string) =>
+      page.evaluate(async ({ brokenPdf, brokenSession, pdfName }) => {
+        const pt = (window as never as {
+          __pt: PtHooks & { controller: { openRecent(e: unknown): Promise<void> } };
+        }).__pt;
+        const granted = async () => 'granted';
+        const gone = () => {
+          throw new DOMException('A requested file or directory could not be found', 'NotFoundError');
+        };
+        const pdfBytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+        const ptlText = await (await fetch('/sample/WStarCats.ptl')).text();
+        const pdfHandle = brokenPdf
+          ? { name: pdfName, queryPermission: granted, getFile: async () => gone() }
+          : { name: pdfName, queryPermission: granted, getFile: async () => new File([pdfBytes], pdfName) };
+        const sessionHandle = brokenSession
+          ? { name: 'gone.ptl', queryPermission: granted, getFile: async () => gone() }
+          : { name: 'WStarCats.ptl', queryPermission: granted, getFile: async () => new File([ptlText], 'WStarCats.ptl') };
+        await pt.controller.openRecent({
+          fp: 'recent-test', name: pdfName, ts: Date.now(),
+          handle: pdfHandle, progressHandle: sessionHandle,
+        });
+        await new Promise((r) => setTimeout(r, 800));
+        return {
+          title: document.title,
+          entries: pt.hist.active.entries.length,
+          stack: pt.hist.active.name,
+          pending: !!document.getElementById('sessionPrompt'),
+          toast: document.getElementById('toast')?.textContent ?? '',
+          page: pt.viewer.currentPosition().page,
+        };
+      }, { brokenPdf, brokenSession, pdfName });
+
+    const beforeRecent = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { title: document.title, entries: pt.hist.active.entries.length };
+    });
+    const missingPdf = await openRecentWith(true, false, 'GonePaper.pdf') as RecentOut;
+    check('recent with a missing PDF loads nothing',
+      missingPdf.title === beforeRecent.title
+        && missingPdf.entries === beforeRecent.entries
+        && !missingPdf.pending
+        && /missing|nothing was loaded/i.test(missingPdf.toast),
+      JSON.stringify({ beforeRecent, missingPdf }));
+    const missingSession = await openRecentWith(false, true, 'RecentCopy.pdf') as RecentOut;
+    check('recent with a missing session loads nothing (not even the PDF)',
+      missingSession.title === beforeRecent.title
+        && missingSession.entries === beforeRecent.entries
+        && !missingSession.pending
+        && /missing|nothing was loaded/i.test(missingSession.toast),
+      JSON.stringify({ beforeRecent, missingSession }));
+    const bothGood = await openRecentWith(false, false, 'WStarCats.pdf') as RecentOut;
+    check('recent with both files present opens the PDF with its session',
+      bothGood.title.startsWith('WStarCats.pdf')
+        && bothGood.stack === 'RoundTrip' && bothGood.page === 17,
+      JSON.stringify(bothGood));
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+
     // --- rendering sharpness on a retina display (deviceScaleFactor 2) ---
     const retina = await browser.newPage({
       viewport: { width: 1400, height: 900 },

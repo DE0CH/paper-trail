@@ -23,4 +23,8 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   setDocumentEdited: (edited: boolean) => {
     ipcRenderer.send('pt-document-edited', edited);
   },
+  // Menu-triggered saves lack user activation for the renderer's picker;
+  // the shell writes the file instead. Resolves to the path or null.
+  saveSessionFallback: (text: string, suggestedName: string): Promise<string | null> =>
+    ipcRenderer.invoke('pt-save-session', { text, suggestedName }) as Promise<string | null>,
 });

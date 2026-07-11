@@ -266,6 +266,23 @@ function openDialog(): void {
   });
 }
 
+/**
+ * Menu items carry no user activation, so the renderer's file pickers
+ * throw SecurityError there; session loading from the menu therefore
+ * uses this main-process dialog and feeds the file into the invoking
+ * window's normal (two-step) session flow.
+ */
+function loadSessionDialog(): void {
+  const win = focusedWindow();
+  void dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'Reading session', extensions: ['ptl'] }],
+  }).then(({ canceled, filePaths }) => {
+    if (canceled || !filePaths[0]) return;
+    openPath(filePaths[0], win ?? undefined);
+  });
+}
+
 // ---- menu ----
 
 function buildMenu(): void {
@@ -296,7 +313,7 @@ function buildMenu(): void {
         }] : []),
         { type: 'separator' },
         { label: 'Save Reading Session', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
-        { label: 'Load Reading Session\u2026', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('load-session') },
+        { label: 'Load Reading Session\u2026', accelerator: 'CmdOrCtrl+Shift+O', click: () => loadSessionDialog() },
         { type: 'separator' },
         { label: 'Replace PDF (Keep History)\u2026', click: () => send('replace-pdf') },
         { type: 'separator' },
@@ -448,6 +465,20 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
   });
 });
 
+// Menu-triggered saves have no user activation either: the renderer
+// delegates here, and the file is written by the main process.
+ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedName: string }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePath } = await dialog.showSaveDialog(win!, {
+    defaultPath: req.suggestedName,
+    filters: [{ name: 'Reading session', extensions: ['ptl'] }],
+  });
+  if (canceled || !filePath) return null;
+  await fs.promises.writeFile(filePath, req.text, 'utf8');
+  app.addRecentDocument(filePath);
+  return filePath;
+});
+
 // The dot in the macOS close button mirrors unsaved session changes.
 ipcMain.on('pt-document-edited', (event, edited: boolean) => {
   BrowserWindow.fromWebContents(event.sender)?.setDocumentEdited(!!edited);
@@ -496,18 +527,23 @@ void app.whenReady().then(() => {
 
   if (SMOKE) {
     // With a file argument the smoke test also proves the OS-open path
-    // (the same code Open With… / Dock drops / File > Open go through).
+    // (the same pipeline Open With…, Dock drops, File > Open, and the
+    // menu's Load Reading Session dialog go through). A .pdf must end up
+    // in the window title; a .ptl must land in the pending-session
+    // prompt (sessions never auto-open their PDF).
     const fileArg = process.argv.slice(1).find((a) => /\.(pdf|ptl)$/i.test(a));
+    const wantSession = !!fileArg && /\.ptl$/i.test(fileArg);
     const deadline = Date.now() + (fileArg ? 20_000 : 0);
     win.webContents.on('did-finish-load', () => {
       const probe = (): void => {
         win.webContents
           .executeJavaScript(
-            'JSON.stringify({ title: document.title, shell: !!window.ptDesktop, fsAccess: !!window.showSaveFilePicker, secure: window.isSecureContext })',
+            'JSON.stringify({ title: document.title, shell: !!window.ptDesktop, fsAccess: !!window.showSaveFilePicker, secure: window.isSecureContext, pendingSession: !!document.getElementById(\'sessionPrompt\') })',
           )
           .then((json: string) => {
-            const ok = JSON.parse(json) as { title: string; shell: boolean };
-            const docLoaded = !fileArg || ok.title.includes(path.basename(fileArg));
+            const ok = JSON.parse(json) as { title: string; shell: boolean; pendingSession: boolean };
+            const docLoaded = !fileArg
+              || (wantSession ? ok.pendingSession : ok.title.includes(path.basename(fileArg)));
             if (ok.title.includes('Paper Trail') && ok.shell && docLoaded) {
               console.log('SMOKE', json);
               app.exit(0);
