@@ -86,6 +86,14 @@ export const IconGitHub = () => (
   </svg>
 );
 
+/** Duplicate (two overlapping squares). */
+export const IconCopy = ({ size = 12 }: { size?: number }) => (
+  <Svg size={size} d={[
+    'M8 8h12v12H8z',
+    'M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2',
+  ]} />
+);
+
 /** Rename (pencil). */
 export const IconEdit = ({ size = 11 }: { size?: number }) => (
   <Svg size={size} d={[

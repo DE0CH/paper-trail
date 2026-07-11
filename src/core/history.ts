@@ -196,6 +196,33 @@ export class NavStacks {
     return this.current;
   }
 
+  /** Start a fresh trail at the given position; it becomes active (undoable). */
+  newStack(pos: Pos): HistEntry {
+    this.recordUndo();
+    const ns = this.mkStack(null, [{ label: 'Start', pos: { ...pos } }], 0);
+    this.stacks.push(ns);
+    this.activeId = ns.id;
+    this.emit();
+    return this.current;
+  }
+
+  /** Duplicate a trail (entries + cursor); the copy becomes active (undoable). */
+  duplicateStack(id: number): boolean {
+    const s = this.stacks.find((st) => st.id === id);
+    if (!s) return false;
+    this.recordUndo();
+    const copy = s.entries.map((e) => ({
+      label: e.label,
+      pos: { ...e.pos },
+      ...(e.edited ? { edited: true } : {}),
+    }));
+    const ns = this.mkStack(`${s.name} copy`, copy, s.index);
+    this.stacks.push(ns);
+    this.activeId = ns.id;
+    this.emit();
+    return true;
+  }
+
   /** Returns true when the closed stack was the active one. */
   closeStack(id: number): boolean {
     if (this.stacks.length <= 1) return false;

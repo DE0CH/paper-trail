@@ -111,6 +111,42 @@ async function run(): Promise<void> {
     const stackRows = await page.locator('#stacksPanel .stackRow').count();
     check('stacks panel lists stacks', stackRows === 2, String(stackRows));
 
+    // --- trails header +: fresh trail; row button: duplicate ---
+    const trailBtns = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks & {
+        controller: { stackNew(): void; stackDuplicate(id: number): void; undoHist(): void };
+      } }).__pt;
+      (document.getElementById('btnNewTrail') as HTMLElement).click();
+      const fresh = {
+        n: pt.hist.stacks.length,
+        entries: pt.hist.active.entries.length,
+        label: pt.hist.active.entries[0].label,
+      };
+      const src = pt.hist.stacks[0];
+      pt.controller.stackDuplicate(src.id);
+      const dup = {
+        n: pt.hist.stacks.length,
+        name: pt.hist.active.name,
+        entries: pt.hist.active.entries.map((e) => e.label),
+        srcEntries: src.entries.map((e) => e.label),
+        counterShown: !!document.querySelector('#stacksPanel .stackRow .cnt'),
+      };
+      pt.controller.undoHist(); // drop the duplicate
+      pt.controller.undoHist(); // drop the fresh trail
+      return { fresh, dup, after: pt.hist.stacks.length };
+    });
+    check('trails + starts a fresh active trail',
+      trailBtns.fresh.n === 3 && trailBtns.fresh.entries === 1
+        && trailBtns.fresh.label === 'Start',
+      JSON.stringify(trailBtns.fresh));
+    check('a trail can be duplicated (entries copied, becomes active)',
+      trailBtns.dup.n === 4 && / copy$/.test(trailBtns.dup.name)
+        && JSON.stringify(trailBtns.dup.entries) === JSON.stringify(trailBtns.dup.srcEntries)
+        && !trailBtns.dup.counterShown,
+      JSON.stringify(trailBtns.dup));
+    check('new/duplicated trails are undoable', trailBtns.after === 2,
+      String(trailBtns.after));
+
     // --- hover preview ---
     await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;

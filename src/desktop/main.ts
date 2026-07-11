@@ -135,6 +135,18 @@ function createWindow(): BrowserWindow {
     // Cancel: keep the window open
   });
 
+  // Standard right-click context menus (text fields and selections).
+  win.webContents.on('context-menu', (_event, params) => {
+    const items: Electron.MenuItemConstructorOptions[] = [];
+    if (params.isEditable) {
+      items.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' },
+        { type: 'separator' }, { role: 'selectAll' });
+    } else if (params.selectionText.trim()) {
+      items.push({ role: 'copy' });
+    }
+    if (items.length) Menu.buildFromTemplate(items).popup();
+  });
+
   win.on('close', () => saveBounds(win));
 
   void win.loadURL(`${SCHEME}://app/index.html`);

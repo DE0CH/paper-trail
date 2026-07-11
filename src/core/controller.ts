@@ -503,6 +503,20 @@ export class Controller {
     this.notify();
   }
 
+  /** Trails-panel +: start a fresh trail at the current position. */
+  stackNew(): void {
+    if (!this.docOpen) return;
+    this.hist.newStack(this.viewer.currentPosition());
+    this.notify();
+  }
+
+  /** Duplicate a trail; the copy becomes the active one. */
+  stackDuplicate(id: number): void {
+    if (!this.docOpen) return;
+    this.hist.duplicateStack(id);
+    this.notify();
+  }
+
   clearHistory(): void {
     if (!this.docOpen) return;
     this.hist.clearAll();

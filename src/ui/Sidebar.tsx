@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
 import NavPanel, { type NavTab } from './NavPanel';
-import { IconAnchor, IconClose, IconEdit, IconPlus, IconTrash } from './icons';
+import { IconAnchor, IconClose, IconCopy, IconEdit, IconPlus, IconTrash } from './icons';
 
 const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
 // The rename input occupies the exact box of the name span (same font,
@@ -10,8 +10,8 @@ const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 my-px rounded-md cursor-po
 const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[13px] border border-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
 
-function StackRow({ snap, id, name, count }: {
-  snap: Snapshot; id: number; name: string; count: number;
+function StackRow({ snap, id, name }: {
+  snap: Snapshot; id: number; name: string;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +72,16 @@ function StackRow({ snap, id, name, count }: {
           <IconEdit />
         </button>
       )}
-      <span className="cnt text-[11px] leading-none text-dim flex-none">{count}</span>
+      <button
+        className="dup flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+        title="Duplicate this trail"
+        onClick={(e) => {
+          e.stopPropagation();
+          controller.stackDuplicate(id);
+        }}
+      >
+        <IconCopy />
+      </button>
       <button
         className="x flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
         title="Close this trail"
@@ -210,10 +219,21 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
-        <div className="flex items-center h-9 flex-none text-dim text-[12.5px] px-2.5 border-b border-borderapp">Trails</div>
+        <div className="flex items-center h-9 flex-none border-b border-borderapp px-1.5">
+          <span className="text-dim text-[12.5px] px-1">Trails</span>
+          <span className="flex-1" />
+          <button
+            id="btnNewTrail"
+            className="inline-flex items-center justify-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
+            title="Start a new trail from the current position"
+            onClick={() => controller.stackNew()}
+          >
+            <IconPlus />
+          </button>
+        </div>
         <div id="stacksPanel" className="flex-1 overflow-auto p-1.5">
           {snap.stacks.map((s) => (
-            <StackRow key={s.id} snap={snap} id={s.id} name={s.name} count={s.entries.length} />
+            <StackRow key={s.id} snap={snap} id={s.id} name={s.name} />
           ))}
         </div>
       </div>
