@@ -1183,6 +1183,33 @@ async function run(): Promise<void> {
       bothGood.title.startsWith('WStarCats.pdf')
         && bothGood.stack === 'RoundTrip' && bothGood.page === 17,
       JSON.stringify(bothGood));
+    // No session was ever saved for this PDF: the recent still records
+    // and reopens the PDF alone, starting fresh.
+    const pdfOnly = await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: PtHooks & { controller: { openRecent(e: unknown): Promise<void> } };
+      }).__pt;
+      pt.session.dirty = false;
+      const pdfBytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await pt.controller.openRecent({
+        fp: 'recent-pdf-only', name: 'SoloPaper.pdf', ts: Date.now(),
+        handle: {
+          name: 'SoloPaper.pdf',
+          queryPermission: async () => 'granted',
+          getFile: async () => new File([pdfBytes], 'SoloPaper.pdf'),
+        },
+      });
+      await new Promise((r) => setTimeout(r, 800));
+      return {
+        title: document.title,
+        stacks: pt.hist.stacks.length,
+        entries: pt.hist.active.entries.length,
+      };
+    });
+    check('recent without a saved session still opens the PDF, fresh',
+      pdfOnly.title.startsWith('SoloPaper.pdf')
+        && pdfOnly.stacks === 1 && pdfOnly.entries === 1,
+      JSON.stringify(pdfOnly));
     await page.evaluate(() => {
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
