@@ -3,12 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { controller, type Snapshot } from '../core/controller';
 import type { OutlineNode } from '../core/types';
-import { IconChevron, IconClose } from './icons';
+import { IconChevron, IconClose, IconCollapseAll, IconExpandAll } from './icons';
 
 export type NavTab = 'outline' | 'pages';
 
-function OutlineItem({ n }: { n: OutlineNode }) {
+/** Expand All / Collapse All broadcast: bump `v` to re-apply `open`. */
+type ForceAll = { v: number; open: boolean };
+
+function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
   const [open, setOpen] = useState(true);
+  useEffect(() => {
+    if (forceAll.v > 0) setOpen(forceAll.open);
+  }, [forceAll]);
   const hasKids = n.children.length > 0;
   return (
     <li>
@@ -33,15 +39,15 @@ function OutlineItem({ n }: { n: OutlineNode }) {
         )}
         <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{n.title}</span>
       </div>
-      {hasKids && open && <OutlineTree nodes={n.children} />}
+      {hasKids && open && <OutlineTree nodes={n.children} forceAll={forceAll} />}
     </li>
   );
 }
 
-function OutlineTree({ nodes }: { nodes: OutlineNode[] }) {
+function OutlineTree({ nodes, forceAll }: { nodes: OutlineNode[]; forceAll: ForceAll }) {
   return (
     <ul className="outlineTree list-none m-0 pl-3">
-      {nodes.map((n, i) => <OutlineItem key={i} n={n} />)}
+      {nodes.map((n, i) => <OutlineItem key={i} n={n} forceAll={forceAll} />)}
     </ul>
   );
 }
@@ -135,6 +141,9 @@ export default function NavPanel({
   onTab: (t: NavTab) => void;
   onClose: () => void;
 }) {
+  const [forceAll, setForceAll] = useState<ForceAll>({ v: 0, open: true });
+  const hasSections = snap.outline.some((n) => n.children.length > 0);
+
   const tabBtn = (t: NavTab, label: string) => (
     <button
       className={`inline-flex items-center h-full px-2 text-[12.5px] cursor-pointer border-b-2 border-t-2 border-t-transparent ${tab === t ? 'text-fgapp border-b-accent' : 'text-dim border-b-transparent'}`}
@@ -144,12 +153,34 @@ export default function NavPanel({
     </button>
   );
 
+  const headerBtn = 'inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer';
+
   return (
     <div id="navCol" className="flex flex-col overflow-hidden border-r border-borderapp h-full">
       <div className="flex items-stretch h-9 border-b border-borderapp px-1.5 flex-none">
         {tabBtn('outline', 'Outline')}
         {tabBtn('pages', 'Pages')}
         <span className="flex-1" />
+        {tab === 'outline' && hasSections && (
+          <>
+            <button
+              id="btnOutlineExpand"
+              className={headerBtn}
+              title="Expand all sections"
+              onClick={() => setForceAll((f) => ({ v: f.v + 1, open: true }))}
+            >
+              <IconExpandAll />
+            </button>
+            <button
+              id="btnOutlineCollapse"
+              className={headerBtn}
+              title="Collapse all sections"
+              onClick={() => setForceAll((f) => ({ v: f.v + 1, open: false }))}
+            >
+              <IconCollapseAll />
+            </button>
+          </>
+        )}
         <button
           id="btnNavClose"
           className="inline-flex items-center self-center h-7 text-dim hover:text-fgapp cursor-pointer px-1.5"
@@ -162,7 +193,7 @@ export default function NavPanel({
       {tab === 'outline' ? (
         <div id="outlinePanel" className="flex-1 overflow-auto p-1.5">
           {snap.outline.length
-            ? <OutlineTree nodes={snap.outline} />
+            ? <OutlineTree nodes={snap.outline} forceAll={forceAll} />
             : <div className="text-dim text-center p-3">No outline in this document</div>}
         </div>
       ) : (

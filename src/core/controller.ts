@@ -916,6 +916,13 @@ export class Controller {
     this.hist.setEntryPos(i, this.viewer.currentPosition());
   }
 
+  /** Remove one entry from the active trail (its × button). */
+  entryRemove(i: number): void {
+    if (!this.docOpen) return;
+    this.hist.removeEntry(i);
+    this.notify();
+  }
+
   /** Re-anchor the CURRENT entry to the reading position (keyboard: r). */
   reanchorCurrent(): void {
     if (!this.docOpen) return;

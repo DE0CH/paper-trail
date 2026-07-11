@@ -196,6 +196,20 @@ export class NavStacks {
     return this.current;
   }
 
+  /**
+   * Remove one entry from the active stack (undoable). A stack always
+   * keeps at least one entry; the cursor follows the surviving entries.
+   */
+  removeEntry(i: number): boolean {
+    const s = this.active;
+    if (i < 0 || i >= s.entries.length || s.entries.length <= 1) return false;
+    this.recordUndo();
+    s.entries.splice(i, 1);
+    if (s.index >= i) s.index = Math.max(0, s.index - 1);
+    this.emit();
+    return true;
+  }
+
   /** Start a fresh trail at the given position; it becomes active (undoable). */
   newStack(pos: Pos): HistEntry {
     this.recordUndo();

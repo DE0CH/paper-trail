@@ -86,6 +86,16 @@ export const IconGitHub = () => (
   </svg>
 );
 
+/** Expand all outline sections (chevrons pointing apart). */
+export const IconExpandAll = () => (
+  <Svg size={14} d={['m7 15 5 5 5-5', 'm7 9 5-5 5 5']} />
+);
+
+/** Collapse all outline sections (chevrons pointing together). */
+export const IconCollapseAll = () => (
+  <Svg size={14} d={['m7 20 5-5 5 5', 'm7 4 5 5 5-5']} />
+);
+
 /** Duplicate (two overlapping squares). */
 export const IconCopy = ({ size = 12 }: { size?: number }) => (
   <Svg size={size} d={[

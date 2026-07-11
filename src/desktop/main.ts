@@ -109,10 +109,12 @@ function createWindow(): BrowserWindow {
       titleBarStyle: 'hiddenInset' as const,
     } : {
       titleBarStyle: 'hidden' as const,
+      // No explicit height: the platform-recommended caption size. The
+      // renderer sizes the toolbar from the titlebar-area-* CSS env vars
+      // so the two always agree.
       titleBarOverlay: {
         color: '#1e1f22',
         symbolColor: '#9a9aa2',
-        height: 38,
       },
     }),
     webPreferences: {

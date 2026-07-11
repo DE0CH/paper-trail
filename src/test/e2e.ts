@@ -304,6 +304,8 @@ async function run(): Promise<void> {
     check('preview hides on mouseleave', previewHidden);
 
     // --- search ---
+    await page.keyboard.press(`${MODK}+f`); // the search bar exists on demand
+    await page.waitForSelector('#searchInput', { timeout: 3000 });
     await page.fill('#searchInput', 'equivariant');
     await page.waitForFunction(
       () => document.getElementById('searchCount')!.textContent!.includes('/ 4'),
@@ -403,6 +405,15 @@ async function run(): Promise<void> {
     const afterExpand = await page.locator('#navCol .outlineItem').count();
     check('expanding restores the subsections', afterExpand === outlineItems,
       `${afterExpand} items`);
+    await page.click('#btnOutlineCollapse');
+    await page.waitForTimeout(200);
+    const allCollapsed = await page.locator('#navCol .outlineItem').count();
+    await page.click('#btnOutlineExpand');
+    await page.waitForTimeout(200);
+    const allExpanded = await page.locator('#navCol .outlineItem').count();
+    check('collapse-all and expand-all fold every section',
+      allCollapsed === outlineItems - 3 && allExpanded === outlineItems,
+      JSON.stringify({ allCollapsed, allExpanded }));
     await page.click('#navCol button:has-text("Pages")');
     await page.waitForSelector('#thumbList [data-thumb-page="1"] canvas', { timeout: 15000 });
     check('page thumbnails render lazily', true);
@@ -921,6 +932,32 @@ async function run(): Promise<void> {
     });
     check('mod+E re-anchors the current entry to the reading position',
       rKey.page === 15 && rKey.label === 'p. 15', JSON.stringify(rKey));
+
+    // --- an entry's × removes just that entry (hover-revealed) ---
+    const rmBefore = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { labels: pt.hist.active.entries.map((e) => e.label), index: pt.hist.active.index };
+    });
+    await page.locator('#historyPanel .histItem').nth(1).hover();
+    await page.locator('#historyPanel .histItem .rmEntry').nth(1).click({ force: true });
+    await page.waitForTimeout(200);
+    const rmAfter = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { labels: pt.hist.active.entries.map((e) => e.label), index: pt.hist.active.index };
+    });
+    check('the × on a history row removes exactly that entry',
+      rmAfter.labels.length === rmBefore.labels.length - 1
+        && JSON.stringify(rmAfter.labels)
+          === JSON.stringify(rmBefore.labels.filter((_, i) => i !== 1)),
+      JSON.stringify({ rmBefore, rmAfter }));
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks & { controller: { undoHist(): void } } })
+        .__pt.controller.undoHist();
+    });
+    const rmUndone = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.entries.length);
+    check('removing an entry is undoable', rmUndone === rmBefore.labels.length,
+      String(rmUndone));
 
     // --- manually mark the current position onto the trail ---
     await page.evaluate(() => {

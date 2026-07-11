@@ -34,10 +34,25 @@ export default function App() {
   const previewRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [widths, setWidths] = useState(initialWidths);
   const [dragOver, setDragOver] = useState(false);
   const [navOpen, setNavOpen] = useState(() => loadUI().navOpen ?? true);
   const [navTab, setNavTab] = useState<'outline' | 'pages'>(() => loadUI().navTab ?? 'outline');
+
+  // The search bar exists only while searching; opening focuses it once
+  // it is in the DOM.
+  const openSearch = () => {
+    setSearchOpen(true);
+    searchRef.current?.focus();
+    searchRef.current?.select();
+  };
+  useEffect(() => {
+    if (searchOpen) {
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    }
+  }, [searchOpen]);
 
   const toggleNav = () => setNavOpen((v) => {
     saveUI({ navOpen: !v });
@@ -62,10 +77,6 @@ export default function App() {
   // anything. (Escape only dismisses.)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const focusSearch = () => {
-        searchRef.current?.focus();
-        searchRef.current?.select();
-      };
       const mod = e.metaKey || e.ctrlKey;
       if (e.key === 'Escape') {
         setHelpOpen(false);
@@ -87,7 +98,7 @@ export default function App() {
       }
       if (!mod) return;
       switch (e.key.toLowerCase()) {
-        case 'f': e.preventDefault(); focusSearch(); break;
+        case 'f': e.preventDefault(); openSearch(); break;
         case 's': e.preventDefault(); controller.saveProgressSafe(); break;
         case 'z':
           if (editing) return; // text fields keep their native undo
@@ -190,6 +201,10 @@ export default function App() {
           else if (id === 'zoom-out') controller.zoomOut();
           else if (id === 'fit') controller.fitWidth();
         });
+      } else {
+        // Anything else (toolbar, panel chrome, welcome screen) has no
+        // meaningful actions: no menu at all beats a stray "Select All".
+        e.preventDefault();
       }
     };
     window.addEventListener('contextmenu', onCtx);
@@ -224,14 +239,18 @@ export default function App() {
         case 'zoom-out': controller.zoomOut(); break;
         case 'fit': controller.fitWidth(); break;
         case 'find':
-          searchRef.current?.focus();
-          searchRef.current?.select();
+          openSearch();
           break;
         case 'search-selection':
-          if (payload && searchRef.current) {
-            searchRef.current.value = payload;
-            searchRef.current.focus();
-            void controller.runSearch(payload);
+          if (payload) {
+            setSearchOpen(true);
+            queueMicrotask(() => {
+              if (searchRef.current) {
+                searchRef.current.value = payload;
+                searchRef.current.focus();
+              }
+              void controller.runSearch(payload);
+            });
           }
           break;
         case 'toggle-sidebar': setSidebarVisible((v) => !v); break;
@@ -346,6 +365,8 @@ export default function App() {
       <Toolbar
         snap={snap}
         searchRef={searchRef}
+        searchOpen={searchOpen}
+        onCloseSearch={() => setSearchOpen(false)}
         onToggleSidebar={() => setSidebarVisible((v) => !v)}
         navOpen={navOpen}
         onToggleNav={toggleNav}
@@ -418,7 +439,7 @@ export default function App() {
 
       {dragOver && (
         <div className="fixed inset-0 z-100 flex items-center justify-center text-[26px] bg-[rgba(20,22,26,0.8)] border-4 border-dashed border-accent pointer-events-none">
-          {snap.docOpen ? 'Drop a session file to load it' : 'Drop PDF to open'}
+          {snap.docOpen ? 'Drop a session file to load it' : 'Drop a PDF or session file to open'}
         </div>
       )}
 

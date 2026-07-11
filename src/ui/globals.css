@@ -158,9 +158,12 @@ body.desktopWin #toolbar :is(button, input) {
 }
 
 /* Windows desktop shell: the native min/max/close buttons overlay the
-   right end of the same 38px toolbar row (titleBarOverlay). */
+   right end of the toolbar row (titleBarOverlay at the platform's
+   recommended caption size). The titlebar-area-* environment variables
+   describe exactly the space the overlay leaves us, so the toolbar can
+   never run underneath the buttons. */
 body.desktopWin #toolbar {
-  height: 38px;
-  padding-right: 150px; /* room for the window-controls overlay */
+  height: env(titlebar-area-height, 36px);
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 8px);
   -webkit-app-region: drag;
 }

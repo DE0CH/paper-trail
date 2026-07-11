@@ -72,6 +72,27 @@ test('setEntryPos refreshes automatic labels but keeps hand-written ones', () =>
   assert.deepEqual(h.active.entries[1].pos, pos(9));
 });
 
+test('removeEntry deletes one entry, keeps the cursor sensible, is undoable', () => {
+  const h = new NavStacks();
+  h.visit({ label: 'a', pos: pos(2) });
+  h.visit({ label: 'b', pos: pos(3) });
+  h.visit({ label: 'c', pos: pos(4) });
+  // remove above the cursor: cursor shifts down with its entry
+  assert.equal(h.removeEntry(1), true);
+  assert.deepEqual(h.active.entries.map((e) => e.label), ['Start', 'b', 'c']);
+  assert.equal(h.active.index, 2);
+  // remove the current entry: cursor moves to the previous one
+  assert.equal(h.removeEntry(2), true);
+  assert.equal(h.active.index, 1);
+  assert.equal(h.current.label, 'b');
+  // undo restores the removal
+  h.undo();
+  assert.deepEqual(h.active.entries.map((e) => e.label), ['Start', 'b', 'c']);
+  // the last entry can never be removed
+  const single = new NavStacks();
+  assert.equal(single.removeEntry(0), false);
+});
+
 test('newStack starts a fresh active trail at the given position', () => {
   const h = new NavStacks();
   h.visit({ label: 'a', pos: pos(2) });

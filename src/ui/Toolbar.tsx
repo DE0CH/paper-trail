@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { controller, type Snapshot } from '../core/controller';
 import {
-  IconSidebar, IconToc, IconUndo, IconRedo, IconBack, IconForward, IconSwap,
+  IconSidebar, IconToc, IconBack, IconForward, IconSwap,
   IconPrev, IconNext, IconGitHub,
 } from './icons';
 
@@ -13,12 +13,16 @@ const iconBtn = `${btn} inline-flex items-center justify-center h-7 px-2`;
 export default function Toolbar({
   snap,
   searchRef,
+  searchOpen,
+  onCloseSearch,
   onToggleSidebar,
   navOpen,
   onToggleNav,
 }: {
   snap: Snapshot;
   searchRef: RefObject<HTMLInputElement | null>;
+  searchOpen: boolean;
+  onCloseSearch: () => void;
   onToggleSidebar: () => void;
   navOpen: boolean;
   onToggleNav: () => void;
@@ -81,18 +85,11 @@ export default function Toolbar({
       )}
       <span className="flex-1" />
 
-      <button id="btnUndo" className={iconBtn} disabled={!snap.canUndo}
-        title="Undo the last history change"
-        onClick={() => controller.undoHist()}><IconUndo /></button>
-      <button id="btnRedo" className={iconBtn} disabled={!snap.canRedo}
-        title="Redo"
-        onClick={() => controller.redoHist()}><IconRedo /></button>
-      {sep}
       <button id="btnBack" className={iconBtn} disabled={!snap.canBack}
-        title="Back — pop up the stack"
+        title="Back to the previous entry on the trail"
         onClick={() => controller.goBack()}><IconBack /></button>
       <button id="btnFwd" className={iconBtn} disabled={!snap.canForward}
-        title="Forward — down again"
+        title="Forward to the next entry on the trail"
         onClick={() => controller.goForward()}><IconForward /></button>
       {sep}
 
@@ -125,32 +122,39 @@ export default function Toolbar({
       <button className={btn} title="Fit width" onClick={() => controller.fitWidth()}>Fit</button>
       {sep}
 
-      <input
-        id="searchInput"
-        ref={searchRef}
-        className={`${input} w-42`}
-        type="text"
-        placeholder="Search  ( / )"
-        disabled={!snap.docOpen}
-        onChange={(e) => {
-          clearTimeout(searchDebounce.current);
-          const q = e.target.value.trim();
-          searchDebounce.current = setTimeout(() => void controller.runSearch(q), 350);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            void controller.gotoMatch(e.shiftKey ? -1 : 1);
-          } else if (e.key === 'Escape') {
-            (e.target as HTMLInputElement).value = '';
-            void controller.runSearch('', { jump: false });
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
-      />
-      <span id="searchCount" className="text-dim min-w-13 text-center">{snap.searchCount}</span>
-      <button className={iconBtn} title="Previous match" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
-      <button className={iconBtn} title="Next match" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
+      {/* The search bar only exists while searching (mod+F); Escape
+          clears the matches and puts it away. */}
+      {searchOpen && (
+        <>
+          <input
+            id="searchInput"
+            ref={searchRef}
+            className={`${input} w-42`}
+            type="text"
+            placeholder="Search"
+            disabled={!snap.docOpen}
+            onChange={(e) => {
+              clearTimeout(searchDebounce.current);
+              const q = e.target.value.trim();
+              searchDebounce.current = setTimeout(() => void controller.runSearch(q), 350);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void controller.gotoMatch(e.shiftKey ? -1 : 1);
+              } else if (e.key === 'Escape') {
+                (e.target as HTMLInputElement).value = '';
+                void controller.runSearch('', { jump: false });
+                (e.target as HTMLInputElement).blur();
+                onCloseSearch();
+              }
+            }}
+          />
+          <span id="searchCount" className="text-dim min-w-13 text-center">{snap.searchCount}</span>
+          <button className={iconBtn} title="Previous match" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
+          <button className={iconBtn} title="Next match" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
+        </>
+      )}
       {/* Web-only: the desktop app behaves like an offline app and should
           not open browser windows from its chrome. */}
       {!window.ptDesktop && (

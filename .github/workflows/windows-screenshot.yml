@@ -21,13 +21,17 @@ jobs:
       - name: Generate the test-fixture PDF
         run: node build-node/test/fixture.js
 
+      - name: Raise the display resolution
+        shell: pwsh
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
       - name: Launch the app and capture the screen
         shell: pwsh
         run: |
           $profile_dir = "$env:RUNNER_TEMP\pt-shot"
           New-Item -ItemType Directory -Force $profile_dir | Out-Null
           # window sized to fit the runner's display
-          '{"width":1000,"height":700,"x":10,"y":10}' |
+          '{"width":1600,"height":1000,"x":40,"y":20}' |
             Set-Content "$profile_dir\window-state.json"
           $env:PT_USERDATA = $profile_dir
           Start-Process -FilePath "$env:GITHUB_WORKSPACE\node_modules\.bin\electron.cmd" `

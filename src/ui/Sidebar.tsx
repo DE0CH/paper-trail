@@ -97,8 +97,8 @@ function StackRow({ snap, id, name }: {
   );
 }
 
-function HistRow({ label, page, current, index }: {
-  label: string; page: number; current: boolean; index: number;
+function HistRow({ label, page, current, index, removable }: {
+  label: string; page: number; current: boolean; index: number; removable: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -169,7 +169,18 @@ function HistRow({ label, page, current, index }: {
       >
         <IconAnchor />
       </button>
-      <span className="pg text-[11px] leading-none text-dim flex-none">p.{page}</span>
+      {removable && (
+        <button
+          className="rmEntry flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+          title="Remove this entry from the trail"
+          onClick={(e) => {
+            e.stopPropagation();
+            controller.entryRemove(index);
+          }}
+        >
+          <IconClose />
+        </button>
+      )}
     </div>
   );
 }
@@ -282,6 +293,7 @@ export default function Sidebar({
                   page={entry.pos.page}
                   current={i === snap.activeIndex}
                   index={i}
+                  removable={(active?.entries.length ?? 0) > 1}
                 />
               </li>
             ))}
