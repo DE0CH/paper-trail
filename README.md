@@ -74,8 +74,10 @@ diffs cleanly, so versioning it in git alongside the paper works well.
 
 ## Keyboard shortcuts
 
-The ones worth learning first — press `?` (`Shift+/`) in the app for
-the full cheat-sheet:
+Press `?` (`Shift+/`) in the app for
+the full cheat-sheet.
+
+Here are some important ones:
 
 | Key | Action |
 | --- | --- |
