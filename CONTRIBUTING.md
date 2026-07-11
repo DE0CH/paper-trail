@@ -51,9 +51,8 @@ npm test           # e2e suite — needs `npm start` running
 npm run perf       # performance profile + limit search
 ```
 
-The e2e suite (playwright-core) launches a **separate headless
-Edge/Chrome** with its own profile — it never touches your browsing
-session. It emulates a user: clicking PDF links, dragging dividers and
+The e2e suite (playwright-core, headless, against the locally installed
+Edge/Chrome) emulates a user: clicking PDF links, dragging dividers and
 text selections, pinch (ctrl+wheel) bursts, keyboard shortcuts — and
 asserts outcomes down to device-pixel-exact canvas geometry and
 pinch-release position deltas. Keep element ids/classes (`#stacksPanel`,

@@ -30,7 +30,9 @@ jobs:
           '{"width":1000,"height":700,"x":10,"y":10}' |
             Set-Content "$profile_dir\window-state.json"
           $env:PT_USERDATA = $profile_dir
-          Start-Process npx -ArgumentList "electron","build-node/desktop/main.js","sample/WStarCats.pdf"
+          Start-Process -FilePath "$env:GITHUB_WORKSPACE\node_modules\.bin\electron.cmd" `
+            -ArgumentList "build-node/desktop/main.js","sample/WStarCats.pdf" `
+            -WorkingDirectory $env:GITHUB_WORKSPACE
           Start-Sleep -Seconds 40
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
