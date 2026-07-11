@@ -141,12 +141,15 @@ body.resizing {
 /* ------------------------------------------------------------------ */
 
 body.desktopMac #toolbar {
-  /* Match the native unified-toolbar metrics (NSWindowToolbarStyle
-     .unified is 52 pt tall with the traffic lights vertically centered
-     and inset from the leading edge). trafficLightPosition in
-     desktop/main.ts is calibrated to this height by measurement. */
-  height: 52px;
-  padding-left: 92px;
+  /* Per the HIG the traffic lights sit vertically centered in the
+     toolbar. Electron's trafficLightPosition is ignored on current
+     macOS, so the bar is sized to the OS-fixed light position instead:
+     measured light centers are 18.75px below the window top and the
+     group ends 64px from the left (SCK captures, pixel centroids), so
+     a 38px bar centers on them and 76px clears them. Re-measure before
+     changing (src/test docs: never eyeball alignment). */
+  height: 38px;
+  padding-left: 76px;
   -webkit-app-region: drag;
 }
 body.desktopMac #toolbar :is(button, input) {
