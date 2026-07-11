@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { MOD } from '../core/platform';
 import { controller } from '../core/controller';
 import { IconClose } from './icons';
 import { loadUI, saveUI } from '../core/store';
 import Toolbar from './Toolbar';
 import Sidebar from './Sidebar';
+import ShortcutHelp from './ShortcutHelp';
 import Welcome from './Welcome';
 
 // Each panel owns its width independently: resizing, closing, or opening
@@ -54,68 +54,64 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const showHelp = () => controller.showToast(
-    `Backspace: back \u00b7 Shift+Backspace: forward \u00b7 [ ]: switch trail \u00b7 m: mark \u00b7 r: re-anchor \u00b7 ${MOD}+click link: fork \u00b7 /: search \u00b7 ${MOD}+S: save`,
-    6000,
-  );
+  const [helpOpen, setHelpOpen] = useState(false);
+  const toggleHelp = () => setHelpOpen((v) => !v);
 
-  // Global keyboard shortcuts.
+  // Global keyboard shortcuts. Every action needs a modifier — this is a
+  // normal app, not a modal editor; plain typing must never trigger
+  // anything. (Escape only dismisses.)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const focusSearch = () => {
         searchRef.current?.focus();
         searchRef.current?.select();
       };
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        focusSearch();
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        controller.saveProgressSafe();
+      const mod = e.metaKey || e.ctrlKey;
+      if (e.key === 'Escape') {
+        setHelpOpen(false);
         return;
       }
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-        // Text inputs keep their native undo (early return above).
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!mod && !editing && (e.key === '?' || (e.key === '/' && e.shiftKey))) {
         e.preventDefault();
-        if (e.shiftKey) controller.redoHist(); else controller.undoHist();
+        toggleHelp();
         return;
       }
-      if (e.metaKey || e.ctrlKey) return;
-      switch (e.key) {
-        case 'Backspace':
+      if (!mod && e.altKey) {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); controller.goBack(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); controller.goForward(); }
+        else if (e.code === 'BracketLeft') { e.preventDefault(); controller.stackCycle(-1); }
+        else if (e.code === 'BracketRight') { e.preventDefault(); controller.stackCycle(1); }
+        return;
+      }
+      if (!mod) return;
+      switch (e.key.toLowerCase()) {
+        case 'f': e.preventDefault(); focusSearch(); break;
+        case 's': e.preventDefault(); controller.saveProgressSafe(); break;
+        case 'z':
+          if (editing) return; // text fields keep their native undo
           e.preventDefault();
-          if (e.shiftKey) controller.goForward(); else controller.goBack();
+          if (e.shiftKey) controller.redoHist(); else controller.undoHist();
           break;
-        case 'ArrowLeft':
-          if (e.altKey) { e.preventDefault(); controller.goBack(); }
-          break;
-        case 'ArrowRight':
-          if (e.altKey) { e.preventDefault(); controller.goForward(); }
-          break;
-        case '/':
+        case 'd': e.preventDefault(); controller.markPosition(e.shiftKey); break;
+        case 'e': e.preventDefault(); controller.reanchorCurrent(); break;
+        case 'b':
           e.preventDefault();
-          if (e.shiftKey) showHelp(); // '?' on most layouts
-          else focusSearch();
+          if (e.shiftKey) toggleNav(); else setSidebarVisible((v) => !v);
           break;
-        case '+': case '=': controller.zoomIn(); break;
-        case '-': controller.zoomOut(); break;
-        case '0': controller.fitWidth(); break;
-        case 't': setSidebarVisible((v) => !v); break;
-        case 'm': controller.markPosition(e.shiftKey); break;
-        case 'r': controller.reanchorCurrent(); break;
-        case '[': controller.stackCycle(-1); break;
-        case ']': controller.stackCycle(1); break;
-        case '?': showHelp(); break;
-        case 'o': void controller.pickFile(); break;
+        case 'o': e.preventDefault(); void controller.pickFile(); break;
+        case '[': e.preventDefault(); controller.goBack(); break;
+        case ']': e.preventDefault(); controller.goForward(); break;
+        case '=': case '+': e.preventDefault(); controller.zoomIn(); break;
+        case '-': e.preventDefault(); controller.zoomOut(); break;
+        case '0': e.preventDefault(); controller.fitWidth(); break;
         default: break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Desktop shell integration: inset traffic lights and OS file opens
@@ -128,16 +124,77 @@ export default function App() {
     });
   }, []);
 
+  // Native right-click menus (desktop): classify what was clicked, let the
+  // shell pop a native menu, then run the chosen action. Text fields and
+  // selections are NOT intercepted — electron-context-menu shows the full
+  // native edit menu (spell-check, Look Up, …) for those.
+  useEffect(() => {
+    const desktop = window.ptDesktop;
+    if (!desktop?.showContextMenu) return;
+    const onCtx = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('input, textarea')) return;
+      if ((window.getSelection()?.toString() ?? '').trim()) return;
+      const snapNow = controller.getSnapshot();
+
+      const link = t.closest<HTMLElement>('.pdfLink');
+      const hist = t.closest<HTMLElement>('.histItem');
+      const stack = t.closest<HTMLElement>('.stackRow');
+      const viewer = t.closest<HTMLElement>('#viewerContainer');
+
+      const run = (p: Promise<string | null>, act: (id: string) => void) => {
+        e.preventDefault();
+        void p.then((id) => { if (id) act(id); });
+      };
+
+      if (link) {
+        run(desktop.showContextMenu({ type: 'link' }), (id) => {
+          link.dispatchEvent(new MouseEvent('click', {
+            bubbles: true, cancelable: true, metaKey: id === 'branch',
+          }));
+        });
+      } else if (hist) {
+        const idx = Number(hist.dataset.idx);
+        run(desktop.showContextMenu({
+          type: 'histEntry', current: idx === snapNow.activeIndex,
+        }), (id) => {
+          if (id === 'jump') controller.histEntryClick(idx);
+          else if (id === 'rename') hist.querySelector('.lbl')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+          else if (id === 'reanchor') controller.entrySetPos(idx);
+        });
+      } else if (stack) {
+        const sid = Number(stack.dataset.id);
+        run(desktop.showContextMenu({
+          type: 'stack',
+          active: sid === snapNow.activeStackId,
+          closable: snapNow.stacks.length > 1,
+        }), (id) => {
+          if (id === 'switch') controller.stackSwitch(sid);
+          else if (id === 'rename') stack.querySelector('.name')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+          else if (id === 'duplicate') controller.stackDuplicate(sid);
+          else if (id === 'close') controller.stackClose(sid);
+        });
+      } else if (viewer && snapNow.docOpen) {
+        run(desktop.showContextMenu({
+          type: 'viewer', canBack: snapNow.canBack, canForward: snapNow.canForward,
+        }), (id) => {
+          if (id === 'back') controller.goBack();
+          else if (id === 'forward') controller.goForward();
+          else if (id === 'mark') controller.markPosition();
+          else if (id === 'zoom-in') controller.zoomIn();
+          else if (id === 'zoom-out') controller.zoomOut();
+          else if (id === 'fit') controller.fitWidth();
+        });
+      }
+    };
+    window.addEventListener('contextmenu', onCtx);
+    return () => window.removeEventListener('contextmenu', onCtx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Native menu actions when running inside the Electron desktop shell.
   useEffect(() => {
-    // If a text field has focus, type the character there and report true.
-    const typeInEditable = (ch: string): boolean => {
-      const el = document.activeElement as HTMLElement | null;
-      if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return false;
-      document.execCommand('insertText', false, ch);
-      return true;
-    };
-    window.ptDesktop?.onMenu((action) => {
+    window.ptDesktop?.onMenu((action, payload) => {
       switch (action) {
         case 'open': void controller.pickFile(); break;
         case 'save': controller.saveProgressSafe(); break;
@@ -165,37 +222,22 @@ export default function App() {
           searchRef.current?.focus();
           searchRef.current?.select();
           break;
-        // Bare-letter menu accelerators (m / M / t) fire even while a text
-        // field has focus; re-insert the character there instead.
-        case 'toggle-sidebar':
-          if (typeInEditable('t')) break;
-          setSidebarVisible((v) => !v);
+        case 'search-selection':
+          if (payload && searchRef.current) {
+            searchRef.current.value = payload;
+            searchRef.current.focus();
+            void controller.runSearch(payload);
+          }
           break;
+        case 'toggle-sidebar': setSidebarVisible((v) => !v); break;
         case 'toggle-nav': toggleNav(); break;
-        case 'mark':
-          if (typeInEditable('m')) break;
-          controller.markPosition();
-          break;
-        case 'mark-branch':
-          if (typeInEditable('M')) break;
-          controller.markPosition(true);
-          break;
-        case 'reanchor':
-          if (typeInEditable('r')) break;
-          controller.reanchorCurrent();
-          break;
+        case 'mark': controller.markPosition(); break;
+        case 'mark-branch': controller.markPosition(true); break;
+        case 'reanchor': controller.reanchorCurrent(); break;
         case 'clear-history': controller.clearHistory(); break;
-        case 'help':
-          showHelp();
-          break;
-        case 'trail-prev':
-          if (typeInEditable('[')) break;
-          controller.stackCycle(-1);
-          break;
-        case 'trail-next':
-          if (typeInEditable(']')) break;
-          controller.stackCycle(1);
-          break;
+        case 'help': toggleHelp(); break;
+        case 'trail-prev': controller.stackCycle(-1); break;
+        case 'trail-next': controller.stackCycle(1); break;
         default: break;
       }
     });
@@ -389,6 +431,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
 
       {snap.toast && (
         <div

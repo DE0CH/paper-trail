@@ -26,6 +26,7 @@ function StackRow({ snap, id, name }: {
   return (
     <div
       className={`stackRow group ${rowBase} ${active ? rowActive : ''}`}
+      data-id={id}
       title={`${name} — double-click to rename`}
       onClick={() => controller.stackSwitch(id)}
     >
@@ -111,6 +112,7 @@ function HistRow({ label, page, current, index }: {
   return (
     <div
       className={`histItem group ${rowBase} ${current ? `current ${rowActive}` : ''}`}
+      data-idx={index}
       title={`${label} — page ${page} — double-click to rename`}
       onClick={() => controller.histEntryClick(index)}
     >

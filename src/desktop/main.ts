@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'electron';
+import contextMenu from 'electron-context-menu';
 import { MIME } from '../node/server';
 
 const SMOKE = process.argv.includes('--smoke');
@@ -137,16 +138,28 @@ function createWindow(): BrowserWindow {
     // Cancel: keep the window open
   });
 
-  // Standard right-click context menus (text fields and selections).
-  win.webContents.on('context-menu', (_event, params) => {
-    const items: Electron.MenuItemConstructorOptions[] = [];
-    if (params.isEditable) {
-      items.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' },
-        { type: 'separator' }, { role: 'selectAll' });
-    } else if (params.selectionText.trim()) {
-      items.push({ role: 'copy' });
-    }
-    if (items.length) Menu.buildFromTemplate(items).popup();
+  // Native right-click menus for text fields and selections come from
+  // electron-context-menu (spell-check suggestions, Look Up, the full
+  // edit menu with proper disabled states). App-specific targets (links,
+  // trail/history rows, the viewer) preventDefault() in the renderer and
+  // go through the pt-context-menu IPC instead.
+  contextMenu({
+    window: win,
+    showSearchWithGoogle: false,
+    showSaveImageAs: false,
+    showCopyImage: false,
+    showSelectAll: true,
+    showLookUpSelection: true,
+    showLearnSpelling: true,
+    showInspectElement: false,
+    prepend: (_defaults, params) => (
+      params.selectionText.trim() && !params.isEditable
+        ? [{
+          label: `Search Document for \u201c${params.selectionText.trim().slice(0, 24)}\u201d`,
+          click: () => win.webContents.send('pt-menu', 'search-selection', params.selectionText.trim()),
+        }]
+        : []
+    ),
   });
 
   // Screenshot tooling: show the window WITHOUT activating it (no focus
@@ -292,7 +305,7 @@ function buildMenu(): void {
         { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => send('zoom-out') },
         { label: 'Fit Width', accelerator: 'CmdOrCtrl+0', click: () => send('fit') },
         { type: 'separator' },
-        { label: 'Toggle Sidebar', accelerator: 'T', click: () => send('toggle-sidebar') },
+        { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => send('toggle-sidebar') },
         { label: 'Toggle Outline / Pages Panel', accelerator: 'CmdOrCtrl+Shift+B', click: () => send('toggle-nav') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
@@ -304,14 +317,12 @@ function buildMenu(): void {
         { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => send('back') },
         { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => send('forward') },
         { type: 'separator' },
-        { label: 'Previous Trail', accelerator: '[', click: () => send('trail-prev') },
-        { label: 'Next Trail', accelerator: ']', click: () => send('trail-next') },
+        { label: 'Previous Trail', accelerator: 'Alt+[', click: () => send('trail-prev') },
+        { label: 'Next Trail', accelerator: 'Alt+]', click: () => send('trail-next') },
         { type: 'separator' },
-        // Bare-letter accelerators match the in-app keys; when a text
-        // field has focus the renderer re-inserts the character instead.
-        { label: 'Mark This Spot', accelerator: 'M', click: () => send('mark') },
-        { label: 'Mark in a New Trail', accelerator: 'Shift+M', click: () => send('mark-branch') },
-        { label: 'Set Current Entry to This Position', accelerator: 'R', click: () => send('reanchor') },
+        { label: 'Mark This Spot', accelerator: 'CmdOrCtrl+D', click: () => send('mark') },
+        { label: 'Mark in a New Trail', accelerator: 'CmdOrCtrl+Shift+D', click: () => send('mark-branch') },
+        { label: 'Set Current Entry to This Position', accelerator: 'CmdOrCtrl+E', click: () => send('reanchor') },
         { type: 'separator' },
         { label: 'Clear History', click: () => send('clear-history') },
       ],
@@ -352,6 +363,70 @@ function registerAppProtocol(): void {
 }
 
 // ---- lifecycle ----
+
+// App-specific right-click menus (links, trail/history rows, the viewer):
+// the renderer says what was clicked; the chosen action id goes back.
+ipcMain.handle('pt-context-menu', async (event, ctx: {
+  type: string; text?: string; current?: boolean; active?: boolean;
+  closable?: boolean; canBack?: boolean; canForward?: boolean;
+}) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return null;
+  return await new Promise<string | null>((resolve) => {
+    let choice: string | null = null;
+    const item = (id: string, label: string, enabled = true): Electron.MenuItemConstructorOptions =>
+      ({ label, enabled, click: () => { choice = id; } });
+    const sep: Electron.MenuItemConstructorOptions = { type: 'separator' };
+    let tpl: Electron.MenuItemConstructorOptions[] = [];
+    switch (ctx.type) {
+      case 'link':
+        tpl = [
+          item('follow', 'Follow Link'),
+          item('branch', 'Branch into a New Trail'),
+        ];
+        break;
+      case 'histEntry':
+        tpl = [
+          item('jump', 'Jump to This Entry', !ctx.current),
+          sep,
+          item('rename', 'Rename\u2026'),
+          item('reanchor', 'Set to Current Position'),
+        ];
+        break;
+      case 'stack':
+        tpl = [
+          item('switch', 'Switch to This Trail', !ctx.active),
+          sep,
+          item('rename', 'Rename\u2026'),
+          item('duplicate', 'Duplicate'),
+          sep,
+          item('close', 'Close Trail', !!ctx.closable),
+        ];
+        break;
+      case 'viewer':
+        tpl = [
+          item('back', 'Back', !!ctx.canBack),
+          item('forward', 'Forward', !!ctx.canForward),
+          sep,
+          item('mark', 'Mark This Spot'),
+          sep,
+          item('zoom-in', 'Zoom In'),
+          item('zoom-out', 'Zoom Out'),
+          item('fit', 'Fit Width'),
+        ];
+        break;
+      default:
+        resolve(null);
+        return;
+    }
+    const menu = Menu.buildFromTemplate(tpl);
+    menu.popup({
+      window: win,
+      // give the click handler a beat to run before the close callback
+      callback: () => setTimeout(() => resolve(choice), 20),
+    });
+  });
+});
 
 ipcMain.on('pt-open-file-ready', (event) => {
   dbg('renderer ready', event.sender.id);

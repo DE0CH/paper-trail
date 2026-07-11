@@ -97,12 +97,12 @@ async function run(): Promise<void> {
     // build a plausible reading state: a trail + a branch
     await page.locator(LINK).nth(3).click();
     await page.waitForTimeout(700);
-    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForTimeout(500);
     await page.waitForSelector(LINK, { timeout: 10000 });
     await page.locator(LINK).nth(2).click();
     await page.waitForTimeout(700);
-    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForTimeout(500);
     await page.waitForSelector(LINK, { timeout: 10000 });
     await page.locator(LINK).nth(0).click({ modifiers: ['Meta'] });
@@ -244,7 +244,7 @@ async function run(): Promise<void> {
       }
     }
     // 3. pop back one level (exact position restore)
-    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForTimeout(1100);
     // 4. jump back arbitrarily: click an early entry in the history panel
     const entries = page.locator('#historyPanel .histItem');

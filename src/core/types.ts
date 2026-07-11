@@ -74,8 +74,17 @@ export type MenuAction =
   | 'open' | 'save' | 'load-session' | 'replace-pdf' | 'back' | 'forward'
   | 'undo' | 'redo' | 'mark' | 'mark-branch' | 'reanchor'
   | 'trail-prev' | 'trail-next'
-  | 'zoom-in' | 'zoom-out' | 'fit' | 'find'
+  | 'zoom-in' | 'zoom-out' | 'fit' | 'find' | 'search-selection'
   | 'toggle-sidebar' | 'toggle-nav' | 'clear-history' | 'help';
+
+/** What the renderer right-clicked on; the shell shows a native menu for it. */
+export type ContextMenuRequest =
+  | { type: 'editable' }
+  | { type: 'selection'; text: string }
+  | { type: 'link' }
+  | { type: 'histEntry'; current: boolean }
+  | { type: 'stack'; active: boolean; closable: boolean }
+  | { type: 'viewer'; canBack: boolean; canForward: boolean };
 
 // ---- global augmentations (File System Access API bits missing from lib.dom,
 // and the Electron shell bridge) ----
@@ -93,8 +102,9 @@ declare global {
     }) => Promise<FileSystemFileHandle>;
     ptDesktop?: {
       platform: string; // process.platform of the shell ('darwin', 'win32', ...)
-      onMenu: (cb: (action: MenuAction) => void) => void;
+      onMenu: (cb: (action: MenuAction, payload?: string) => void) => void;
       onOpenFile: (cb: (file: { name: string; data: ArrayBuffer }) => void) => void;
+      showContextMenu: (ctx: ContextMenuRequest) => Promise<string | null>;
     };
     __pt?: unknown;
   }

@@ -20,6 +20,8 @@ function check(name: string, ok: boolean, detail = ''): void {
 }
 
 const LINK_SEL = '.page[data-page="1"] .annotLayer .pdfLink:not(.external)';
+// The platform's primary modifier for synthesized shortcuts.
+const MODK = process.platform === 'darwin' ? 'Meta' : 'Control';
 
 async function run(): Promise<void> {
   const executablePath = findBrowser();
@@ -64,7 +66,7 @@ async function run(): Promise<void> {
     // --- back restores exact position, preserves forward tail ---
     const posBefore = await page.evaluate(() =>
       (window as never as { __pt: PtHooks }).__pt.hist.active.entries[0].pos);
-    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForTimeout(400);
     const st2 = await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
@@ -80,14 +82,14 @@ async function run(): Promise<void> {
       JSON.stringify(st2.pos));
 
     // --- forward ---
-    await page.keyboard.press('Shift+Backspace');
+    await page.keyboard.press('Alt+ArrowRight');
     await page.waitForTimeout(400);
     const idx = await page.evaluate(() =>
       (window as never as { __pt: PtHooks }).__pt.hist.active.index);
     check('forward descends again', idx === 1);
 
     // --- cmd+click forks the whole history into a new stack ---
-    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForTimeout(400);
     await page.waitForSelector(LINK_SEL, { timeout: 10000 });
     await page.locator(LINK_SEL).nth(0).click({ modifiers: ['Meta'] });
@@ -147,22 +149,29 @@ async function run(): Promise<void> {
     check('new/duplicated trails are undoable', trailBtns.after === 2,
       String(trailBtns.after));
 
-    // --- [ and ] cycle trails; ? shows the shortcut cheat-sheet ---
+    // --- Alt+[ / Alt+] cycle trails; ? opens the cheat-sheet overlay ---
     const activeName = () => page.evaluate(() =>
       (window as never as { __pt: PtHooks }).__pt.hist.active.name);
     const beforeCycle = await activeName();
-    await page.keyboard.press(']');
+    await page.keyboard.press('Alt+]');
     const next = await activeName();
-    await page.keyboard.press('[');
+    await page.keyboard.press('Alt+[');
     const back2 = await activeName();
-    check('[ and ] switch between trails',
+    check('Alt+[ and Alt+] switch between trails',
       next !== beforeCycle && back2 === beforeCycle,
       JSON.stringify({ beforeCycle, next, back2 }));
     await page.keyboard.press('Shift+/');
-    const helpToast = await page.evaluate(() =>
-      document.getElementById('toast')?.textContent ?? '');
-    check('? shows the shortcut cheat-sheet', /switch trail/.test(helpToast),
-      helpToast.slice(0, 60));
+    await page.waitForSelector('#shortcutOverlay', { timeout: 3000 });
+    const helpInfo = await page.evaluate(() => ({
+      kbd: document.querySelectorAll('#shortcutOverlay kbd').length,
+      hasMark: /Mark the current position/.test(
+        document.getElementById('shortcutOverlay')?.textContent ?? ''),
+    }));
+    check('? opens the shortcut cheat-sheet overlay',
+      helpInfo.kbd > 12 && helpInfo.hasMark, JSON.stringify(helpInfo));
+    await page.keyboard.press('Escape');
+    check('Escape closes the cheat-sheet',
+      (await page.locator('#shortcutOverlay').count()) === 0);
 
     // --- hover preview ---
     await page.evaluate(() => {
@@ -839,21 +848,21 @@ async function run(): Promise<void> {
         && JSON.stringify(labels.parsedEdited) === '["my special place"]',
       JSON.stringify({ line: labels.namedLine, parsed: labels.parsedEdited }));
 
-    // --- "r" re-anchors the current entry from the keyboard ---
+    // --- MOD+E re-anchors the current entry from the keyboard ---
     await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
       pt.hist.jumpTo(0); // the automatic-label entry
       pt.viewer.scrollTo({ page: 15, yRatio: 0.2 });
     });
     await page.waitForTimeout(500);
-    await page.keyboard.press('r');
+    await page.keyboard.press(`${MODK}+e`);
     await page.waitForTimeout(200);
     const rKey = await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
       const cur = pt.hist.active.entries[pt.hist.active.index];
       return { page: cur.pos.page, label: cur.label };
     });
-    check('r re-anchors the current entry to the reading position',
+    check('mod+E re-anchors the current entry to the reading position',
       rKey.page === 15 && rKey.label === 'p. 15', JSON.stringify(rKey));
 
     // --- manually mark the current position onto the trail ---
@@ -864,14 +873,14 @@ async function run(): Promise<void> {
     const markBefore = await page.evaluate(() =>
       (window as never as { __pt: PtHooks }).__pt.hist.active.entries.length);
     await page.click('#viewerContainer'); // focus outside inputs
-    await page.keyboard.press('m');
+    await page.keyboard.press(`${MODK}+d`);
     await page.waitForTimeout(300);
     const marked = await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
       const cur = pt.hist.active.entries[pt.hist.active.index];
       return { n: pt.hist.active.entries.length, label: cur.label, pos: cur.pos };
     });
-    check('"m" marks the current position as a trail entry',
+    check('mod+D marks the current position as a trail entry',
       marked.label === 'Marked p.7' && marked.pos.page === 7
         && Math.abs(marked.pos.yRatio - 0.6) < 0.05,
       JSON.stringify({ markBefore, marked }));

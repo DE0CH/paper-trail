@@ -38,23 +38,23 @@ window. (Building from source is covered in
 
 - **Follow any internal link** — it's pushed onto your trail, labelled
   from the text around it ("Lemma 3.16", "(7.2)").
-- **Backspace** pops back to the *exact* position you left;
-  **Shift+Backspace** goes forward again. Following a new link mid-trail
+- **Back** (`Alt+←`) pops back to the *exact* position you left;
+  **Forward** (`Alt+→`) goes down again. Following a new link mid-trail
   overwrites the entries above you, exactly like browser history.
 - **Cmd/Ctrl+click a link** (or middle-click) to **branch**: your whole
   history is copied into a new trail and the jump happens there — so Back
   still works, unlike a browser tab. Trails live in the sidebar: switch,
   rename (double-click), close.
 - **Mark a spot** you reached by scrolling or searching with the `+`
-  button above the history list (or press `m`) — recorded like a link
-  jump.
+  button above the history list (or `Cmd/Ctrl+D`) — recorded like a
+  link jump.
 - **Hover a link** for a moment to preview its destination in a panel the
   width of the page: scroll inside it, drag its bottom edge to resize.
 - **Undo** (`Cmd/Ctrl+Z`) reverts history changes — an overwritten
   forward tail, a branch, a closed or renamed trail, even a replaced PDF.
 - Entries never move on their own: scrolling doesn't touch them.
   Re-anchor one deliberately with the ⌖ button on its row (hover), or
-  press `r` for the current entry.
+  press `Cmd/Ctrl+E` for the current entry.
 
 The leftmost panel shows the document **Outline** and **Pages**
 (thumbnails); close it with ×, reopen it from the toolbar. All panels
@@ -81,9 +81,9 @@ the full cheat-sheet:
 
 | Key | Action |
 | --- | --- |
-| `Backspace` / `Shift+Backspace` | Back / forward along the trail |
+| `Alt+←` / `Alt+→` | Back / forward along the trail |
 | `Cmd/Ctrl+click` a link | Branch into a new trail |
-| `m` | Mark the current position |
+| `Cmd/Ctrl+D` | Mark the current position |
 | `Cmd/Ctrl+S` | Save session |
 
 ## Notes

@@ -52,6 +52,8 @@ re-litigate without asking.
 - Edit files ONLY with the Edit/Write tools — never via python or shell
   scripts. If a Write/Edit fails with "file has been modified", the
   owner is probably editing it concurrently: re-read and retry.
+- The owner also pushes to GitHub while Claude works: when a push is
+  rejected, `git pull` (rebases per .gitconfig) and push again.
 - Keep audiences separate: instructions the owner gives Claude are NOT
   contributor/user documentation. CONTRIBUTING.md and README.md contain
   only what contributors/users need, written in full sentences (no
