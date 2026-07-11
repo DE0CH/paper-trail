@@ -306,21 +306,52 @@ function loadSessionDialog(): void {
 
 // ---- automatic updates (GitHub Releases feed) ----
 
+let downloadedVersion: string | null = null;
+
 /**
  * Updates download in the background and install when the app quits.
  * A toast in the renderer announces a downloaded update; the macOS menu
- * also offers an explicit check. Dev/test builds never update.
+ * also offers an explicit check with a full download-and-restart flow.
+ * Dev/test builds never update; the update tests point the updater at
+ * a local feed with PT_UPDATE_URL and observe it via PT_UPDATE_TEST.
  */
 function setupAutoUpdates(): void {
   autoUpdater.autoDownload = true;
-  if (SMOKE || !app.isPackaged) return;
+  if (process.env.PT_UPDATE_URL) {
+    autoUpdater.forceDevUpdateConfig = true;
+    autoUpdater.setFeedURL({ provider: 'generic', url: process.env.PT_UPDATE_URL });
+  } else if (SMOKE || !app.isPackaged) {
+    return;
+  }
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('update-downloaded', (info) => {
+  // Download progress shows on the Dock / taskbar icon.
+  autoUpdater.on('download-progress', (p) => {
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) w.webContents.send('pt-menu', 'update-ready', info.version);
+      if (!w.isDestroyed()) w.setProgressBar(p.percent / 100);
     }
   });
-  autoUpdater.on('error', (e) => dbg('auto-update error', e));
+  autoUpdater.on('update-downloaded', (info) => {
+    downloadedVersion = info.version;
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) {
+        w.setProgressBar(-1);
+        w.webContents.send('pt-menu', 'update-ready', info.version);
+      }
+    }
+    if (process.env.PT_UPDATE_TEST === 'download') {
+      console.log(`PT_UPDATE_DOWNLOADED ${info.version}`);
+      app.exit(0);
+    } else if (process.env.PT_UPDATE_TEST === 'install') {
+      autoUpdater.quitAndInstall(true, false);
+    }
+  });
+  autoUpdater.on('error', (e) => {
+    dbg('auto-update error', e);
+    if (process.env.PT_UPDATE_TEST) {
+      console.error('PT_UPDATE_ERROR', String(e));
+      app.exit(1);
+    }
+  });
   const check = () => {
     autoUpdater.checkForUpdates().catch((e) => dbg('update check failed', e));
   };
@@ -328,8 +359,40 @@ function setupAutoUpdates(): void {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
+/**
+ * Restart into the new version. Windows close one by one first, so the
+ * standard unsaved-session prompt protects every window; if the user
+ * keeps any window open (Save… or Cancel), the restart is abandoned —
+ * the update still installs on the next normal quit.
+ */
+async function restartToUpdate(): Promise<void> {
+  for (const w of [...BrowserWindow.getAllWindows()]) {
+    if (w.isDestroyed()) continue;
+    const closed = new Promise<boolean>((resolve) => {
+      w.once('closed', () => resolve(true));
+      // Counts only unblocked time: the close prompt is a synchronous
+      // dialog that halts the main process until answered.
+      setTimeout(() => resolve(false), 1500);
+    });
+    w.close();
+    if (!(await closed)) return;
+  }
+  autoUpdater.quitAndInstall();
+}
+
+async function promptRestart(version: string): Promise<void> {
+  const { response } = await dialog.showMessageBox({
+    message: `Paper Trail ${version} is ready`,
+    detail: 'Restart the app to finish updating.',
+    buttons: ['Restart Now', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0) await restartToUpdate();
+}
+
 async function checkForUpdatesInteractive(): Promise<void> {
-  if (!app.isPackaged) {
+  if (!app.isPackaged && !process.env.PT_UPDATE_URL) {
     await dialog.showMessageBox({ message: 'Updates apply to the installed app only.' });
     return;
   }
@@ -341,12 +404,18 @@ async function checkForUpdatesInteractive(): Promise<void> {
         message: 'You\u2019re up to date',
         detail: `Paper Trail ${app.getVersion()} is the latest version.`,
       });
-    } else {
-      await dialog.showMessageBox({
-        message: `Updating to ${latest}\u2026`,
-        detail: 'The update downloads in the background and installs when you quit.',
-      });
+      return;
     }
+    const { response } = await dialog.showMessageBox({
+      message: `Paper Trail ${latest} is available`,
+      detail: `You have ${app.getVersion()}. The download shows its progress on the app icon; you can keep reading meanwhile.`,
+      buttons: ['Update Now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response !== 0) return;
+    if (downloadedVersion !== latest) await r?.downloadPromise;
+    await promptRestart(latest);
   } catch (e) {
     await dialog.showMessageBox({
       type: 'error',
@@ -364,7 +433,11 @@ function buildMenu(): void {
       label: app.name,
       submenu: [
         { role: 'about' },
-        { label: 'Check for Updates\u2026', click: () => void checkForUpdatesInteractive() },
+        {
+          id: 'check-updates',
+          label: 'Check for Updates\u2026',
+          click: () => void checkForUpdatesInteractive(),
+        },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },

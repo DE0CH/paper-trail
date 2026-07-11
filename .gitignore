@@ -8,3 +8,4 @@ __pycache__/
 .vercel/
 .vercel
 dist-electron/
+dist-update-feed/
