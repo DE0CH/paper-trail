@@ -71,9 +71,8 @@ diffs cleanly, so versioning it in git alongside the paper works well.
   always these two explicit steps; the app never opens a file by itself.
 - Once saved, the session **auto-saves continuously**; a dot on the Save
   button means unsaved changes, and closing warns if anything is unsaved.
-- Opened a different PDF than the session was saved with? A banner says
-  so; **Use this PDF** adopts it. Got a revised version of the paper?
-  **⇄ Replace PDF** swaps the file and keeps your whole reading history.
+- Got a revised version of the paper? **⇄ Replace PDF** swaps the file
+  and keeps your whole reading history.
 
 ## Keyboard shortcuts
 

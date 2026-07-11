@@ -1,0 +1,46 @@
+# Captures a real screenshot of the Windows app UI (manual trigger) so
+# it can be reviewed without a Windows machine. The app runs from the
+# build output with the fixture PDF; the runner's desktop is captured
+# with System.Drawing and uploaded as an artifact.
+
+name: Windows UI screenshot
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  screenshot:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDF
+        run: node build-node/test/fixture.js
+
+      - name: Launch the app and capture the screen
+        shell: pwsh
+        run: |
+          $profile_dir = "$env:RUNNER_TEMP\pt-shot"
+          New-Item -ItemType Directory -Force $profile_dir | Out-Null
+          # window sized to fit the runner's display
+          '{"width":1000,"height":700,"x":10,"y":10}' |
+            Set-Content "$profile_dir\window-state.json"
+          $env:PT_USERDATA = $profile_dir
+          Start-Process npx -ArgumentList "electron","build-node/desktop/main.js","sample/WStarCats.pdf"
+          Start-Sleep -Seconds 40
+          Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("windows-ui.png")
+          Get-Item windows-ui.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui
+          path: windows-ui.png
