@@ -3,6 +3,12 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.4.6
+
+- Windows: the toolbar now uses the standard 48px height that Fluent
+  recommends for title bars with content (like Outlook and Edge), so
+  it no longer feels cramped.
+
 ## 0.4.5
 
 - Fixed: marking a spot (`Cmd/Ctrl+D`) no longer silently rewrites the
