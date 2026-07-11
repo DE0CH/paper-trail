@@ -1,7 +1,8 @@
-# Windows build + full e2e suite + packaged-app smoke test.
-# The e2e suite emulates a user against the real app in a headless Edge
-# that ships on the runner image, so this is the Windows "interactive"
-# testing loop — just with a longer round trip than local.
+# The full test pyramid on every OS/CPU combination users run:
+# [Windows, macOS] x [x86-64, ARM64]. Each cell builds the app, runs the
+# unit tests, the browser e2e suite, the desktop e2e suite (offline),
+# the desktop-shell regression harnesses, then packages the real
+# installer artifacts and installs and smoke-tests them like a user.
 
 name: CI
 
@@ -12,8 +13,12 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm, macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
 
@@ -25,13 +30,13 @@ jobs:
 
       - run: npm run build
 
-      - name: Generate the test-fixture PDF
+      - name: Generate the test-fixture PDFs
         run: node build-node/tools/fixture.js
 
-      - name: Run unit tests
+      - name: Unit tests
         run: node --test build-node/test/unit.js
 
-      - name: Run e2e suite against the built app
+      - name: Browser e2e suite (headless browser + node server)
         shell: bash
         run: |
           node build-node/node/server.js 8377 &
@@ -41,18 +46,9 @@ jobs:
           done
           node build-node/test/e2e.js
 
-      - name: Package Windows app (unsigned)
-        env:
-          # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
-          # which the NSIS extractor plugin can't decode — installs on ARM
-          # machines silently dropped every exe/dll. BCJ2 is understood.
-          ELECTRON_BUILDER_7Z_FILTER: BCJ2
-        run: npx electron-builder --win --publish never
-
-      - name: Smoke-test the packaged app
+      - name: Desktop e2e suite (Electron shell, fully offline)
         shell: bash
-        run: |
-          "./dist-electron/win-unpacked/Paper Trail.exe" --smoke
+        run: node build-node/test/desktopE2e.js
 
       - name: Desktop save regression (menu actions without user activation)
         shell: bash
@@ -62,79 +58,36 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopOffline.js
 
-      - name: Full e2e suite against the desktop app, offline
-        shell: bash
-        run: node build-node/test/desktopE2e.js
-
       - name: Desktop auto-save regression (Recents re-arm auto-save)
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
 
-      - name: Installer test (install, shortcuts, smoke, uninstall)
-        shell: bash
-        run: node build-node/test/installerWin.js
+      - name: Package the Windows app (unsigned)
+        if: runner.os == 'Windows'
+        env:
+          # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
+          # which the NSIS extractor plugin can't decode — installs on ARM
+          # machines silently dropped every exe/dll. BCJ2 is understood.
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win --publish never
 
-      - name: Upload the installer for the ARM job
-        uses: actions/upload-artifact@v4
-        with:
-          name: win-setup
-          path: dist-electron/*Setup*.exe
-
-      - name: List artifacts
-        shell: bash
-        run: ls -la dist-electron/*.exe dist-electron/*.zip
-
-  # The universal mac app on both CPU families: the dmg a user drags to
-  # Applications and the zip auto-update installs, each smoke-tested
-  # natively on its architecture.
-  mac-install:
-    strategy:
-      matrix:
-        runner: [macos-latest, macos-15-intel]
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-
-      - run: npm ci
-
-      - run: npm run build
-
-      - name: Package macOS app (unsigned)
+      - name: Package the macOS app (unsigned)
+        if: runner.os == 'macOS'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npx electron-builder --mac --publish never -c.mac.notarize=false
 
-      - name: Installer test (dmg, zip, universal binary, smoke)
-        run: node build-node/test/installerMac.js
-
-  # The one Setup.exe serves x64 and ARM machines; this job installs the
-  # exact installer the x64 job built (the same shape a release ships)
-  # on an ARM machine, which is the only way to exercise the ARM payload.
-  windows-arm:
-    needs: windows
-    runs-on: windows-11-arm
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-
-      - run: npm ci
-
-      - name: Compile the node-side tests
-        run: npx tsc -p tsconfig.node.json
-
-      - name: Fetch the installer built by the x64 job
-        uses: actions/download-artifact@v4
-        with:
-          name: win-setup
-          path: dist-electron
+      - name: Smoke-test the packaged app
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          "./dist-electron/win-unpacked/Paper Trail.exe" --smoke
 
       - name: Installer test (install, shortcuts, smoke, uninstall)
+        if: runner.os == 'Windows'
         shell: bash
         run: node build-node/test/installerWin.js
+
+      - name: Installer test (dmg, zip, universal binary, smoke)
+        if: runner.os == 'macOS'
+        run: node build-node/test/installerMac.js
