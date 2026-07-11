@@ -5,9 +5,6 @@
 //   paper-trail-session v1
 //   saved 2026-07-10T12:34:56.000Z
 //   pdf.name WStarCats.pdf
-//   pdf.relPath WStarCats.pdf
-//   pdf.fingerprint dcc474819b461982e1882557a8baa4fa
-//   pdf.size 547247
 //   view.scale 1.2745098
 //   view.fitWidth true
 //   view.page 17
@@ -19,8 +16,10 @@
 //   entry 8 0.29980178 Start
 //   entry 17 0.42 Lemma test-marker
 //
-// Stacks are an ordered list; `active` is the 0-based position of the
-// active one. Free-text values (stack names, entry labels) go last on
+// The PDF is identified by its NAME alone — deliberately no fingerprints,
+// hashes, or paths, so the file holds nothing the user can't see and
+// control. Stacks are an ordered list; `active` is the 0-based position
+// of the active one. Free-text values (stack names, entry labels) go last on
 // their line so no escaping is needed; newlines are flattened on save.
 // Internal ids are assigned on load — they never appear in the file.
 
@@ -40,9 +39,6 @@ export function serializeProgress(p: ProgressFile): string {
   out.push(PROGRESS_HEADER);
   out.push(`saved ${new Date(p.savedAt).toISOString()}`);
   out.push(`pdf.name ${line(p.pdf.name)}`);
-  out.push(`pdf.relPath ${line(p.pdf.relPath)}`);
-  out.push(`pdf.fingerprint ${p.pdf.fingerprint ?? '-'}`);
-  out.push(`pdf.size ${p.pdf.size}`);
   out.push(`view.scale ${p.state.scale}`);
   out.push(`view.fitWidth ${p.state.fitWidth}`);
   out.push(`view.page ${p.state.pos.page}`);
@@ -116,12 +112,9 @@ export function parseProgress(text: string): ProgressFile | null {
       type: 'pdf-stack-reader-progress',
       v: 1,
       savedAt: Date.parse(kv['saved'] ?? '') || Date.now(),
-      pdf: {
-        name: kv['pdf.name'] ?? '',
-        relPath: kv['pdf.relPath'] || kv['pdf.name'] || '',
-        fingerprint: kv['pdf.fingerprint'] === '-' ? null : (kv['pdf.fingerprint'] ?? null),
-        size: parseInt(kv['pdf.size'] ?? '0', 10) || 0,
-      },
+      // Older files carry pdf.relPath / pdf.fingerprint / pdf.size lines;
+      // they land in kv and are deliberately ignored.
+      pdf: { name: kv['pdf.name'] ?? '' },
       state: {
         v: 1,
         name: kv['pdf.name'] ?? '',

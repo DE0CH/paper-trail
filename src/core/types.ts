@@ -42,12 +42,11 @@ export interface ProgressFile {
   type: 'pdf-stack-reader-progress';
   v: 1;
   savedAt: number;
-  pdf: {
-    name: string;
-    relPath: string;
-    fingerprint: string | null;
-    size: number;
-  };
+  // Deliberately just the name: the session file must be fully
+  // transparent to the user — no hidden identifiers, no paths. PDFs are
+  // matched by a simple name comparison, with a visible warning banner
+  // when the names differ.
+  pdf: { name: string };
   state: SerializedState;
 }
 

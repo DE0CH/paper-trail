@@ -453,7 +453,7 @@ async function run(): Promise<void> {
       const out: {
         dirtyAfterJump: boolean | null;
         dirtyAfterSave: boolean | null;
-        savedJson: { type: string; name: string; size: number; stacks: number } | null;
+        savedJson: { type: string; name: string; hidden: boolean; stacks: number } | null;
       } = { dirtyAfterJump: null, dirtyAfterSave: null, savedJson: null };
       pt.jumpVia({ page: 3, yRatio: 0 }, 'probe');
       await new Promise((r) => setTimeout(r, 100));
@@ -477,7 +477,7 @@ async function run(): Promise<void> {
       out.savedJson = {
         type: lines[0],
         name: get('pdf.name'),
-        size: parseInt(get('pdf.size'), 10),
+        hidden: /pdf\.(fingerprint|relPath|size)/.test(captured),
         stacks: lines.filter((l) => l.startsWith('stack ')).length,
       };
       pt.session.handle = null;
@@ -517,9 +517,11 @@ async function run(): Promise<void> {
     check('save writes line-oriented progress file and clears dirty',
       st4.dirtyAfterSave === false
         && st4.savedJson!.type === 'paper-trail-session v1'
-        && st4.savedJson!.size > 10000
+        && st4.savedJson!.name === 'WStarCats.pdf'
         && st4.savedJson!.stacks === 2,
       JSON.stringify(st4.savedJson));
+    check('session file holds only the PDF name — no hidden identifiers',
+      st4.savedJson!.hidden === false, JSON.stringify(st4.savedJson));
     const noIds = await page.evaluate(() => {
       const pt = (window as never as { __pt: PtFormatHooks }).__pt;
       const text = pt.progressText();
@@ -549,8 +551,24 @@ async function run(): Promise<void> {
     check('opening a PDF starts fresh (no auto-resumed session)',
       fresh.stacks === 1 && fresh.entries === 1, JSON.stringify(fresh));
 
-    // --- progress file round trip over HTTP (?file=…pt.json) ---
+    // --- progress file round trip: opening a session is ALWAYS two
+    // explicit steps — the app never fetches the PDF on its own ---
     await page.goto(BASE + '/?file=sample/WStarCats.ptl');
+    await page.waitForSelector('#sessionPrompt', { timeout: 20000 });
+    const twoStep = await page.evaluate(() => ({
+      docOpen: !!document.querySelector('.page canvas'),
+      promptNames: document.getElementById('sessionPrompt')?.textContent ?? '',
+    }));
+    check('opening a session never auto-loads the PDF (two-step flow)',
+      !twoStep.docOpen && /WStarCats\.pdf/.test(twoStep.promptNames),
+      JSON.stringify(twoStep));
+    await page.evaluate(async () => {
+      const pt = (window as never as {
+        __pt: { controller: { openFile(f: File): Promise<void> } };
+      }).__pt;
+      const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+      await pt.controller.openFile(new File([bytes], 'WStarCats.pdf'));
+    });
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForTimeout(800);
     const st5 = await page.evaluate(() => {
@@ -564,27 +582,6 @@ async function run(): Promise<void> {
     });
     check('progress file restores stack and position',
       st5.stack === 'RoundTrip' && st5.pos.page === 17 && !st5.bound, JSON.stringify(st5));
-    await page.evaluate(() => {
-      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
-    });
-
-    // --- cross-directory round trip: relPath ../WStarCats.pdf resolves
-    // relative to the progress file's own location ---
-    await page.goto(BASE + '/?file=sample/sub/WStarCats-sub.ptl');
-    await page.waitForSelector('.page canvas', { timeout: 20000 });
-    await page.waitForTimeout(600);
-    const sub = await page.evaluate(() => {
-      const pt = (window as never as { __pt: PtHooks }).__pt;
-      return {
-        stacks: pt.hist.stacks.map((s) => s.name),
-        active: pt.hist.active.name,
-        page: pt.viewer.currentPosition().page,
-      };
-    });
-    check('cross-directory relPath resolves against the progress file',
-      sub.active === 'SubDir' && sub.page === 9
-        && sub.stacks.join('|') === 'Main line|SubDir',
-      JSON.stringify(sub));
     await page.evaluate(() => {
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
@@ -651,8 +648,19 @@ async function run(): Promise<void> {
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
 
-    // --- mismatching PDF: banner + adopt + out-of-range positions clamp ---
+    // --- mismatching PDF name: banner + adopt + out-of-range clamp ---
+    const openPdfManually = async () => {
+      await page.evaluate(async () => {
+        const pt = (window as never as {
+          __pt: { controller: { openFile(f: File): Promise<void> } };
+        }).__pt;
+        const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+        await pt.controller.openFile(new File([bytes], 'WStarCats.pdf'));
+      });
+    };
     await page.goto(BASE + '/?file=sample/sub/mismatch.ptl');
+    await page.waitForSelector('#sessionPrompt', { timeout: 20000 });
+    await openPdfManually();
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForSelector('#mismatchBanner', { timeout: 5000 });
     const mm = await page.evaluate(() => {
@@ -674,6 +682,8 @@ async function run(): Promise<void> {
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
     await page.goto(BASE + '/?file=sample/sub/mismatch.ptl');
+    await page.waitForSelector('#sessionPrompt', { timeout: 20000 });
+    await openPdfManually();
     await page.waitForSelector('#mismatchBanner', { timeout: 20000 });
     await page.click('#btnAdoptPdf');
     const adopted = await page.evaluate(() => {
@@ -682,11 +692,11 @@ async function run(): Promise<void> {
       return {
         bannerGone: !document.getElementById('mismatchBanner'),
         nameLine: text.split('\n').find((l) => l.startsWith('pdf.name ')),
-        fpIsReal: !/deadbeef/.test(text),
+        noHidden: !/pdf\.(fingerprint|relPath|size)/.test(text),
       };
     });
     check('"Use this PDF" adopts the open PDF into the session',
-      adopted.bannerGone && adopted.nameLine === 'pdf.name WStarCats.pdf' && adopted.fpIsReal,
+      adopted.bannerGone && adopted.nameLine === 'pdf.name WStarCats.pdf' && adopted.noHidden,
       JSON.stringify(adopted));
 
     // --- loading a session into an already open PDF asks for confirmation ---

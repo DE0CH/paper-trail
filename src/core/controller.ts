@@ -8,7 +8,7 @@ import { NavStacks } from './history';
 import { SearchController } from './search';
 import { Preview } from './preview';
 import {
-  putRecent, getRecent, getRecents, ensureReadPermission,
+  putRecent, getRecents, ensureReadPermission,
 } from './store';
 import { parseProgress, serializeProgress, PROGRESS_EXT } from './progressFormat';
 import type {
@@ -67,7 +67,6 @@ export class Controller {
   private docOpen = false;
   private currentName = '';
   private currentFp: string | null = null;
-  private currentSize = 0;
   private searchEntry: ReturnType<NavStacks['visit']> | null = null;
   private outline: OutlineNode[] = [];
   private recents: RecentEntry[] = [];
@@ -339,15 +338,9 @@ export class Controller {
       type: 'pdf-stack-reader-progress',
       v: 1,
       savedAt: Date.now(),
-      pdf: {
-        name: this.currentName,
-        // Path of the PDF relative to the progress file. The browser cannot
-        // see real paths, so this assumes the two files live side by side
-        // (which also makes the pair portable as a unit).
-        relPath: this.currentName,
-        fingerprint: this.currentFp,
-        size: this.currentSize,
-      },
+      // Only the name: session files are fully transparent (no hidden
+      // identifiers); PDFs are matched by name with a visible warning.
+      pdf: { name: this.currentName },
       state: this.serializeState(),
     };
   }
@@ -681,15 +674,12 @@ export class Controller {
   ): Promise<void> {
     const { handle = null, progress = null, progressHandle = null, source = null } = opts;
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
-    // Read the size before pdf.js transfers (detaches) the buffer.
-    const size = data.byteLength || 0;
     try {
       const doc = await this.viewer.open({ data });
       if (!doc) return;
       this.docOpen = true;
       this.currentName = name;
       this.currentFp = doc.fingerprints?.[0] ?? null;
-      this.currentSize = size;
       this.currentSource = source ?? handle ?? null;
       this.searchEntry = null;
       this.currentPage = 1;
@@ -714,8 +704,7 @@ export class Controller {
       this.session.dirty = false;
       this.session.saving = false;
       clearTimeout(this.fileSaveTimer);
-      this.mismatch_ = (progress?.pdf?.fingerprint && this.currentFp
-          && progress.pdf.fingerprint !== this.currentFp)
+      this.mismatch_ = (progress && progress.pdf.name && progress.pdf.name !== name)
         ? { savedName: progress.pdf.name, openName: name }
         : null;
       if (this.currentFp) {
@@ -779,8 +768,9 @@ export class Controller {
   /**
    * Open a reading-session file. If a PDF is already open, the session is
    * applied to it (after confirmation, since it replaces the current
-   * reading history). Otherwise the PDF is resolved via a remembered
-   * handle when possible; else the app shows a prompt asking for the PDF.
+   * reading history). Otherwise the app shows a prompt asking for the
+   * PDF: opening a session is deliberately two explicit steps — the app
+   * never fetches a PDF on its own behind the user's back.
    */
   private async openProgressFile(
     file: File,
@@ -806,23 +796,7 @@ export class Controller {
       return;
     }
 
-    // Session first: try the remembered PDF silently, else prompt for it.
-    const rec = json.pdf.fingerprint ? await getRecent(json.pdf.fingerprint) : null;
-    if (rec?.handle && await ensureReadPermission(rec.handle)) {
-      try {
-        const pdfFile = await rec.handle.getFile();
-        const buf = new Uint8Array(await pdfFile.arrayBuffer());
-        await this.openData(buf, pdfFile.name, {
-          handle: rec.handle,
-          source: rec.handle,
-          progress: json,
-          progressHandle,
-        });
-        return;
-      } catch (e) {
-        console.warn('stored PDF handle no longer valid', e);
-      }
-    }
+    // Session first: show the preview and ask the user for the PDF.
     this.enterPendingState(json, progressHandle);
   }
 
@@ -857,8 +831,7 @@ export class Controller {
     this.session.dirty = false;
     this.session.saving = false;
     clearTimeout(this.fileSaveTimer);
-    this.mismatch_ = (cs.json.pdf.fingerprint && this.currentFp
-        && cs.json.pdf.fingerprint !== this.currentFp)
+    this.mismatch_ = (cs.json.pdf.name && cs.json.pdf.name !== this.currentName)
       ? { savedName: cs.json.pdf.name, openName: this.currentName }
       : null;
     if (this.currentFp && cs.progressHandle) {
@@ -884,9 +857,8 @@ export class Controller {
   }
 
   /**
-   * Banner: make the currently open PDF the session's PDF — its name,
-   * fingerprint, and size are written to the session file on the next
-   * (auto-)save.
+   * Banner: make the currently open PDF the session's PDF — its name is
+   * written to the session file on the next (auto-)save.
    */
   adoptCurrentPdf(): void {
     this.mismatch_ = null;
@@ -1067,31 +1039,15 @@ export class Controller {
       const r = await fetch(fileParam);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       if (this.isProgressName(fileParam)) {
-        // Progress file served over HTTP: resolve the PDF via its relative
-        // path next to the progress file.
+        // Sessions never fetch their PDF automatically — the same two-step
+        // flow as local files: preview the session, ask for the PDF.
         const json = parseProgress(await r.text());
         if (!json) throw new Error('not a progress file');
-        const pdfUrl = new URL(
-          json.pdf.relPath || json.pdf.name,
-          new URL(fileParam, location.href),
+        this.enterPendingState(json, null);
+        this.showToast(
+          `Reading session loaded \u2014 open the PDF manually (${json.pdf.name}) to continue`,
+          7000,
         );
-        const pr = await fetch(pdfUrl);
-        if (!pr.ok) {
-          // Degrade gracefully: keep the session and ask for the PDF.
-          this.enterPendingState(json, null);
-          this.showToast(
-            `Couldn't find the PDF (${json.pdf.relPath}) next to the progress file `
-            + '\u2014 open the PDF manually to restore the session',
-            7000,
-          );
-          return;
-        }
-        const buf = new Uint8Array(await pr.arrayBuffer());
-        // No writable handle over HTTP: session stays unbound (dirty flow).
-        await this.openData(buf, decodeURIComponent(pdfUrl.pathname.split('/').pop()!), {
-          progress: json,
-          source: pdfUrl.toString(),
-        });
       } else {
         const buf = new Uint8Array(await r.arrayBuffer());
         await this.openData(buf, decodeURIComponent(fileParam.split('/').pop()!), {
