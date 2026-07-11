@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/679c363d-9432-4fe7-94d8-180480570981
   (a Chromium-based browser — Chrome, Edge, Brave — is needed for saving
   session files)
 - **Or download the desktop app** (works offline):
-  grab the `.dmg` (macOS) or installer (Windows) from the
+  grab the `.dmg` (macOS) or `.exe` installer (Windows) from the
   [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
 
 Then open a PDF — the **Choose a PDF…** button on the welcome screen,
