@@ -147,6 +147,23 @@ async function run(): Promise<void> {
     check('new/duplicated trails are undoable', trailBtns.after === 2,
       String(trailBtns.after));
 
+    // --- [ and ] cycle trails; ? shows the shortcut cheat-sheet ---
+    const activeName = () => page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.active.name);
+    const beforeCycle = await activeName();
+    await page.keyboard.press(']');
+    const next = await activeName();
+    await page.keyboard.press('[');
+    const back2 = await activeName();
+    check('[ and ] switch between trails',
+      next !== beforeCycle && back2 === beforeCycle,
+      JSON.stringify({ beforeCycle, next, back2 }));
+    await page.keyboard.press('Shift+/');
+    const helpToast = await page.evaluate(() =>
+      document.getElementById('toast')?.textContent ?? '');
+    check('? shows the shortcut cheat-sheet', /switch trail/.test(helpToast),
+      helpToast.slice(0, 60));
+
     // --- hover preview ---
     await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;

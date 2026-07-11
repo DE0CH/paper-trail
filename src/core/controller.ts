@@ -473,6 +473,14 @@ export class Controller {
     if (n) this.viewer.scrollTo(n.pos);
   }
 
+  /** Switch to the previous/next trail in the list (keyboard: [ and ]). */
+  stackCycle(delta: number): void {
+    const ids = this.hist.stacks.map((s) => s.id);
+    if (ids.length < 2) return;
+    const i = ids.indexOf(this.hist.activeId);
+    this.stackSwitch(ids[(i + delta + ids.length) % ids.length]);
+  }
+
   stackSwitch(id: number): void {
     if (id === this.hist.activeId) return;
     if (!this.docOpen) {

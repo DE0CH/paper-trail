@@ -54,6 +54,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const showHelp = () => controller.showToast(
+    `Backspace: back \u00b7 Shift+Backspace: forward \u00b7 [ ]: switch trail \u00b7 m: mark \u00b7 r: re-anchor \u00b7 ${MOD}+click link: fork \u00b7 /: search \u00b7 ${MOD}+S: save`,
+    6000,
+  );
+
   // Global keyboard shortcuts.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -93,7 +98,8 @@ export default function App() {
           break;
         case '/':
           e.preventDefault();
-          focusSearch();
+          if (e.shiftKey) showHelp(); // '?' on most layouts
+          else focusSearch();
           break;
         case '+': case '=': controller.zoomIn(); break;
         case '-': controller.zoomOut(); break;
@@ -101,6 +107,9 @@ export default function App() {
         case 't': setSidebarVisible((v) => !v); break;
         case 'm': controller.markPosition(e.shiftKey); break;
         case 'r': controller.reanchorCurrent(); break;
+        case '[': controller.stackCycle(-1); break;
+        case ']': controller.stackCycle(1); break;
+        case '?': showHelp(); break;
         case 'o': void controller.pickFile(); break;
         default: break;
       }
@@ -177,10 +186,15 @@ export default function App() {
           break;
         case 'clear-history': controller.clearHistory(); break;
         case 'help':
-          controller.showToast(
-            `Backspace: back \u00b7 Shift+Backspace: forward \u00b7 ${MOD}+click link: fork \u00b7 /: search \u00b7 ${MOD}+S: save progress`,
-            6000,
-          );
+          showHelp();
+          break;
+        case 'trail-prev':
+          if (typeInEditable('[')) break;
+          controller.stackCycle(-1);
+          break;
+        case 'trail-next':
+          if (typeInEditable(']')) break;
+          controller.stackCycle(1);
           break;
         default: break;
       }

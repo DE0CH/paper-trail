@@ -73,6 +73,7 @@ export interface RecentEntry {
 export type MenuAction =
   | 'open' | 'save' | 'load-session' | 'replace-pdf' | 'back' | 'forward'
   | 'undo' | 'redo' | 'mark' | 'mark-branch' | 'reanchor'
+  | 'trail-prev' | 'trail-next'
   | 'zoom-in' | 'zoom-out' | 'fit' | 'find'
   | 'toggle-sidebar' | 'toggle-nav' | 'clear-history' | 'help';
 

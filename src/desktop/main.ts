@@ -298,6 +298,9 @@ function buildMenu(): void {
         { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => send('back') },
         { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => send('forward') },
         { type: 'separator' },
+        { label: 'Previous Trail', accelerator: '[', click: () => send('trail-prev') },
+        { label: 'Next Trail', accelerator: ']', click: () => send('trail-next') },
+        { type: 'separator' },
         // Bare-letter accelerators match the in-app keys; when a text
         // field has focus the renderer re-inserts the character instead.
         { label: 'Mark This Spot', accelerator: 'M', click: () => send('mark') },
@@ -311,7 +314,7 @@ function buildMenu(): void {
     {
       role: 'help',
       submenu: [
-        { label: 'Keyboard Shortcuts', click: () => send('help') },
+        { label: 'Keyboard Shortcuts', accelerator: 'Shift+/', click: () => send('help') },
       ],
     },
   ];

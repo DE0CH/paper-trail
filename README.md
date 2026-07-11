@@ -12,7 +12,7 @@ file you can come back to (or keep in git next to the paper).
 Following references, popping back, jumping around the history, and
 branching into a new trail:
 
-https://github.com/user-attachments/assets/c6796ec2-f5a7-42d8-b961-6a563fa2d73e
+https://github.com/user-attachments/assets/dcff790c-ce33-457b-9f59-79731156e724
 
 <p align="center">
   <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after branching with cmd+click">
@@ -77,19 +77,15 @@ diffs cleanly, so versioning it in git alongside the paper works well.
 
 ## Keyboard shortcuts
 
+The ones worth learning first — press `?` (`Shift+/`) in the app for
+the full cheat-sheet:
+
 | Key | Action |
 | --- | --- |
-| `Backspace` / `Alt+←` | Back (pop up the trail) |
-| `Shift+Backspace` / `Alt+→` | Forward |
-| `Cmd/Ctrl+click` / middle-click a link | Branch into a new trail |
-| `m` (`Shift+M` to branch) | Mark the current position |
-| `r` | Re-anchor the current entry to this exact position |
-| `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` | Undo / redo history changes |
-| `/` or `Cmd/Ctrl+F` | Search (`Enter` / `Shift+Enter` for matches) |
-| `+` / `-` / `0` | Zoom in / out / fit width (trackpad pinch works) |
+| `Backspace` / `Shift+Backspace` | Back / forward along the trail |
+| `Cmd/Ctrl+click` a link | Branch into a new trail |
+| `m` | Mark the current position |
 | `Cmd/Ctrl+S` | Save session |
-| `t` | Toggle sidebar |
-| `o` | Open a file |
 
 ## Notes
 

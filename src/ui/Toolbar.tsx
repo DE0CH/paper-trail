@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
 import {
   IconSidebar, IconToc, IconUndo, IconRedo, IconBack, IconForward, IconSwap,
@@ -38,15 +37,15 @@ export default function Toolbar({
     ? 'Saving\u2026'
     : snap.save === 'dirty'
       ? (snap.saveBound
-        ? 'Unsaved changes — auto-save is pending (' + MOD + '+S to save now)'
-        : 'Unsaved changes — save your reading session to a file (' + MOD + '+S)')
+        ? 'Unsaved changes — auto-save is pending'
+        : 'Unsaved changes — save your reading session to a file')
       : snap.saveBound
-        ? 'Session saved — changes auto-save (' + MOD + '+S to save now)'
-        : 'Save your reading session to a file (' + MOD + '+S)';
+        ? 'Session saved — changes auto-save'
+        : 'Save your reading session to a file';
 
   return (
     <header id="toolbar" className="flex items-center gap-1.5 h-10 px-2.5 bg-toolbar border-b border-borderapp select-none overflow-hidden whitespace-nowrap">
-      <button className={iconBtn} title="Toggle sidebar (t)" onClick={onToggleSidebar}><IconSidebar /></button>
+      <button className={iconBtn} title="Toggle sidebar" onClick={onToggleSidebar}><IconSidebar /></button>
       <button
         id="btnNavToggle"
         className={`${iconBtn} ${navOpen ? 'text-accent' : ''}`}
@@ -55,7 +54,7 @@ export default function Toolbar({
       ><IconToc /></button>
       {/* Desktop reaches Open via the File menu; the toolbar stays lean. */}
       {!window.ptDesktop && (
-        <button className={btn} title="Open a PDF or reading-progress file (o)" onClick={() => void controller.pickFile()}>Open</button>
+        <button className={btn} title="Open a PDF or reading-session file" onClick={() => void controller.pickFile()}>Open</button>
       )}
       <button id="btnSave" className={`${btn} inline-flex items-center`} disabled={!snap.docOpen}
         title={saveTitle}
@@ -87,17 +86,17 @@ export default function Toolbar({
       <span className="flex-1" />
 
       <button id="btnUndo" className={iconBtn} disabled={!snap.canUndo}
-        title={`Undo the last history change (${MOD}+Z)`}
+        title="Undo the last history change"
         onClick={() => controller.undoHist()}><IconUndo /></button>
       <button id="btnRedo" className={iconBtn} disabled={!snap.canRedo}
-        title={`Redo (${MOD}+Shift+Z)`}
+        title="Redo"
         onClick={() => controller.redoHist()}><IconRedo /></button>
       {sep}
       <button id="btnBack" className={iconBtn} disabled={!snap.canBack}
-        title="Back — pop up the stack (Backspace / Alt+←)"
+        title="Back — pop up the stack"
         onClick={() => controller.goBack()}><IconBack /></button>
       <button id="btnFwd" className={iconBtn} disabled={!snap.canForward}
-        title="Forward — down again (Shift+Backspace / Alt+→)"
+        title="Forward — down again"
         onClick={() => controller.goForward()}><IconForward /></button>
       {sep}
 
@@ -124,10 +123,10 @@ export default function Toolbar({
       <span id="pageCount" className="text-dim">/ {snap.numPages}</span>
       {sep}
 
-      <button className={btn} title="Zoom out (-)" onClick={() => controller.zoomOut()}>&minus;</button>
+      <button className={btn} title="Zoom out" onClick={() => controller.zoomOut()}>&minus;</button>
       <span className="text-dim min-w-10 text-center">{snap.zoomPercent}%</span>
-      <button className={btn} title="Zoom in (+)" onClick={() => controller.zoomIn()}>+</button>
-      <button className={btn} title="Fit width (0)" onClick={() => controller.fitWidth()}>Fit</button>
+      <button className={btn} title="Zoom in" onClick={() => controller.zoomIn()}>+</button>
+      <button className={btn} title="Fit width" onClick={() => controller.fitWidth()}>Fit</button>
       {sep}
 
       <input
@@ -154,8 +153,8 @@ export default function Toolbar({
         }}
       />
       <span id="searchCount" className="text-dim min-w-13 text-center">{snap.searchCount}</span>
-      <button className={iconBtn} title="Previous match (Shift+Enter)" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
-      <button className={iconBtn} title="Next match (Enter)" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
+      <button className={iconBtn} title="Previous match" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
+      <button className={iconBtn} title="Next match" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
       {/* Web-only: the desktop app behaves like an offline app and should
           not open browser windows from its chrome. */}
       {!window.ptDesktop && (
