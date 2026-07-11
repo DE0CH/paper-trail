@@ -209,11 +209,26 @@ export class Preview {
     const pageRect = anchorPage.el.getBoundingClientRect();
 
     // Vertical placement: below the link if there is room, else above.
+    // The popup must NEVER cover the link itself (it would swallow the
+    // hover and block the click), so when the remembered height fits on
+    // neither side — e.g. after the window shrank — it is capped to the
+    // larger free side instead of overlaying.
     const lr = linkEl.getBoundingClientRect();
-    const h = Math.min(this.height, window.innerHeight - 40);
-    let top = lr.bottom + 10;
-    if (top + h > window.innerHeight - 8) top = lr.top - h - 10;
-    if (top < 8) top = 8;
+    const spaceBelow = window.innerHeight - 8 - (lr.bottom + 10);
+    const spaceAbove = lr.top - 10 - 8;
+    let h = Math.min(this.height, window.innerHeight - 40);
+    let top;
+    if (h <= spaceBelow) {
+      top = lr.bottom + 10;
+    } else if (h <= spaceAbove) {
+      top = lr.top - h - 10;
+    } else if (spaceBelow >= spaceAbove) {
+      h = Math.max(spaceBelow, 80);
+      top = lr.bottom + 10;
+    } else {
+      h = Math.max(spaceAbove, 80);
+      top = lr.top - h - 10;
+    }
 
     this.el.style.left = `${pageRect.left}px`;
     this.el.style.width = `${pageRect.width}px`;

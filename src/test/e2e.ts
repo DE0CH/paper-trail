@@ -242,6 +242,50 @@ async function run(): Promise<void> {
           && Math.abs((pvBox2.y + pvBox2.height) - (pvBox.y + pvBox.height)) < 3,
         JSON.stringify({ before: pvBox, after: pvBox2 }));
 
+      // Regression: an oversized remembered preview height in a smaller
+      // window must never cover the hovered link (it blocked clicking).
+      await page.mouse.move(10, 500); // close the popup
+      await page.waitForTimeout(500);
+      await page.setViewportSize({ width: 1400, height: 560 });
+      await page.evaluate(() => {
+        localStorage.setItem('pt:ui',
+          JSON.stringify({ ...JSON.parse(localStorage.getItem('pt:ui') ?? '{}'), previewH: 900 }));
+        (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+      });
+      await page.reload();
+      await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+      await page.locator(LINK_SEL).nth(3).hover();
+      await page.waitForSelector('#preview:not(.hidden)', { timeout: 5000 });
+      const linkBox = (await page.locator(LINK_SEL).nth(3).boundingBox())!;
+      const popBox = (await page.locator('#preview').boundingBox())!;
+      const overlaps = linkBox.x < popBox.x + popBox.width
+        && popBox.x < linkBox.x + linkBox.width
+        && linkBox.y < popBox.y + popBox.height
+        && popBox.y < linkBox.y + linkBox.height;
+      check('preview never covers the hovered link (small window, tall preview)',
+        !overlaps, JSON.stringify({ linkBox, popBox }));
+      await page.mouse.move(10, 500);
+      await page.setViewportSize({ width: 1400, height: 900 });
+      await page.evaluate(() => {
+        (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+      });
+      await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+      await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+      // the reload dropped the forked stack; later tests expect two
+      await page.evaluate(() => {
+        const pt = (window as never as { __pt: PtHooks }).__pt;
+        pt.jumpVia({ page: 22, yRatio: 0 }, 'Definition 4.1');
+        pt.jumpVia({ page: 38, yRatio: 0 }, 'GLR85', true);
+        pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+      });
+      await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+      await page.locator(LINK_SEL).nth(3).hover();
+      await page.waitForSelector('#preview:not(.hidden)', { timeout: 5000 });
+      await page.waitForFunction(
+        () => !!document.querySelector('#preview .previewContent canvas'),
+        undefined, { timeout: 5000 },
+      );
+
       // Regression: preview canvases are device-pixel exact (no resample blur).
       const sharp = await page.evaluate(() => {
         const c = document.querySelector('#preview .previewPageHolder canvas') as HTMLCanvasElement;
