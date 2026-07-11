@@ -3,6 +3,7 @@ import { controller } from '../core/controller';
 import { IconClose } from './icons';
 import { loadUI, saveUI } from '../core/store';
 import Toolbar from './Toolbar';
+import SearchBar from './SearchBar';
 import Sidebar from './Sidebar';
 import ShortcutHelp from './ShortcutHelp';
 import Welcome from './Welcome';
@@ -106,7 +107,13 @@ export default function App() {
           if (e.shiftKey) controller.redoHist(); else controller.undoHist();
           break;
         case 'd': e.preventDefault(); controller.markPosition(e.shiftKey); break;
-        case 'e': e.preventDefault(); controller.reanchorCurrent(); break;
+        case 'e':
+          // Plain mod+E belongs to the browser (Use Selection for Find /
+          // omnibox) and never reaches the page — Shift is required.
+          if (!e.shiftKey) return;
+          e.preventDefault();
+          controller.reanchorCurrent();
+          break;
         case 'b':
           e.preventDefault();
           if (e.shiftKey) toggleNav(); else setSidebarVisible((v) => !v);
@@ -364,12 +371,15 @@ export default function App() {
     <div className="flex flex-col h-full">
       <Toolbar
         snap={snap}
-        searchRef={searchRef}
-        searchOpen={searchOpen}
-        onCloseSearch={() => setSearchOpen(false)}
         onToggleSidebar={() => setSidebarVisible((v) => !v)}
         navOpen={navOpen}
         onToggleNav={toggleNav}
+      />
+      <SearchBar
+        snap={snap}
+        searchRef={searchRef}
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
       />
       <div className="flex flex-1 min-h-0">
         {sidebarVisible && (

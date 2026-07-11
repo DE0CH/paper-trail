@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { controller, type Snapshot } from '../core/controller';
 import {
-  IconSidebar, IconToc, IconBack, IconForward, IconSwap,
-  IconPrev, IconNext, IconGitHub,
+  IconSidebar, IconToc, IconBack, IconForward, IconSwap, IconGitHub,
 } from './icons';
 
 const btn = 'px-2.5 py-1 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
@@ -12,24 +11,17 @@ const iconBtn = `${btn} inline-flex items-center justify-center h-7 px-2`;
 
 export default function Toolbar({
   snap,
-  searchRef,
-  searchOpen,
-  onCloseSearch,
   onToggleSidebar,
   navOpen,
   onToggleNav,
 }: {
   snap: Snapshot;
-  searchRef: RefObject<HTMLInputElement | null>;
-  searchOpen: boolean;
-  onCloseSearch: () => void;
   onToggleSidebar: () => void;
   navOpen: boolean;
   onToggleNav: () => void;
 }) {
   const [pageText, setPageText] = useState('');
   const pageFocused = useRef(false);
-  const searchDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     if (!pageFocused.current) setPageText(snap.docOpen ? String(snap.currentPage) : '');
@@ -122,39 +114,6 @@ export default function Toolbar({
       <button className={btn} title="Fit width" onClick={() => controller.fitWidth()}>Fit</button>
       {sep}
 
-      {/* The search bar only exists while searching (mod+F); Escape
-          clears the matches and puts it away. */}
-      {searchOpen && (
-        <>
-          <input
-            id="searchInput"
-            ref={searchRef}
-            className={`${input} w-42`}
-            type="text"
-            placeholder="Search"
-            disabled={!snap.docOpen}
-            onChange={(e) => {
-              clearTimeout(searchDebounce.current);
-              const q = e.target.value.trim();
-              searchDebounce.current = setTimeout(() => void controller.runSearch(q), 350);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                void controller.gotoMatch(e.shiftKey ? -1 : 1);
-              } else if (e.key === 'Escape') {
-                (e.target as HTMLInputElement).value = '';
-                void controller.runSearch('', { jump: false });
-                (e.target as HTMLInputElement).blur();
-                onCloseSearch();
-              }
-            }}
-          />
-          <span id="searchCount" className="text-dim min-w-13 text-center">{snap.searchCount}</span>
-          <button className={iconBtn} title="Previous match" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
-          <button className={iconBtn} title="Next match" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
-        </>
-      )}
       {/* Web-only: the desktop app behaves like an offline app and should
           not open browser windows from its chrome. */}
       {!window.ptDesktop && (

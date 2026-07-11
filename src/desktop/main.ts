@@ -337,7 +337,7 @@ function buildMenu(): void {
         { type: 'separator' },
         { label: 'Mark This Spot', accelerator: 'CmdOrCtrl+D', click: () => send('mark') },
         { label: 'Mark in a New Trail', accelerator: 'CmdOrCtrl+Shift+D', click: () => send('mark-branch') },
-        { label: 'Set Current Entry to This Position', accelerator: 'CmdOrCtrl+E', click: () => send('reanchor') },
+        { label: 'Set Current Entry to This Position', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('reanchor') },
         { type: 'separator' },
         { label: 'Clear History', click: () => send('clear-history') },
       ],

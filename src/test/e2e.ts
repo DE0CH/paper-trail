@@ -923,7 +923,7 @@ async function run(): Promise<void> {
       pt.viewer.scrollTo({ page: 15, yRatio: 0.2 });
     });
     await page.waitForTimeout(500);
-    await page.keyboard.press(`${MODK}+e`);
+    await page.keyboard.press(`${MODK}+Shift+e`);
     await page.waitForTimeout(200);
     const rKey = await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
