@@ -57,6 +57,10 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopOffline.js
 
+      - name: Desktop auto-save regression (Recents re-arm auto-save)
+        shell: bash
+        run: npx electron build-node/test/desktopAutosave.js
+
       - name: Installer test (install, shortcuts, smoke, uninstall)
         shell: bash
         run: node build-node/test/installerWin.js

@@ -297,14 +297,21 @@ export class Controller {
   /**
    * True when writing won't trigger a browser permission prompt. Timer
    * saves must never pop a prompt out of nowhere; if permission needs
-   * asking, it waits for the next user-initiated save.
+   * asking, it waits for the next user-initiated save. The desktop
+   * shell has no permission UI at all — requests are granted invisibly
+   * — so there it simply asks (handles restored from the Recents store
+   * always come back in the 'prompt' state).
    */
   private async canWriteSilently(): Promise<boolean> {
     const h = this.session.handle;
     if (!h) return false;
-    if (!h.queryPermission) return true; // API absent (Electron auto-grants, tests fake)
+    if (!h.queryPermission) return true; // API absent (tests fake)
     try {
-      return (await h.queryPermission({ mode: 'readwrite' })) === 'granted';
+      if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+      if (window.ptDesktop && h.requestPermission) {
+        return (await h.requestPermission({ mode: 'readwrite' })) === 'granted';
+      }
+      return false;
     } catch {
       return true;
     }

@@ -1249,6 +1249,34 @@ async function run(): Promise<void> {
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
 
+    // --- in the browser the auto-save timer must never request write
+    // permission (prompts only ever come from a user-initiated save);
+    // the desktop shell is the opposite and re-arms silently (covered
+    // by the desktopAutosave harness in CI) ---
+    const silentSave = await page.evaluate(async () => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      let requested = false;
+      const state: Record<string, string> = { read: 'granted', readwrite: 'prompt' };
+      pt.session.handle = {
+        kind: 'file', name: 'x.ptl',
+        queryPermission: async (d?: { mode?: string }) => state[d?.mode ?? 'read'],
+        requestPermission: async (d?: { mode?: string }) => {
+          requested = true;
+          state[d?.mode ?? 'read'] = 'granted';
+          return 'granted';
+        },
+        createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+      };
+      pt.jumpVia({ page: 2, yRatio: 0.1 }, 'silent-save probe');
+      await new Promise((r) => setTimeout(r, 2500)); // past the 1.5s debounce
+      const out = { requested, dirty: pt.session.dirty };
+      pt.session.handle = null;
+      pt.session.dirty = false;
+      return out;
+    });
+    check('browser auto-save never requests permission from the timer',
+      !silentSave.requested && silentSave.dirty, JSON.stringify(silentSave));
+
     // --- CJK documents work offline: pdf.js needs its cMaps to decode
     // CID-encoded text and its standard fonts for non-embedded fonts, so
     // both ship with the app instead of being fetched from a CDN ---
