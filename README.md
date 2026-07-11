@@ -74,8 +74,7 @@ the sidebar.
   press `Cmd/Ctrl+E` for the current entry.
 
 The leftmost panel shows the document **Outline** and **Pages**
-(thumbnails); close it with ×, reopen it from the toolbar. All panels
-resize by dragging their edges — each keeps its own width.
+(thumbnails); close it with ×, reopen it from the toolbar.
 
 ## Saving your place: reading sessions
 
