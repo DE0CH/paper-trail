@@ -196,17 +196,25 @@ function createWindow(): BrowserWindow {
 // ---- opening OS files ----
 
 const pendingPaths: string[] = [];
-const readyWindows = new Set<number>();          // renderer listener registered
-const queuedFiles = new Map<number, string[]>(); // files waiting for that
+const readyWindows = new Set<number>();  // renderer listener registered
+/** A file to deliver: a path on disk, or bytes handed over from a renderer. */
+type QueuedFile = string | { name: string; data: ArrayBuffer };
+const queuedFiles = new Map<number, QueuedFile[]>();
 
-function sendFileTo(win: BrowserWindow, filePath: string): void {
-  dbg('sendFileTo', filePath, 'ready:', readyWindows.has(win.webContents.id));
+function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
+  dbg('sendFileTo', typeof item === 'string' ? item : item.name,
+    'ready:', readyWindows.has(win.webContents.id));
   if (!readyWindows.has(win.webContents.id)) {
     const q = queuedFiles.get(win.webContents.id) ?? [];
-    q.push(filePath);
+    q.push(item);
     queuedFiles.set(win.webContents.id, q);
     return;
   }
+  if (typeof item !== 'string') {
+    win.webContents.send('pt-open-file', item);
+    return;
+  }
+  const filePath = item;
   const name = path.basename(filePath);
   fs.promises.readFile(filePath).then((buf) => {
     if (win.isDestroyed()) return;
@@ -224,17 +232,26 @@ function sendFileTo(win: BrowserWindow, filePath: string): void {
 }
 
 /**
- * Open an OS-provided file (Open With…, Dock drops, Open dialog). Always
- * in a new window — except at launch, where the file goes into the
- * freshly created first window (`target`).
+ * Open an OS-provided file (Open With…, Dock drops, Open dialog). A
+ * window that already shows a document never gets a second one: the
+ * file goes into the invoking/focused window only while it is still
+ * empty (its title is the bare app name), and into a new window
+ * otherwise. At launch the file goes into the first window (`target`).
  */
 function openPath(filePath: string, target?: BrowserWindow): void {
   if (!app.isReady()) {
     pendingPaths.push(filePath);
     return;
   }
-  const win = target && !target.isDestroyed() ? target : createWindow();
-  sendFileTo(win, filePath);
+  let win = target && !target.isDestroyed() ? target : null;
+  if (!win) {
+    const focused = focusedWindow();
+    if (focused && !focused.isDestroyed()
+      && (focused.webContents.isLoading() || focused.getTitle() === 'Paper Trail')) {
+      win = focused;
+    }
+  }
+  sendFileTo(win ?? createWindow(), filePath);
 }
 
 // macOS: Open With…, drag onto the Dock icon, recent documents.
@@ -482,6 +499,11 @@ ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedNa
 // The dot in the macOS close button mirrors unsaved session changes.
 ipcMain.on('pt-document-edited', (event, edited: boolean) => {
   BrowserWindow.fromWebContents(event.sender)?.setDocumentEdited(!!edited);
+});
+
+// A PDF picked in an occupied window opens in a window of its own.
+ipcMain.on('pt-open-new-window', (_event, file: { name: string; data: ArrayBuffer }) => {
+  sendFileTo(createWindow(), file);
 });
 
 ipcMain.on('pt-open-file-ready', (event) => {

@@ -3,6 +3,23 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.4.7
+
+- Fixed: Load Reading Session (and first-time Save) from the macOS menu
+  bar did nothing — menu clicks can't open the browser-style file
+  pickers, so the app's own dialogs handle both now.
+- The Recent list remembers each PDF together with its saved session
+  and reopens them as a pair. If either file has gone missing, nothing
+  loads at all and the message names exactly which file it was; a PDF
+  that never had a session still reopens on its own.
+- Opening a PDF while one is already showing opens it in a new window
+  (desktop) or a new tab (web) instead of replacing what you're
+  reading; an empty window is used directly.
+- `Cmd/Ctrl+F` now toggles the search bar — pressing it again closes
+  the bar and clears the highlights.
+- Windows: the app now ships for ARM (one installer covers both Intel
+  and ARM; separate zips per architecture).
+
 ## 0.4.6
 
 - Windows: the toolbar now uses the standard 48px height that Fluent

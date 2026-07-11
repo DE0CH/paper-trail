@@ -332,6 +332,17 @@ async function run(): Promise<void> {
     } catch { /* hlCount stays 0 */ }
     check('search finds 4 matches with highlights', hlCount >= 1, `highlights: ${hlCount}`);
 
+    // mod+F toggles: pressing it with the bar open closes it and clears
+    // the highlights.
+    await page.keyboard.press(`${MODK}+f`);
+    await page.waitForTimeout(400);
+    const searchClosed = await page.evaluate(() => ({
+      bar: !!document.getElementById('searchBar'),
+      hl: document.querySelectorAll('.searchHl').length,
+    }));
+    check('mod+F closes an open search bar and clears highlights',
+      !searchClosed.bar && searchClosed.hl === 0, JSON.stringify(searchClosed));
+
     // --- panel resizing: each divider resizes exactly one panel; the
     // others keep their widths (they only shift) ---
     async function dragHandle(sel: string, toX: number): Promise<void> {
@@ -729,6 +740,29 @@ async function run(): Promise<void> {
     });
     check('opening a PDF starts fresh (no auto-resumed session)',
       fresh.stacks === 1 && fresh.entries === 1, JSON.stringify(fresh));
+
+    // --- a second PDF opened while one is showing goes to a NEW tab,
+    // leaving the current one untouched ---
+    const [childPage] = await Promise.all([
+      page.context().waitForEvent('page'),
+      page.evaluate(async () => {
+        const pt = (window as never as {
+          __pt: { controller: { openFile(f: File): Promise<void> } };
+        }).__pt;
+        const bytes = await (await fetch('/sample/WStarCats.pdf')).arrayBuffer();
+        void pt.controller.openFile(new File([bytes], 'SecondPaper.pdf'));
+      }),
+    ]);
+    await childPage.waitForSelector('.page canvas', { timeout: 30000 });
+    const secondTab = {
+      child: await childPage.title(),
+      parent: await page.title(),
+    };
+    await childPage.close();
+    check('a second PDF opens in a new tab; the current one is untouched',
+      secondTab.child.startsWith('SecondPaper.pdf')
+        && secondTab.parent.startsWith('WStarCats.pdf'),
+      JSON.stringify(secondTab));
 
     // --- progress file round trip: opening a session is ALWAYS two
     // explicit steps — the app never fetches the PDF on its own ---

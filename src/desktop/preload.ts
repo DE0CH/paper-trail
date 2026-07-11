@@ -27,4 +27,8 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   // the shell writes the file instead. Resolves to the path or null.
   saveSessionFallback: (text: string, suggestedName: string): Promise<string | null> =>
     ipcRenderer.invoke('pt-save-session', { text, suggestedName }) as Promise<string | null>,
+  // A PDF picked while this window already shows one opens elsewhere.
+  openInNewWindow: (name: string, data: ArrayBuffer) => {
+    ipcRenderer.send('pt-open-new-window', { name, data });
+  },
 });

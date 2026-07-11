@@ -42,11 +42,22 @@ export default function App() {
   const [navTab, setNavTab] = useState<'outline' | 'pages'>(() => loadUI().navTab ?? 'outline');
 
   // The search bar exists only while searching; opening focuses it once
-  // it is in the DOM.
+  // it is in the DOM. mod+F toggles: pressing it again puts the bar away.
+  const searchOpenRef = useRef(false);
+  searchOpenRef.current = searchOpen;
+  const closeSearch = () => {
+    if (searchRef.current) searchRef.current.value = '';
+    void controller.runSearch('', { jump: false });
+    setSearchOpen(false);
+  };
   const openSearch = () => {
     setSearchOpen(true);
     searchRef.current?.focus();
     searchRef.current?.select();
+  };
+  const toggleSearch = () => {
+    if (searchOpenRef.current) closeSearch();
+    else openSearch();
   };
   useEffect(() => {
     if (searchOpen) {
@@ -100,7 +111,7 @@ export default function App() {
       }
       if (!mod) return;
       switch (e.key.toLowerCase()) {
-        case 'f': e.preventDefault(); openSearch(); break;
+        case 'f': e.preventDefault(); toggleSearch(); break;
         case 's': e.preventDefault(); controller.saveProgressSafe(); break;
         case 'z':
           if (editing) return; // text fields keep their native undo
@@ -251,7 +262,7 @@ export default function App() {
         case 'zoom-out': controller.zoomOut(); break;
         case 'fit': controller.fitWidth(); break;
         case 'find':
-          openSearch();
+          toggleSearch();
           break;
         case 'search-selection':
           if (payload) {

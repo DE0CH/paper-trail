@@ -182,6 +182,7 @@ export class Controller {
 
     void this.refreshRecents();
     void this.bootFromQuery();
+    this.initTabHandoff();
 
     // Test / debugging hooks.
     window.__pt = {
@@ -802,7 +803,50 @@ export class Controller {
       });
       return;
     }
+    if (this.docOpen) {
+      // A document is already open here: another PDF belongs in its own
+      // window (desktop) or tab (web), never on top of this one.
+      this.openPdfElsewhere(file);
+      return;
+    }
     await this.openData(buf, file.name, { handle, source });
+  }
+
+  /** Open a PDF in a fresh window/tab because this one is occupied. */
+  private openPdfElsewhere(file: File): void {
+    if (window.ptDesktop?.openInNewWindow) {
+      void file.arrayBuffer().then((data) => {
+        window.ptDesktop!.openInNewWindow(file.name, data);
+      });
+      return;
+    }
+    // Web: hand the picked File to a fresh tab of the app over a
+    // same-origin handshake (Files are structured-cloneable).
+    const child = window.open(location.origin + location.pathname);
+    if (!child) {
+      this.showToast('Popup blocked \u2014 allow popups to open PDFs in a new tab');
+      return;
+    }
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.origin === location.origin && ev.source === child && ev.data === 'pt-child-ready') {
+        child.postMessage({ type: 'pt-open-file', file }, location.origin);
+        window.removeEventListener('message', onMsg);
+      }
+    };
+    window.addEventListener('message', onMsg);
+  }
+
+  /** Child-tab side of openPdfElsewhere: announce readiness, accept the file. */
+  initTabHandoff(): void {
+    if (!window.opener || window.ptDesktop) return;
+    window.addEventListener('message', (ev: MessageEvent) => {
+      if (ev.origin !== location.origin) return;
+      const d = ev.data as { type?: string; file?: File };
+      if (d?.type === 'pt-open-file' && d.file instanceof File) {
+        void this.openFile(d.file);
+      }
+    });
+    (window.opener as Window).postMessage('pt-child-ready', location.origin);
   }
 
   /** Discard a session that is waiting for its PDF. */

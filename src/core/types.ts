@@ -107,6 +107,7 @@ declare global {
       showContextMenu: (ctx: ContextMenuRequest) => Promise<string | null>;
       setDocumentEdited: (edited: boolean) => void;
       saveSessionFallback: (text: string, suggestedName: string) => Promise<string | null>;
+      openInNewWindow: (name: string, data: ArrayBuffer) => void;
     };
     __pt?: unknown;
   }
