@@ -77,10 +77,10 @@ async function run(): Promise<void> {
 
   // The README media should show the real paper, not the synthetic e2e
   // fixture (which has placeholder text). Drop the actual PDF into
-  // sample/WStarCats-real.pdf (gitignored) to use it; the fixture is the
+  // sample/real/WStarCats.pdf (gitignored) to use it; the fixture is the
   // fallback so the script still runs anywhere.
-  const PDF_PARAM = fs.existsSync(path.resolve(__dirname, '..', '..', 'sample', 'WStarCats-real.pdf'))
-    ? 'sample/WStarCats-real.pdf'
+  const PDF_PARAM = fs.existsSync(path.resolve(__dirname, '..', '..', 'sample', 'real', 'WStarCats.pdf'))
+    ? 'sample/real/WStarCats.pdf'
     : 'sample/WStarCats.pdf';
   console.log('recording against', PDF_PARAM);
 
