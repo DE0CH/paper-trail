@@ -37,7 +37,7 @@ const GROUPS: Array<{ title: string; rows: Array<{ keys: string[]; label: string
       { keys: [`${ALT}+⇧+D`], label: 'Duplicate the current trail' },
       { keys: [`${MOD}+D`], label: 'Mark the current position' },
       { keys: [`${MOD}+⇧+D`], label: 'Mark in a new trail' },
-      { keys: [`${MOD}+⇧+E`], label: 'Re-anchor the current entry' },
+      { keys: [`${MOD}+G`], label: 'Re-anchor the current entry' },
       { keys: [`${MOD}+Z`], label: 'Undo history change' },
       { keys: [`${MOD}+⇧+Z`], label: 'Redo' },
     ],

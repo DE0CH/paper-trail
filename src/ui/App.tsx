@@ -108,10 +108,9 @@ export default function App() {
           if (e.shiftKey) controller.redoHist(); else controller.undoHist();
           break;
         case 'd': e.preventDefault(); controller.markPosition(e.shiftKey); break;
-        case 'e':
-          // Plain mod+E belongs to the browser (Use Selection for Find /
-          // omnibox) and never reaches the page — Shift is required.
-          if (!e.shiftKey) return;
+        case 'g':
+          // mod+G: reachable left-handed, and unlike the E variants it
+          // actually reaches the page in browsers.
           e.preventDefault();
           controller.reanchorCurrent();
           break;

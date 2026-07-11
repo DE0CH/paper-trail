@@ -427,8 +427,11 @@ export class Controller {
    * entry — or, when forking (cmd/ctrl/middle-click), copy the whole
    * history into a new stack first.
    */
-  jumpVia(pos: Pos, label: string, fork = false): void {
-    this.hist.updateCurrentPos(this.viewer.currentPosition());
+  jumpVia(pos: Pos, label: string, fork = false, { captureLeave = true } = {}): void {
+    // Real jumps pin the position you left onto the entry you were on,
+    // so Back returns exactly there. Marking is not a jump — you're
+    // already at `pos` — and must not rewrite the previous anchor.
+    if (captureLeave) this.hist.updateCurrentPos(this.viewer.currentPosition());
     this.viewer.scrollTo(pos);
     if (fork) {
       this.hist.fork({ label, pos });
@@ -912,7 +915,7 @@ export class Controller {
   markPosition(fork = false): void {
     if (!this.docOpen) return;
     const pos = this.viewer.currentPosition();
-    this.jumpVia(pos, `Marked p.${pos.page}`, fork);
+    this.jumpVia(pos, `Marked p.${pos.page}`, fork, { captureLeave: false });
   }
 
   /** Re-anchor a history entry to the current reading position. */

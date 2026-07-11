@@ -112,7 +112,6 @@ export default function Toolbar({
       <span className="text-dim min-w-10 text-center">{snap.zoomPercent}%</span>
       <button className={btn} title="Zoom in" onClick={() => controller.zoomIn()}>+</button>
       <button className={btn} title="Fit width" onClick={() => controller.fitWidth()}>Fit</button>
-      {sep}
 
       {/* Web-only: the desktop app behaves like an offline app and should
           not open browser windows from its chrome. */}

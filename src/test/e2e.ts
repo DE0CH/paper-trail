@@ -965,21 +965,21 @@ async function run(): Promise<void> {
         && JSON.stringify(labels.parsedEdited) === '["my special place"]',
       JSON.stringify({ line: labels.namedLine, parsed: labels.parsedEdited }));
 
-    // --- MOD+E re-anchors the current entry from the keyboard ---
+    // --- mod+G re-anchors the current entry from the keyboard ---
     await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
       pt.hist.jumpTo(0); // the automatic-label entry
       pt.viewer.scrollTo({ page: 15, yRatio: 0.2 });
     });
     await page.waitForTimeout(500);
-    await page.keyboard.press(`${MODK}+Shift+e`);
+    await page.keyboard.press(`${MODK}+g`);
     await page.waitForTimeout(200);
     const rKey = await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
       const cur = pt.hist.active.entries[pt.hist.active.index];
       return { page: cur.pos.page, label: cur.label };
     });
-    check('mod+E re-anchors the current entry to the reading position',
+    check('mod+G re-anchors the current entry to the reading position',
       rKey.page === 15 && rKey.label === 'p. 15', JSON.stringify(rKey));
 
     // --- an entry's × removes just that entry (hover-revealed) ---
@@ -1013,16 +1013,32 @@ async function run(): Promise<void> {
       (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 7, yRatio: 0.6 });
     });
     await page.waitForTimeout(700);
-    const markBefore = await page.evaluate(() =>
-      (window as never as { __pt: PtHooks }).__pt.hist.active.entries.length);
+    const beforeMark = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      const cur = pt.hist.active.entries[pt.hist.active.index];
+      return { n: pt.hist.active.entries.length, curPos: { ...cur.pos } };
+    });
+    const markBefore = beforeMark.n;
     await page.click('#viewerContainer'); // focus outside inputs
     await page.keyboard.press(`${MODK}+d`);
     await page.waitForTimeout(300);
     const marked = await page.evaluate(() => {
       const pt = (window as never as { __pt: PtHooks }).__pt;
       const cur = pt.hist.active.entries[pt.hist.active.index];
-      return { n: pt.hist.active.entries.length, label: cur.label, pos: cur.pos };
+      const prev = pt.hist.active.entries[pt.hist.active.index - 1];
+      return {
+        n: pt.hist.active.entries.length,
+        label: cur.label,
+        pos: cur.pos,
+        prevPos: prev?.pos,
+      };
     });
+    // Regression: marking must not rewrite the anchor of the entry you
+    // were on — anchors only move through explicit re-anchoring.
+    check('marking never moves the previous entry\u2019s anchor',
+      marked.prevPos?.page === beforeMark.curPos.page
+        && Math.abs((marked.prevPos?.yRatio ?? -1) - beforeMark.curPos.yRatio) < 1e-9,
+      JSON.stringify({ before: beforeMark.curPos, after: marked.prevPos }));
     check('mod+D marks the current position as a trail entry',
       marked.label === 'Marked p.7' && marked.pos.page === 7
         && Math.abs(marked.pos.yRatio - 0.6) < 0.05,

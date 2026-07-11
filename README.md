@@ -70,7 +70,7 @@ the sidebar.
   replaced PDF.
 - Entries never move on their own: scrolling doesn't touch them.
   Re-anchor one deliberately with the ⌖ button on its row (hover), or
-  press `Cmd/Ctrl+Shift+E` for the current entry.
+  press `Cmd/Ctrl+G` for the current entry.
 
 The leftmost panel shows the document **Outline** and **Pages**
 (thumbnails); close it with ×, reopen it from the toolbar.
