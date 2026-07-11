@@ -66,8 +66,8 @@ zoom — to a small plain-text file (`<pdf>.ptl`) wherever you choose. It
 diffs cleanly, so versioning it in git alongside the paper works well.
 
 - Open the PDF first and use **Load session…**, or open the session file
-  first — the app shows which PDF it belongs to and asks for it (or
-  reopens it silently when it can).
+  first — the app shows which PDF it belongs to and asks for it. It's
+  always these two explicit steps; the app never opens a file by itself.
 - Once saved, the session **auto-saves continuously**; a dot on the Save
   button means unsaved changes, and closing warns if anything is unsaved.
 - Opened a different PDF than the session was saved with? A banner says

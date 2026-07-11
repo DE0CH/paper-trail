@@ -72,9 +72,6 @@ stacks are an ordered list and `active` is a 0-based position.
 paper-trail-session v1
 saved 2026-07-10T12:34:56.000Z
 pdf.name WStarCats.pdf
-pdf.relPath WStarCats.pdf
-pdf.fingerprint dcc47481…
-pdf.size 547247
 view.scale 1.27
 view.fitWidth true
 view.page 17
@@ -87,10 +84,13 @@ entry 8 0.2998 Start
 entry 17 0.42 Lemma test-marker
 ```
 
-Positions are scale-independent `{page, yRatio}`. The app never resolves
-filesystem paths between the session and its PDF (browser sandboxes
-don't expose paths) — the user supplies both files; `pdf.relPath` is
-only used by the `?file=` dev mode, where URL-relative resolution works.
+Positions are scale-independent `{page, yRatio}`. The file identifies
+its PDF by NAME alone — deliberately no fingerprints, hashes, or paths,
+so it contains nothing the user can't see and control. Opening a
+session is always two explicit steps (session file, then PDF); a plain
+name comparison drives the mismatch banner. Older files with
+`pdf.relPath` / `pdf.fingerprint` / `pdf.size` lines still parse; those
+keys are ignored.
 
 ## pdf.js v6 embedding gotchas (hard-won)
 

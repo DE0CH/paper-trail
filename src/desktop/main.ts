@@ -99,11 +99,11 @@ function createWindow(): BrowserWindow {
     y: bounds.y !== undefined ? bounds.y + offset : undefined,
     show: !SMOKE,
     backgroundColor: '#2b2d31',
-    // Traffic lights sit inside the app's own toolbar row (32.5px tall:
-    // h-10 at the 13px root font), vertically centered: (32.5 - 12) / 2.
+    // Traffic lights sit inside the app's own toolbar row, which is
+    // 44px tall on macOS (globals.css body.desktopMac): (44 - 12) / 2.
     ...(isMac ? {
       titleBarStyle: 'hidden' as const,
-      trafficLightPosition: { x: 12, y: 10 },
+      trafficLightPosition: { x: 12, y: 16 },
     } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
