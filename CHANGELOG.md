@@ -3,6 +3,16 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.0
+
+- The desktop apps now **update themselves**: new releases download in
+  the background and install when you quit (a toast tells you when one
+  is ready; macOS also has Check for Updates… in the app menu). Windows
+  updates download only the changed pieces. This release is the last
+  one you need to install by hand.
+- Session files from a newer version of Paper Trail are refused with a
+  clear "update the app" message instead of failing confusingly.
+
 ## 0.4.7
 
 - Fixed: Load Reading Session (and first-time Save) from the macOS menu
