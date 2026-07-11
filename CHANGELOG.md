@@ -3,6 +3,25 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.2
+
+- Fixed: on Windows ARM machines the installer finished but installed
+  a broken app — the desktop shortcut pointed at nothing. (The
+  compressor used a filter the installer's extractor couldn't decode,
+  so every executable was silently dropped while the rest installed.)
+- The Windows installer is now a standard wizard — pick the install
+  folder, then Install — instead of the one-click installer, and it
+  creates Start Menu and Desktop shortcuts.
+- Fixed: on the desktop, reopening a PDF together with its session
+  from the Recent list left continuous auto-save off until the next
+  manual save.
+- The Windows and web icons are now the paper-and-trail artwork
+  itself, scaled to fill the canvas — the rounded dark plate belongs
+  to the macOS icon only.
+- Installers are now tested in CI end to end on four kinds of machines
+  (Windows and macOS, Intel and ARM each): install, check shortcuts,
+  launch, uninstall.
+
 ## 0.5.1
 
 - Fixed: PDFs written with CJK (Chinese, Japanese, Korean) fonts that
