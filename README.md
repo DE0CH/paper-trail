@@ -6,16 +6,16 @@ Reading a paper means chasing references: Lemma 3.16 sends you to
 Definition 2.4, which sends you to Equation (7.2) — and five jumps later
 you've lost the page you were actually reading. Paper Trail records every
 jump on a **reading trail**, so you can always pop back to the exact spot
-you left, branch off side explorations, and save the whole thing to a
+you left, split side explorations onto their own trails, and save it to a
 file you can come back to (or keep in git next to the paper).
 
 Following references, popping back, jumping around the history, and
-branching into a new trail:
+continuing in a new trail:
 
 https://github.com/user-attachments/assets/dcff790c-ce33-457b-9f59-79731156e724
 
 <p align="center">
-  <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after branching with cmd+click">
+  <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after a cmd+click duplicated the first one">
   <img src="docs/media/preview.png" width="49%" alt="Hovering a reference previews its destination at page width">
 </p>
 
@@ -33,22 +33,22 @@ button in the browser, or just drop the file anywhere in the window.
 (Building from source is covered in
 [CONTRIBUTING.md](CONTRIBUTING.md).)
 
-## Trails and branches: how it works
+## Trails: how it works
 
 A **trail** is the path you took through the paper: every jump you make
 — following a reference, clicking an outline or thumbnail entry,
 marking a spot — appends a labelled entry to it, and the entry pins the
 exact position you jumped *from*, so Back always returns you precisely
-there. One trail behaves exactly like browser history: Back and Forward
+there. A trail behaves exactly like browser history: Back and Forward
 walk it, and jumping somewhere new while you're partway down discards
 the entries above you.
 
-A **branch** protects a trail from that overwriting. Branching copies
-your history so far into a fresh trail and continues there, so the
-original stays intact — like opening a link in a new browser tab,
-except Back still works in the copy. Use it whenever a side quest
-starts ("I'll just quickly check Lemma 2.3…") and switch between trails
-in the sidebar.
+You can keep **multiple trails**. `Cmd/Ctrl+click` a link to duplicate
+your trail so far onto a new one and follow the link there, leaving
+the original intact — like opening a link in a new browser tab, except
+Back still works in the copy. Do that whenever a side quest starts
+("I'll just quickly check Lemma 2.3…") and switch between trails in
+the sidebar.
 
 ## Reading with trails
 
@@ -57,17 +57,18 @@ in the sidebar.
 - **Back** (`Alt+←`) pops back to the *exact* position you left;
   **Forward** (`Alt+→`) goes down again. Following a new link mid-trail
   overwrites the entries above you, exactly like browser history.
-- **Cmd/Ctrl+click a link** (or middle-click) to **branch**: your whole
-  history is copied into a new trail and the jump happens there — so Back
-  still works, unlike a browser tab. Trails live in the sidebar: switch,
-  rename (double-click), close.
+- **Cmd/Ctrl+click a link** (or middle-click) to follow it **in a new
+  trail**: your history so far is duplicated onto it, so Back still
+  works — unlike a browser tab. Trails live in the sidebar: switch,
+  rename (double-click), duplicate, close, or start a fresh one with +.
 - **Mark a spot** you reached by scrolling or searching with the `+`
   button above the history list (or `Cmd/Ctrl+D`) — recorded like a
   link jump.
 - **Hover a link** for a moment to preview its destination in a panel the
   width of the page: scroll inside it, drag its bottom edge to resize.
 - **Undo** (`Cmd/Ctrl+Z`) reverts history changes — an overwritten
-  forward tail, a branch, a closed or renamed trail, even a replaced PDF.
+  forward tail, a new trail, a closed or renamed trail, even a
+  replaced PDF.
 - Entries never move on their own: scrolling doesn't touch them.
   Re-anchor one deliberately with the ⌖ button on its row (hover), or
   press `Cmd/Ctrl+E` for the current entry.
@@ -98,7 +99,7 @@ Here are some important ones:
 | Key | Action |
 | --- | --- |
 | `Alt+←` / `Alt+→` | Back / forward along the trail |
-| `Cmd/Ctrl+click` a link | Branch into a new trail |
+| `Cmd/Ctrl+click` a link | Follow it in a new trail |
 | `Cmd/Ctrl+D` | Mark the current position |
 | `Cmd/Ctrl+S` | Save session |
 

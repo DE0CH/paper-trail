@@ -41,28 +41,40 @@ export class Preview {
     // Keep the page label current while scrolling through the document.
     this.scroller.addEventListener('scroll', () => this.updateLabel());
 
-    // Bottom edge drag-to-resize.
-    const handle = el.querySelector<HTMLElement>('.previewResize')!;
-    handle.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      handle.setPointerCapture(e.pointerId);
-      const startY = e.clientY;
-      const startH = this.el.getBoundingClientRect().height;
-      const move = (ev: PointerEvent) => {
-        this.height = Math.min(
-          Math.max(startH + ev.clientY - startY, MIN_H),
-          window.innerHeight - 40,
-        );
-        this.el.style.height = `${this.height}px`;
-      };
-      const up = () => {
-        handle.removeEventListener('pointermove', move);
-        handle.removeEventListener('pointerup', up);
-        saveUI({ previewH: Math.round(this.height) });
-      };
-      handle.addEventListener('pointermove', move);
-      handle.addEventListener('pointerup', up);
-    });
+    // Both horizontal edges drag to resize: the bottom edge moves the
+    // bottom, the top edge moves the top (the opposite edge stays put).
+    const wireResize = (sel: string, top: boolean) => {
+      const handle = el.querySelector<HTMLElement>(sel)!;
+      handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        handle.setPointerCapture(e.pointerId);
+        const startY = e.clientY;
+        const rect = this.el.getBoundingClientRect();
+        const move = (ev: PointerEvent) => {
+          const dy = ev.clientY - startY;
+          if (top) {
+            const newTop = Math.min(Math.max(rect.top + dy, 8), rect.bottom - MIN_H);
+            this.height = rect.bottom - newTop;
+            this.el.style.top = `${newTop}px`;
+          } else {
+            this.height = Math.min(
+              Math.max(rect.height + dy, MIN_H),
+              window.innerHeight - 40,
+            );
+          }
+          this.el.style.height = `${this.height}px`;
+        };
+        const up = () => {
+          handle.removeEventListener('pointermove', move);
+          handle.removeEventListener('pointerup', up);
+          saveUI({ previewH: Math.round(this.height) });
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', up);
+      });
+    };
+    wireResize('.previewResize', false);
+    wireResize('.previewResizeTop', true);
   }
 
   scheduleShow(dest: string | unknown[], linkEl: HTMLElement): void {

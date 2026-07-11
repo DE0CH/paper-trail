@@ -258,7 +258,7 @@ export default function Sidebar({
           <button
             id="btnMark"
             className="inline-flex items-center justify-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
-            title={`Mark this spot — add the current position to the trail; ${MOD}-click to branch into a new trail`}
+            title={`Mark this spot — add the current position to the trail; ${MOD}-click to mark it in a new trail`}
             onClick={(e) => controller.markPosition(e.metaKey || e.ctrlKey)}
           >
             <IconPlus />

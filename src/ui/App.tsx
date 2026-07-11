@@ -396,10 +396,11 @@ export default function App() {
         id="preview"
         className="hidden fixed z-50 bg-white border border-borderapp rounded-lg shadow-[0_8px_28px_rgba(0,0,0,0.5)] overflow-hidden"
       >
-        <div className="previewScroll absolute inset-0 bottom-2 overflow-auto">
+        <div className="previewScroll absolute inset-0 top-2 bottom-2 overflow-auto">
           <div className="previewContent" />
         </div>
         <div className="previewPage absolute right-1.5 bottom-3 text-[11px] text-[#555] bg-white/85 px-1.5 rounded z-10">p.</div>
+        <div className="previewResizeTop absolute left-0 right-0 top-0 h-2 cursor-ns-resize bg-[#e8e8e8] hover:bg-[rgba(79,140,255,0.5)]" title="Drag to resize" />
         <div className="previewResize absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize bg-[#e8e8e8] hover:bg-[rgba(79,140,255,0.5)]" title="Drag to resize" />
       </div>
 

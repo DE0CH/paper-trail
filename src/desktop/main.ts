@@ -399,7 +399,7 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
       case 'link':
         tpl = [
           item('follow', 'Follow Link'),
-          item('branch', 'Branch into a New Trail'),
+          item('branch', 'Follow Link in a New Trail'),
         ];
         break;
       case 'histEntry':

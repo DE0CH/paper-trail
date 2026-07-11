@@ -432,7 +432,7 @@ export class Controller {
     this.viewer.scrollTo(pos);
     if (fork) {
       this.hist.fork({ label, pos });
-      this.showToast('Branched into a new trail');
+      this.showToast('Continued in a new trail');
     } else {
       this.hist.visit({ label, pos });
     }

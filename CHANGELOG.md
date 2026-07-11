@@ -13,9 +13,10 @@ matching section into the GitHub Release notes.
 - Press `?` for a proper shortcut cheat-sheet overlay.
 - Right-click menus everywhere, and they feel native: full edit menus
   with spell-check in text fields, Copy / Look Up / "Search Document
-  for …" on selections, and context actions on links (follow, branch),
-  history entries (jump, rename, re-anchor), trails (switch, rename,
-  duplicate, close), and the page (back, forward, mark, zoom).
+  for …" on selections, and context actions on links (follow, follow in
+  a new trail), history entries (jump, rename, re-anchor), trails
+  (switch, rename, duplicate, close), and the page (back, forward,
+  mark, zoom).
 - Windows: the window buttons are integrated into the toolbar and the
   menu bar is gone — everything is in the app itself.
 - macOS: the traffic lights are now exactly centered in the toolbar.

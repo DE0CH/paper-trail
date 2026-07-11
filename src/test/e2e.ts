@@ -229,6 +229,19 @@ async function run(): Promise<void> {
         span.holders === 41 && span.lastRendered && /p\.\s*41/.test(span.label ?? ''),
         JSON.stringify(span));
 
+      // The top edge resizes the popup too (bottom edge stays put).
+      const pvBox = (await page.locator('#preview').boundingBox())!;
+      await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y + 1);
+      await page.mouse.down();
+      await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y - 59, { steps: 6 });
+      await page.mouse.up();
+      const pvBox2 = (await page.locator('#preview').boundingBox())!;
+      check('dragging the preview top edge resizes it upward',
+        Math.abs((pvBox2.height - pvBox.height) - 60) < 6
+          && Math.abs((pvBox.y - pvBox2.y) - 60) < 6
+          && Math.abs((pvBox2.y + pvBox2.height) - (pvBox.y + pvBox.height)) < 3,
+        JSON.stringify({ before: pvBox, after: pvBox2 }));
+
       // Regression: preview canvases are device-pixel exact (no resample blur).
       const sharp = await page.evaluate(() => {
         const c = document.querySelector('#preview .previewPageHolder canvas') as HTMLCanvasElement;

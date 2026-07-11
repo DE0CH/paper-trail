@@ -9,10 +9,12 @@ is hand-vendored.
 
 A note on naming: the code and the UI use different vocabularies for
 the same concepts. What the UI calls a *trail* is a `stack` in the code
-(see `NavStacks` in `history.ts`), what the UI calls *branching* is
-`fork`, and what the UI calls a *reading session* is a progress file
-internally. Use the code vocabulary in code and in this document, and
-the UI vocabulary in anything a user reads.
+(see `NavStacks` in `history.ts`); the user-facing model is simply
+multiple trails, and the action the UI describes as following a link
+in a new trail is `fork` internally. What the UI calls a *reading
+session* is a progress file in the code. Use the code vocabulary in
+code and in this document, and the UI vocabulary in anything a user
+reads.
 
 ## Architecture
 

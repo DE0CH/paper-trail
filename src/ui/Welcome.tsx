@@ -42,7 +42,7 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
           A PDF reader that remembers <em>how</em> you got where you are.
           Every reference you follow extends your reading trail, so you can
           dive many levels deep and pop back to the exact spot you left.
-          {' '}{MOD}-click a link to branch off a separate trail.
+          {' '}{MOD}-click a link to follow it in a new trail.
         </p>
         <button
           className="mt-4 bg-accent text-white text-sm px-4.5 py-2 rounded-lg cursor-pointer hover:brightness-110"
