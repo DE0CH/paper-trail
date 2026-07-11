@@ -1,14 +1,15 @@
-# Contributing / developer notes
+# Contributing and developer documentation
 
 ## Stack
 
-TypeScript (strict) throughout. React + Vite + Tailwind CSS v4 for the
-UI; pdf.js (`pdfjs-dist` v6) for rendering; Electron for the desktop
-shell; Python for the helper scripts. No hand-vendored code.
+The app is written in strict TypeScript throughout. The UI uses React,
+Vite, and Tailwind CSS v4; rendering uses pdf.js (`pdfjs-dist` v6); the
+desktop shell is Electron; helper scripts are written in Python. Nothing
+is hand-vendored.
 
-Naming: user-facing copy (UI strings, README) says *trail*, *branch*,
-*reading session*; data-structure terms like *stack* and *fork* belong
-in code and in this file only.
+A note on naming: user-facing copy (UI strings and the README) says
+*trail*, *branch*, and *reading session*, while data-structure terms
+such as *stack* and *fork* belong in code and in this file only.
 
 ## Architecture
 
@@ -27,18 +28,18 @@ src/ui/                      React components; subscribe to the controller
                              snapshot via useSyncExternalStore
 src/node/server.ts           static server for browser use (127.0.0.1 only)
 src/desktop/                 Electron shell: paper-trail:// protocol, native menus,
-                             minimal contextBridge (menu actions only)
+                             minimal contextBridge (menu actions + OS file opens)
 src/test/e2e.ts              end-to-end suite        (npm test)
 src/test/perf.ts             performance profiler    (npm run perf)
 desktop/launch.py            build-if-needed + serve + open browser
 desktop/make_app.py          generate the macOS .app bundle
 ```
 
-The core is imperative and owns all state; React renders an immutable
-snapshot (`controller.getSnapshot()`) and calls controller methods. pdf.js
-canvases/text layers are non-React DOM inside a ref.
+The core is imperative and owns all state. React renders an immutable
+snapshot (`controller.getSnapshot()`) and calls controller methods. The
+pdf.js canvases and text layers are non-React DOM inside a ref.
 
-## Build, run, test
+## Building, running, and testing
 
 ```sh
 npm run dev        # Vite dev server (hot reload) on :5173
@@ -51,20 +52,28 @@ npm test           # e2e suite — needs `npm start` running
 npm run perf       # performance profile + limit search
 ```
 
-The e2e suite (playwright-core, headless, against the locally installed
-Edge/Chrome) emulates a user: clicking PDF links, dragging dividers and
-text selections, pinch (ctrl+wheel) bursts, keyboard shortcuts — and
-asserts outcomes down to device-pixel-exact canvas geometry and
-pinch-release position deltas. Keep element ids/classes (`#stacksPanel`,
-`.pdfLink`, `.searchHl`, ...) and the `window.__pt` hooks stable; tests
-depend on them.
+The end-to-end suite drives a headless copy of the locally installed
+Edge or Chrome with playwright-core. It emulates a person using the
+app — clicking PDF links, dragging dividers and text selections,
+sending pinch (ctrl+wheel) bursts, and pressing keyboard shortcuts —
+and asserts the outcomes, down to device-pixel-exact canvas geometry
+and pinch-release position deltas. Please keep element ids and classes
+(`#stacksPanel`, `.pdfLink`, `.searchHl`, and friends) and the
+`window.__pt` hooks stable, because the tests depend on them.
+
+When running the desktop shell next to an installed copy of the app,
+set `PT_USERDATA` to any directory to get a separate profile and a
+separate single-instance lock. Setting `PT_DEBUG=1` traces the IPC that
+delivers OS file opens.
 
 ## Session file format (`.ptl`)
 
-Line-oriented plain text, one logical fact per line, free text always
-last on the line (no escaping; newlines are flattened on save). Designed
-so appending an entry is a one-line git diff. Internal ids never appear;
-stacks are an ordered list and `active` is a 0-based position.
+Session files are line-oriented plain text with one logical fact per
+line, and free text always comes last on its line, so no escaping is
+needed (newlines inside names are flattened on save). The format is
+designed so that appending a history entry produces a one-line git
+diff. Internal ids never appear in the file; stacks are an ordered
+list, and `active` is a 0-based position into it.
 
 ```
 paper-trail-session v1
@@ -82,67 +91,71 @@ entry 8 0.2998 Start
 named 17 0.42 my own label
 ```
 
-`entry` lines have automatic labels (link text, `Marked p.N`, …);
-`named` lines are labels the user typed by hand — re-anchoring (⌖)
-refreshes automatic labels to the new position but never touches
-hand-written ones.
+Lines that start with `entry` carry automatic labels (link text,
+`Marked p.N`, and so on), while `named` marks a label the user typed by
+hand. Re-anchoring (⌖) refreshes automatic labels to the new position
+but never touches hand-written ones.
 
-Positions are scale-independent `{page, yRatio}`. The file identifies
-its PDF by NAME alone — deliberately no fingerprints, hashes, or paths,
-so it contains nothing the user can't see and control. Opening a
-session is always two explicit steps (session file, then PDF); a plain
-name comparison drives the mismatch banner. Older files with
-`pdf.relPath` / `pdf.fingerprint` / `pdf.size` lines still parse; those
-keys are ignored.
+Positions are scale-independent `{page, yRatio}` pairs. The file
+identifies its PDF by name alone — deliberately no fingerprints,
+hashes, or paths — so it contains nothing the user cannot see and
+control. Opening a session is always two explicit steps (first the
+session file, then the PDF), and a plain name comparison drives the
+mismatch banner. Older files that still contain `pdf.relPath`,
+`pdf.fingerprint`, or `pdf.size` lines parse fine; those keys are
+ignored.
 
-## pdf.js v6 embedding gotchas
+## pdf.js v6 embedding notes
 
 - The text layer is sized by CSS rules over per-span custom properties
   (`--font-height`, `--scale-x`) against `--total-scale-factor`; see
-  `globals.css`. Without them, spans lay out at the inherited font size
-  and selection/search/label geometry silently breaks.
-- Canvas geometry must be device-pixel exact: backing store =
-  `round(css × dpr)`, CSS box = `backing / dpr`, render transform =
-  exact backing/viewport ratio. Anything else resamples and softens
-  every glyph. Don't cap `devicePixelRatio` (browser zoom raises it);
-  cap only total canvas area.
-- `getDocument({data})` **transfers** the buffer — read `byteLength`
-  before. Destroy via the loading task. `convertToViewportRectangle` is
-  gone; convert the two corners with `convertToViewportPoint`.
+  `globals.css`. Without those rules, spans lay out at the inherited
+  font size, and selection, search, and label geometry silently break.
+- Canvas geometry must be device-pixel exact: the backing store is
+  `round(css × dpr)`, the CSS box is `backing / dpr`, and the render
+  transform is the exact backing-to-viewport ratio. Anything else
+  resamples the bitmap and softens every glyph. Do not cap
+  `devicePixelRatio` (browser zoom raises it); cap only the total
+  canvas area.
+- `getDocument({data})` transfers the buffer, so read `byteLength`
+  before calling it. Destroy documents via the loading task. The
+  `convertToViewportRectangle` helper is gone; convert the two corners
+  with `convertToViewportPoint` instead.
 - The annotation layer must be `pointer-events: none` with links opting
   back in, or it eats text selection.
-- A scale change mid-render invalidates the in-flight render; something
-  must re-trigger rendering (see `ensureRendered`'s finally block) or
-  pages stay blank.
-- Smooth zoom = CSS transform during the gesture (anchor held fixed),
-  re-render on commit, stale canvases kept stretched as placeholders.
-  Inter-page gaps must scale with `--scale-factor` so the transform and
-  the committed layout agree exactly; fixed-size gaps make the document
-  jump when the gesture ends.
+- A scale change invalidates any in-flight render, and something must
+  re-trigger rendering afterwards (see the `finally` block of
+  `ensureRendered`), or pages stay blank.
+- Smooth zoom works as a CSS transform during the gesture (with the
+  anchor point held fixed) and a re-render on commit, keeping the stale
+  canvases stretched as placeholders. Inter-page gaps must scale with
+  `--scale-factor` so that the transform and the committed layout agree
+  exactly; fixed-size gaps make the document jump when the gesture
+  ends.
 
 ## Undo design and performance
 
 Undo of history mutations is deliberately naive: every structural
 mutation pushes a full deep copy (`serialize()`) onto a bounded stack
-(50 deep, oldest dropped; in-memory only; redo cleared by any new
-action). `npm run perf` proves this is the right call: a snapshot costs
-0.01 ms at realistic scale, 0.6 ms at an absurd 100k entries, and never
-shows up in the CPU profile — rendering the unvirtualized history list
-dominates long before the data structure matters.
+that keeps 50 snapshots, drops the oldest, lives only in memory, and
+clears its redo side on any new action. The profiler (`npm run perf`)
+shows why this is the right call: a snapshot costs 0.01 ms at realistic
+scale and 0.6 ms at an absurd 100k entries, and it never shows up in
+the CPU profile — rendering the unvirtualized history list dominates
+long before the data structure matters. One measured soft limit is
+documented rather than enforced: interactions get sluggish past roughly
+20k entries in the active trail.
 
-Measured limit (documented, not enforced): interactions soften past
-~20k entries in the active trail.
-
-PDF replacement has its own single-slot document-level undo: the
-previous document is retained as a cheap re-readable source (File /
-handle / URL — never copied bytes) and any history mutation supersedes
-the pending replace-undo (`NavStacks.onMutate`).
+PDF replacement has its own single-slot, document-level undo. The
+previous document is retained as a cheap re-readable source (a File, a
+handle, or a URL — never copied bytes), and any history mutation
+supersedes the pending replace-undo (`NavStacks.onMutate`).
 
 ## Conventions
 
-- One commit per feature/fix, after its tests pass; descriptive messages
-  focused on the why.
-- UI copy: plain language, no data-structure jargon.
-- Panels own their widths independently — resizing/closing one never
+- Make one commit per feature or fix, after its tests pass, with a
+  descriptive message focused on the why.
+- Write UI copy in plain language without data-structure jargon.
+- Panels own their widths independently: resizing or closing one never
   resizes another.
 - History entry anchors change only through explicit user actions.

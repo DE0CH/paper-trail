@@ -49,6 +49,13 @@ re-litigate without asking.
   owner's browser. Keep element ids/classes and `window.__pt` hooks
   stable; tests depend on them.
 - Installing dependencies is pre-approved.
+- Edit files ONLY with the Edit/Write tools — never via python or shell
+  scripts. If a Write/Edit fails with "file has been modified", the
+  owner is probably editing it concurrently: re-read and retry.
+- Keep audiences separate: instructions the owner gives Claude are NOT
+  contributor/user documentation. CONTRIBUTING.md and README.md contain
+  only what contributors/users need, written in full sentences (no
+  fragments outside section titles), with no development war stories.
 - **Deployment steps happen in CI**, never on the dev machine: Vercel
   deploys, building/signing/notarizing release binaries, publishing
   releases. The dev machine only pushes commits and tags; secrets live
