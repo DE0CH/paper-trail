@@ -1,28 +1,11 @@
-// Persistence: per-document state in localStorage, recent files (with
-// optional FileSystemFileHandle for one-click reopen) in IndexedDB.
+// Persistence: UI prefs in localStorage, recent files (with optional
+// FileSystemFileHandle for one-click reopen) in IndexedDB. Reading state
+// deliberately lives ONLY in explicit session files: opening a plain PDF
+// always starts fresh.
 
-import type { RecentEntry, SerializedState } from './types';
+import type { RecentEntry } from './types';
 
-const LS_PREFIX = 'pt:doc:';
 const UI_KEY = 'pt:ui';
-
-export const Store = {
-  saveDoc(fp: string, data: SerializedState): void {
-    try {
-      localStorage.setItem(LS_PREFIX + fp, JSON.stringify(data));
-    } catch (e) {
-      console.warn('saveDoc failed', e);
-    }
-  },
-  loadDoc(fp: string): SerializedState | null {
-    try {
-      const raw = localStorage.getItem(LS_PREFIX + fp);
-      return raw ? (JSON.parse(raw) as SerializedState) : null;
-    } catch {
-      return null;
-    }
-  },
-};
 
 export interface UiPrefs {
   stacksW?: number;

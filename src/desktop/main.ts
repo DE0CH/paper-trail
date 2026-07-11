@@ -238,7 +238,6 @@ function buildMenu(): void {
         { type: 'separator' },
         { label: 'Save Reading Session', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
         { label: 'Load Reading Session\u2026', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('load-session') },
-        { label: 'New Reading Session', click: () => send('new-session') },
         { type: 'separator' },
         { label: 'Replace PDF (Keep History)\u2026', click: () => send('replace-pdf') },
         { type: 'separator' },

@@ -3,7 +3,7 @@ import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
 import {
   IconSidebar, IconToc, IconUndo, IconRedo, IconBack, IconForward, IconSwap,
-  IconPrev, IconNext,
+  IconPrev, IconNext, IconGitHub,
 } from './icons';
 
 const btn = 'px-2.5 py-1 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
@@ -71,11 +71,6 @@ export default function Toolbar({
         title="Load a reading session file (replaces your current reading history and position)"
         onClick={() => void controller.requestLoadSession()}>
         Load session&hellip;
-      </button>
-      <button id="btnNewSession" className={btn} disabled={!snap.docOpen}
-        title="Start a fresh reading session for this PDF — your current session file stays untouched"
-        onClick={() => controller.newSession()}>
-        New session
       </button>
       <span className="text-dim max-w-55 overflow-hidden text-ellipsis ml-1">{snap.docTitle}</span>
       {snap.docOpen && (
@@ -158,6 +153,14 @@ export default function Toolbar({
       <span id="searchCount" className="text-dim min-w-13 text-center">{snap.searchCount}</span>
       <button className={iconBtn} title="Previous match (Shift+Enter)" onClick={() => void controller.gotoMatch(-1)}><IconPrev /></button>
       <button className={iconBtn} title="Next match (Enter)" onClick={() => void controller.gotoMatch(1)}><IconNext /></button>
+      {sep}
+      <a
+        className={`${iconBtn} text-dim hover:text-fgapp`}
+        href="https://github.com/DE0CH/paper-trail"
+        target="_blank"
+        rel="noreferrer"
+        title="Source code on GitHub"
+      ><IconGitHub /></a>
     </header>
   );
 }

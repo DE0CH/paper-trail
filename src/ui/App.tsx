@@ -132,7 +132,6 @@ export default function App() {
         case 'open': void controller.pickFile(); break;
         case 'save': controller.saveProgressSafe(); break;
         case 'load-session': void controller.requestLoadSession(); break;
-        case 'new-session': controller.newSession(); break;
         case 'replace-pdf': void controller.requestReplacePdf(); break;
         case 'back': controller.goBack(); break;
         case 'forward': controller.goForward(); break;

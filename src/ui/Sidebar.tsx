@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MOD } from '../core/platform';
 import { controller, type Snapshot } from '../core/controller';
 import NavPanel, { type NavTab } from './NavPanel';
-import { IconAnchor, IconClose, IconEdit } from './icons';
+import { IconAnchor, IconClose, IconEdit, IconPlus, IconTrash } from './icons';
 
 const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
 // The rename input occupies the exact box of the name span (same font,
@@ -235,18 +235,19 @@ export default function Sidebar({
           <span className="flex-1" />
           <button
             id="btnMark"
-            className="inline-flex items-center h-7 text-[15px] leading-none text-dim hover:text-fgapp cursor-pointer px-1.5"
+            className="inline-flex items-center justify-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
             title={`Mark this spot — add the current position to the trail (m); ${MOD}-click to branch into a new trail`}
             onClick={(e) => controller.markPosition(e.metaKey || e.ctrlKey)}
           >
-            +
+            <IconPlus />
           </button>
           <button
-            className="inline-flex items-center h-7 text-[11px] leading-none text-dim hover:text-fgapp cursor-pointer px-1.5"
+            id="btnClearHistory"
+            className="inline-flex items-center justify-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
             title="Clear reading history (all trails)"
             onClick={() => controller.clearHistory()}
           >
-            clear
+            <IconTrash />
           </button>
         </div>
 

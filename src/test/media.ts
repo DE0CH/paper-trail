@@ -75,6 +75,15 @@ async function run(): Promise<void> {
   const executablePath = findBrowser();
   fs.mkdirSync(REC, { recursive: true });
 
+  // The README media should show the real paper, not the synthetic e2e
+  // fixture (which has placeholder text). Drop the actual PDF into
+  // sample/WStarCats-real.pdf (gitignored) to use it; the fixture is the
+  // fallback so the script still runs anywhere.
+  const PDF_PARAM = fs.existsSync(path.resolve(__dirname, '..', '..', 'sample', 'WStarCats-real.pdf'))
+    ? 'sample/WStarCats-real.pdf'
+    : 'sample/WStarCats.pdf';
+  console.log('recording against', PDF_PARAM);
+
   const browser = await chromium.launch({ executablePath, headless: true });
 
   // ---------- screenshots (crisp, deviceScaleFactor 2, no video) ----------
@@ -83,12 +92,8 @@ async function run(): Promise<void> {
       viewport: { width: 1280, height: 800 },
       deviceScaleFactor: 2,
     });
-    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.goto(BASE + '/?file=' + PDF_PARAM);
     await page.waitForSelector(LINK, { timeout: 20000 });
-    await page.evaluate(() => {
-      Object.keys(localStorage).filter((k) => k.startsWith('pt:doc:'))
-        .forEach((k) => localStorage.removeItem(k));
-    });
     // build a plausible reading state: a trail + a branch
     await page.locator(LINK).nth(3).click();
     await page.waitForTimeout(700);
@@ -144,12 +149,8 @@ async function run(): Promise<void> {
     const center = (box: { x: number; y: number; width: number; height: number }) =>
       ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
 
-    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.goto(BASE + '/?file=' + PDF_PARAM);
     await page.waitForSelector(LINK, { timeout: 20000 });
-    await page.evaluate(() => {
-      Object.keys(localStorage).filter((k) => k.startsWith('pt:doc:'))
-        .forEach((k) => localStorage.removeItem(k));
-    });
     await page.mouse.move(640, 400);
     await page.waitForTimeout(900);
 

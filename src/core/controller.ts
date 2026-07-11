@@ -8,7 +8,7 @@ import { NavStacks } from './history';
 import { SearchController } from './search';
 import { Preview } from './preview';
 import {
-  Store, putRecent, getRecent, getRecents, ensureReadPermission,
+  putRecent, getRecent, getRecents, ensureReadPermission,
 } from './store';
 import { parseProgress, serializeProgress, PROGRESS_EXT } from './progressFormat';
 import type {
@@ -82,7 +82,6 @@ export class Controller {
   } | null = null;
   private mismatch_: { savedName: string; openName: string } | null = null;
 
-  private saveTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private fileSaveTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private scrollTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private toastTimer: ReturnType<typeof setTimeout> | 0 = 0;
@@ -121,14 +120,14 @@ export class Controller {
         if (this.search.query) void this.search.highlightPage(p, n);
       },
       onScaleChange: () => {
-        this.scheduleSave();
+        this.markDirty();
         this.notify();
       },
     });
     this.search = new SearchController(this.viewer);
     this.preview = new Preview(this.viewer, previewEl);
     this.hist.onChange = () => {
-      this.scheduleSave();
+      this.markDirty();
       this.notify();
     };
     // Any history mutation supersedes a pending replace-undo/redo.
@@ -176,7 +175,6 @@ export class Controller {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {
-        if (this.currentFp) Store.saveDoc(this.currentFp, this.serializeState());
         if (this.session.handle && this.session.dirty) {
           this.writeProgressAuto().catch(() => { /* dirty flag stays honest */ });
         }
@@ -278,15 +276,6 @@ export class Controller {
     };
   }
 
-  private scheduleSave(): void {
-    if (!this.docOpen) return;
-    this.markDirty();
-    if (!this.currentFp) return;
-    clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      if (this.currentFp) Store.saveDoc(this.currentFp, this.serializeState());
-    }, 800);
-  }
 
   private markDirty(): void {
     if (this.restoring || !this.docOpen) return;
@@ -336,12 +325,6 @@ export class Controller {
     const pos = d.pos ?? this.hist.current?.pos;
     if (pos) this.viewer.scrollTo(pos);
     return true;
-  }
-
-  private restoreState(): boolean {
-    return this.currentFp
-      ? this.restoreStateFrom(Store.loadDoc(this.currentFp))
-      : false;
   }
 
   private async refreshRecents(): Promise<void> {
@@ -528,23 +511,6 @@ export class Controller {
     this.notify();
   }
 
-  /**
-   * Start a brand-new reading session for the open PDF: fresh history
-   * (undoable, like Clear History) and detached from any session file —
-   * saving prompts for a new .ptl, exactly like a freshly opened PDF.
-   * The previous session file on disk is left untouched.
-   */
-  newSession(): void {
-    if (!this.docOpen) return;
-    clearTimeout(this.fileSaveTimer); // no auto-save into the old file
-    this.hist.clearAll();
-    this.hist.updateCurrentPos(this.viewer.currentPosition());
-    this.session.handle = null;
-    this.session.dirty = true; // unsaved until the user picks a new file
-    this.mismatch_ = null;
-    this.showToast('New session \u2014 Save session writes a new file');
-    this.notify();
-  }
 
   /**
    * Undo the last history mutation (overwrite, fork, close, rename, clear)
@@ -641,7 +607,7 @@ export class Controller {
       // Note: scrolling never moves history entries — their positions only
       // change through explicit actions (following a link, back/forward,
       // or the re-anchor button). Only the session's view position updates.
-      this.scheduleSave();
+      this.markDirty();
       this.notify();
     }, 500);
   }
@@ -737,9 +703,9 @@ export class Controller {
         void this.buildOutline();
         if (progress?.state) {
           this.restoreStateFrom(progress.state);
-        } else {
-          this.restoreState();
         }
+        // No automatic restore for a plain PDF: opening a PDF starts
+        // fresh; state only comes from an explicit session file.
       } finally {
         this.restoring = false;
       }
@@ -926,7 +892,7 @@ export class Controller {
     this.mismatch_ = null;
     // progressFileObject() always serializes the currently open PDF's
     // identity, so marking the session dirty is enough to persist it.
-    this.scheduleSave();
+    this.markDirty();
     if (this.session.handle) {
       this.writeProgress().catch((e) => console.warn('adopt save failed', e));
     }

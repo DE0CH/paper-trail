@@ -534,13 +534,22 @@ async function run(): Promise<void> {
       noIds.stackLinesPlainNames && /^active \d+$/.test(noIds.activeLine ?? ''),
       JSON.stringify(noIds));
 
-    // --- progress file round trip over HTTP (?file=…pt.json) ---
+    // --- opening a plain PDF always starts fresh: reading state only ever
+    // comes from an explicit session file (no localStorage auto-resume) ---
     await page.evaluate(() => {
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith('pt:doc:'))
-        .forEach((k) => localStorage.removeItem(k));
       (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
     });
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector('.page canvas', { timeout: 20000 });
+    await page.waitForTimeout(400);
+    const fresh = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks }).__pt;
+      return { stacks: pt.hist.stacks.length, entries: pt.hist.active.entries.length };
+    });
+    check('opening a PDF starts fresh (no auto-resumed session)',
+      fresh.stacks === 1 && fresh.entries === 1, JSON.stringify(fresh));
+
+    // --- progress file round trip over HTTP (?file=…pt.json) ---
     await page.goto(BASE + '/?file=sample/WStarCats.ptl');
     await page.waitForSelector('.page canvas', { timeout: 20000 });
     await page.waitForTimeout(800);
@@ -716,33 +725,6 @@ async function run(): Promise<void> {
     });
     check('replace applies the loaded session',
       replaced.stack === 'RoundTrip' && replaced.page === 17, JSON.stringify(replaced));
-
-    // --- "New session": fresh history, detached from the session file,
-    // dirty like a first open; the old trails come back with undo ---
-    const ns = await page.evaluate(() => {
-      const pt = (window as never as {
-        __pt: PtHooks & { controller: { newSession(): void; undoHist(): void } };
-      }).__pt;
-      const beforeStacks = pt.hist.stacks.map((s) => s.name);
-      const boundBefore = !!pt.session.handle;
-      pt.controller.newSession();
-      const after = {
-        stacks: pt.hist.stacks.length,
-        entries: pt.hist.active.entries.length,
-        bound: !!pt.session.handle,
-        dirty: pt.session.dirty,
-      };
-      pt.controller.undoHist();
-      const undone = pt.hist.stacks.map((s) => s.name);
-      pt.controller.newSession(); // leave the fresh state for inspection
-      return { beforeStacks, boundBefore, after, undoRestores: JSON.stringify(undone) === JSON.stringify(beforeStacks) };
-    });
-    await page.waitForSelector('#saveDirtyDot', { timeout: 3000 });
-    check('new session resets to a single fresh trail, unbound and dirty',
-      ns.after.stacks === 1 && ns.after.entries === 1 && !ns.after.bound && ns.after.dirty,
-      JSON.stringify(ns.after));
-    check('undo restores the trails discarded by new session', ns.undoRestores,
-      JSON.stringify({ before: ns.beforeStacks }));
 
     // --- re-anchor an entry to the current position ---
     await page.evaluate(() => {
