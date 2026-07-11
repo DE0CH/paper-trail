@@ -22,12 +22,14 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v5
-      - name: Tag must match package.json version
+      - name: Tag must match package.json version and have a changelog entry
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
           PKG=$(node -p "require('./package.json').version")
           echo "tag=$TAG pkg=$PKG"
           test "$TAG" = "$PKG"
+          grep -q "^## $TAG$" CHANGELOG.md \
+            || { echo "::error::CHANGELOG.md has no '## $TAG' section — write the user-facing summary first"; exit 1; }
 
   windows:
     needs: [check-version]
@@ -59,10 +61,18 @@ jobs:
         shell: bash
         run: |
           "./dist-electron/win-unpacked/Paper Trail.exe" --smoke
+      - name: Extract the changelog section for the release notes
+        if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
+        shell: bash
+        run: |
+          V="${GITHUB_REF#refs/tags/v}"
+          awk -v v="$V" '$0 == "## "v {f=1; next} /^## / {f=0} f' CHANGELOG.md > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
       - name: Upload to GitHub Release
         if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
         uses: softprops/action-gh-release@v3
         with:
+          body_path: RELEASE_NOTES.md
           files: |
             dist-electron/*.exe
             dist-electron/*-win.zip
@@ -152,10 +162,18 @@ jobs:
       - name: List artifacts
         run: ls -la dist-electron/*.dmg dist-electron/*.zip
 
+      - name: Extract the changelog section for the release notes
+        if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
+        shell: bash
+        run: |
+          V="${GITHUB_REF#refs/tags/v}"
+          awk -v v="$V" '$0 == "## "v {f=1; next} /^## / {f=0} f' CHANGELOG.md > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
       - name: Upload to GitHub Release
         if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
         uses: softprops/action-gh-release@v3
         with:
+          body_path: RELEASE_NOTES.md
           files: |
             dist-electron/*.dmg
             dist-electron/*.zip
