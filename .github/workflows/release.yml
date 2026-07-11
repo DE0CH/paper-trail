@@ -45,6 +45,8 @@ jobs:
 
       - name: Generate the test-fixture PDF
         run: node build-node/test/fixture.js
+      - name: Run unit tests
+        run: node --test build-node/test/unit.js
       - name: Run e2e suite against the built app
         shell: bash
         run: |
@@ -95,6 +97,9 @@ jobs:
 
       - name: Generate the test-fixture PDF
         run: node build-node/test/fixture.js
+
+      - name: Run unit tests
+        run: node --test build-node/test/unit.js
 
       - name: Run e2e suite against the built app
         shell: bash

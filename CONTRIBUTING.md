@@ -7,9 +7,12 @@ Vite, and Tailwind CSS v4; rendering uses pdf.js (`pdfjs-dist` v6); the
 desktop shell is Electron; helper scripts are written in Python. Nothing
 is hand-vendored.
 
-A note on naming: user-facing copy (UI strings and the README) says
-*trail*, *branch*, and *reading session*, while data-structure terms
-such as *stack* and *fork* belong in code and in this file only.
+A note on naming: the code and the UI use different vocabularies for
+the same concepts. What the UI calls a *trail* is a `stack` in the code
+(see `NavStacks` in `history.ts`), what the UI calls *branching* is
+`fork`, and what the UI calls a *reading session* is a progress file
+internally. Use the code vocabulary in code and in this document, and
+the UI vocabulary in anything a user reads.
 
 ## Architecture
 
@@ -48,9 +51,14 @@ npm run build      # typecheck web (noEmit) + vite build → dist-web
 npm start          # serve dist-web at http://127.0.0.1:8377
 npm run desktop    # Electron shell (loads dist-web over paper-trail://)
 
+npm run test:unit  # fast unit tests for the pure core modules
 npm test           # e2e suite — needs `npm start` running
 npm run perf       # performance profile + limit search
 ```
+
+The unit tests (node:test, no extra dependencies) cover the pure core
+modules — the navigation history and the session-file format — and run
+in CI before the e2e suite.
 
 The end-to-end suite drives a headless copy of the locally installed
 Edge or Chrome with playwright-core. It emulates a person using the

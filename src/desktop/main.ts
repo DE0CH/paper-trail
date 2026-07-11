@@ -50,7 +50,7 @@ if (process.env.PT_USERDATA) {
 if (SMOKE) {
   app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'pt-smoke-')));
 } else if (!app.requestSingleInstanceLock()) {
-  // OS file opens on Windows/Linux arrive as a second process; forward
+  // OS file opens on Windows arrive as a second process; forward
   // them to the running instance (see 'second-instance').
   app.quit();
 }
@@ -97,13 +97,15 @@ function createWindow(): BrowserWindow {
     height: bounds.height,
     x: bounds.x !== undefined ? bounds.x + offset : undefined,
     y: bounds.y !== undefined ? bounds.y + offset : undefined,
-    show: !SMOKE,
+    show: !SMOKE && !process.env.PT_SHOT,
     backgroundColor: '#2b2d31',
-    // Traffic lights sit inside the app's own toolbar row, which is
-    // 44px tall on macOS (globals.css body.desktopMac): (44 - 12) / 2.
+    // The toolbar follows the native unified-toolbar metrics (52 px, see
+    // globals.css body.desktopMac) and per the HIG the traffic lights sit
+    // vertically centered in it with the standard leading inset. The y
+    // value is calibrated by measuring rendered pixels — do not derive it
+    // arithmetically; macOS applies its own offsets.
     ...(isMac ? {
-      titleBarStyle: 'hidden' as const,
-      trafficLightPosition: { x: 12, y: 16 },
+      titleBarStyle: 'hiddenInset' as const,
     } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -146,6 +148,10 @@ function createWindow(): BrowserWindow {
     }
     if (items.length) Menu.buildFromTemplate(items).popup();
   });
+
+  // Screenshot tooling: show the window WITHOUT activating it (no focus
+  // steal, may stay buried); it is then captured by window id.
+  if (process.env.PT_SHOT) win.showInactive();
 
   win.on('close', () => saveBounds(win));
 
@@ -206,7 +212,7 @@ app.on('open-file', (event, filePath) => {
   openPath(filePath);
 });
 
-// Windows/Linux: file path arrives in a second process's argv.
+// Windows: the file path arrives in a second process's argv.
 app.on('second-instance', (_event, argv) => {
   const files = argv.filter((a) => /\.(pdf|ptl)$/i.test(a) && fs.existsSync(a));
   if (files.length) files.forEach((f) => openPath(f));

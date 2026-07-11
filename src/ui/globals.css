@@ -141,11 +141,12 @@ body.resizing {
 /* ------------------------------------------------------------------ */
 
 body.desktopMac #toolbar {
-  /* Follow the native unified-toolbar height and leave room for the
-     inset traffic lights. Keep trafficLightPosition in desktop/main.ts
-     in sync: y = (height - 12) / 2. */
-  height: 44px;
-  padding-left: 84px;
+  /* Match the native unified-toolbar metrics (NSWindowToolbarStyle
+     .unified is 52 pt tall with the traffic lights vertically centered
+     and inset from the leading edge). trafficLightPosition in
+     desktop/main.ts is calibrated to this height by measurement. */
+  height: 52px;
+  padding-left: 92px;
   -webkit-app-region: drag;
 }
 body.desktopMac #toolbar :is(button, input) {
