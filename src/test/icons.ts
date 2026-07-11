@@ -2,6 +2,9 @@
 //   build/icon.icns  (macOS, via sips + iconutil — run on a Mac)
 //   build/icon.ico   (Windows, via ffmpeg)
 //   public/icon.svg  (favicon, copied into dist-web by Vite)
+// macOS keeps the squircle plate (apps draw their own on that
+// platform); Windows and the web get only the paper-and-trail artwork,
+// scaled up to fill the canvas, since icons there aren't plated.
 // The generated binaries are committed so CI never needs macOS tooling.
 // Usage: npm run icons
 
@@ -16,18 +19,36 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const SVG = path.join(ROOT, 'docs', 'icon.svg');
 const BUILD = path.join(ROOT, 'build');
 
+// The flat variant: no squircle plate, artwork scaled up to fill the
+// 1024 canvas (the art's bounding box is ~524x698 centered at 520,541).
+function flatSvg(): string {
+  const src = fs.readFileSync(SVG, 'utf8');
+  const flat = src
+    .replace(/^\s*<rect id="plate"[^\n]*\n/m, '')
+    .replace('<g id="art">', '<g id="art" transform="translate(-174 -202) scale(1.32)">');
+  if (flat === src || flat.includes('id="plate"')) {
+    throw new Error('docs/icon.svg no longer matches the flat-variant markers');
+  }
+  return flat;
+}
+
 async function run(): Promise<void> {
   fs.mkdirSync(BUILD, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-icons-'));
   const master = path.join(tmp, 'icon-1024.png');
+  const flatFile = path.join(tmp, 'icon-flat.svg');
+  const flatPng = path.join(tmp, 'icon-flat-1024.png');
+  fs.writeFileSync(flatFile, flatSvg());
 
   const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
   const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
-  await page.goto('file://' + SVG);
-  await page.evaluate(() => {
-    document.documentElement.style.background = 'transparent';
-  });
-  await page.screenshot({ path: master, omitBackground: true });
+  for (const [svg, png] of [[SVG, master], [flatFile, flatPng]] as const) {
+    await page.goto('file://' + svg);
+    await page.evaluate(() => {
+      document.documentElement.style.background = 'transparent';
+    });
+    await page.screenshot({ path: png, omitBackground: true });
+  }
   await browser.close();
 
   // macOS .icns
@@ -46,13 +67,13 @@ async function run(): Promise<void> {
   }
   execFileSync('iconutil', ['-c', 'icns', iconset, '-o', path.join(BUILD, 'icon.icns')]);
 
-  // Windows .ico (256px)
-  execFileSync('ffmpeg', ['-y', '-i', master, '-vf', 'scale=256:256',
+  // Windows .ico (256px, flat artwork)
+  execFileSync('ffmpeg', ['-y', '-i', flatPng, '-vf', 'scale=256:256',
     path.join(BUILD, 'icon.ico')], { stdio: 'ignore' });
 
-  // favicon
+  // favicon (flat artwork)
   fs.mkdirSync(path.join(ROOT, 'public'), { recursive: true });
-  fs.copyFileSync(SVG, path.join(ROOT, 'public', 'icon.svg'));
+  fs.writeFileSync(path.join(ROOT, 'public', 'icon.svg'), flatSvg());
 
   fs.rmSync(tmp, { recursive: true, force: true });
   for (const f of ['build/icon.icns', 'build/icon.ico', 'public/icon.svg']) {

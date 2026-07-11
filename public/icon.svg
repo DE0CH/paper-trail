@@ -11,29 +11,33 @@
     </linearGradient>
   </defs>
 
-  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- The squircle plate belongs to the macOS icon only; the icons
+       script strips it (and scales #art up) for the Windows and web
+       icons, which are the bare paper-and-trail artwork. -->
 
-  <!-- document with folded corner -->
-  <path d="M302 192 h310 l170 170 v426 a44 44 0 0 1 -44 44 h-436 a44 44 0 0 1 -44 -44 v-552 a44 44 0 0 1 44 -44 z"
-        fill="url(#page)"/>
-  <path d="M612 192 l170 170 h-126 a44 44 0 0 1 -44 -44 z" fill="#c5c9d3"/>
+  <g id="art" transform="translate(-174 -202) scale(1.32)">
+    <!-- document with folded corner -->
+    <path d="M302 192 h310 l170 170 v426 a44 44 0 0 1 -44 44 h-436 a44 44 0 0 1 -44 -44 v-552 a44 44 0 0 1 44 -44 z"
+          fill="url(#page)"/>
+    <path d="M612 192 l170 170 h-126 a44 44 0 0 1 -44 -44 z" fill="#c5c9d3"/>
 
-  <!-- faint text lines -->
-  <g stroke="#ccd0d9" stroke-width="20" stroke-linecap="round">
-    <line x1="356" y1="330" x2="540" y2="330"/>
-    <line x1="356" y1="404" x2="672" y2="404"/>
-    <line x1="356" y1="478" x2="640" y2="478"/>
-    <line x1="356" y1="552" x2="672" y2="552"/>
-    <line x1="356" y1="626" x2="600" y2="626"/>
-    <line x1="356" y1="700" x2="660" y2="700"/>
+    <!-- faint text lines -->
+    <g stroke="#ccd0d9" stroke-width="20" stroke-linecap="round">
+      <line x1="356" y1="330" x2="540" y2="330"/>
+      <line x1="356" y1="404" x2="672" y2="404"/>
+      <line x1="356" y1="478" x2="640" y2="478"/>
+      <line x1="356" y1="552" x2="672" y2="552"/>
+      <line x1="356" y1="626" x2="600" y2="626"/>
+      <line x1="356" y1="700" x2="660" y2="700"/>
+    </g>
+
+    <!-- the trail: dotted path from a start point up to the current spot -->
+    <path d="M340 856 C 520 812, 400 660, 528 600 C 660 540, 640 500, 596 452"
+          fill="none" stroke="#4f8cff" stroke-width="30"
+          stroke-linecap="round" stroke-dasharray="0.5 66"/>
+    <circle cx="340" cy="856" r="34" fill="#4f8cff"/>
+    <!-- current position: a target ring, like the current-entry highlight -->
+    <circle cx="576" cy="430" r="58" fill="#4f8cff"/>
+    <circle cx="576" cy="430" r="30" fill="none" stroke="#ffffff" stroke-width="13"/>
   </g>
-
-  <!-- the trail: dotted path from a start point up to the current spot -->
-  <path d="M340 856 C 520 812, 400 660, 528 600 C 660 540, 640 500, 596 452"
-        fill="none" stroke="#4f8cff" stroke-width="30"
-        stroke-linecap="round" stroke-dasharray="0.5 66"/>
-  <circle cx="340" cy="856" r="34" fill="#4f8cff"/>
-  <!-- current position: a target ring, like the current-entry highlight -->
-  <circle cx="576" cy="430" r="58" fill="#4f8cff"/>
-  <circle cx="576" cy="430" r="30" fill="none" stroke="#ffffff" stroke-width="13"/>
 </svg>
