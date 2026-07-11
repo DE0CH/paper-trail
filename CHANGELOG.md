@@ -3,6 +3,21 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.4.5
+
+- Fixed: marking a spot (`Cmd/Ctrl+D`) no longer silently rewrites the
+  anchor of the entry you were on — anchors only ever move when you
+  re-anchor deliberately.
+- Fixed: expanding an outline section after Collapse All no longer
+  flashes the whole subtree before settling.
+- Re-anchoring is now `Cmd/Ctrl+G` (the E-based combos belong to the
+  browser and never reached the app).
+- The app feels more at home on the desktop: the macOS close button
+  shows the standard dot while the session has unsaved changes, opened
+  files appear in the title-bar proxy and the Windows taskbar Jump
+  List, the Dock menu offers New Window, and there's a proper About
+  panel.
+
 ## 0.4.4
 
 - Search is a floating find bar now: `Cmd/Ctrl+F` summons it, Escape
