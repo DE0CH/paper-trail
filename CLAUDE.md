@@ -18,6 +18,11 @@ re-litigate without asking.
 - Reading-session files are line-oriented plain text (`.ptl`), designed
   for clean git diffs. **Never JSON** for user-facing save formats. Free
   text goes last on a line; no internal ids in the file.
+- Session-format compatibility policy: before 1.0 the format may change
+  freely (the header's `v<N>` plus a friendly newer-version message is
+  enough — no migration machinery). From 1.0 on, save files must be
+  handled defensively: strict backward compatibility and migrations for
+  every format change.
 - History entry anchors never change from scrolling — only from explicit
   actions (link follow, back/forward capture, ⌖ re-anchor, `m` mark).
 - Undo/redo is deliberately fragile like a normal editor: in-memory only,

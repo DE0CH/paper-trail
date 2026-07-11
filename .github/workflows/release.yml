@@ -77,7 +77,9 @@ jobs:
           body_path: RELEASE_NOTES.md
           files: |
             dist-electron/*.exe
+            dist-electron/*.exe.blockmap
             dist-electron/*-win.zip
+            dist-electron/latest.yml
           generate_release_notes: true
 
   mac:
@@ -182,4 +184,6 @@ jobs:
           files: |
             dist-electron/*.dmg
             dist-electron/*.zip
+            dist-electron/*.blockmap
+            dist-electron/latest-mac.yml
           generate_release_notes: true

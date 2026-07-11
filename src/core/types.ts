@@ -75,7 +75,8 @@ export type MenuAction =
   | 'undo' | 'redo' | 'mark' | 'mark-branch' | 'reanchor'
   | 'trail-prev' | 'trail-next' | 'trail-duplicate'
   | 'zoom-in' | 'zoom-out' | 'fit' | 'find' | 'search-selection'
-  | 'toggle-sidebar' | 'toggle-nav' | 'clear-history' | 'help';
+  | 'toggle-sidebar' | 'toggle-nav' | 'clear-history' | 'help'
+  | 'update-ready';
 
 /** What the renderer right-clicked on; the shell shows a native menu for it. */
 export type ContextMenuRequest =

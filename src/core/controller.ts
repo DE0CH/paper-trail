@@ -10,7 +10,9 @@ import { Preview } from './preview';
 import {
   putRecent, getRecents, removeRecent, ensureReadPermission,
 } from './store';
-import { parseProgress, serializeProgress, PROGRESS_EXT } from './progressFormat';
+import {
+  parseProgress, serializeProgress, progressVersion, PROGRESS_EXT, PROGRESS_VERSION,
+} from './progressFormat';
 import type {
   HistStack, OutlineNode, Pos, ProgressFile, RecentEntry, SerializedState,
 } from './types';
@@ -870,9 +872,13 @@ export class Controller {
     file: File,
     progressHandle: FileSystemFileHandle | null = null,
   ): Promise<void> {
-    const json = parseProgress(await file.text());
+    const text = await file.text();
+    const json = parseProgress(text);
     if (!json) {
-      this.showToast('Not a reading-session file');
+      const v = progressVersion(text);
+      this.showToast(v !== null && v > PROGRESS_VERSION
+        ? 'This session file was saved by a newer version of Paper Trail \u2014 update the app to open it'
+        : 'Not a reading-session file');
       return;
     }
 

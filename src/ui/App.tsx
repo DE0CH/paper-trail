@@ -286,6 +286,12 @@ export default function App() {
         case 'trail-prev': controller.stackCycle(-1); break;
         case 'trail-next': controller.stackCycle(1); break;
         case 'trail-duplicate': controller.stackDuplicateActive(); break;
+        case 'update-ready':
+          controller.showToast(
+            `Update ${payload ?? ''} downloaded \u2014 it installs when you quit Paper Trail`,
+            8000,
+          );
+          break;
         default: break;
       }
     });

@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
+import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
 
 const SMOKE = process.argv.includes('--smoke');
@@ -300,6 +301,58 @@ function loadSessionDialog(): void {
   });
 }
 
+// ---- automatic updates (GitHub Releases feed) ----
+
+/**
+ * Updates download in the background and install when the app quits.
+ * A toast in the renderer announces a downloaded update; the macOS menu
+ * also offers an explicit check. Dev/test builds never update.
+ */
+function setupAutoUpdates(): void {
+  if (SMOKE || !app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-downloaded', (info) => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('pt-menu', 'update-ready', info.version);
+    }
+  });
+  autoUpdater.on('error', (e) => dbg('auto-update error', e));
+  const check = () => {
+    autoUpdater.checkForUpdates().catch((e) => dbg('update check failed', e));
+  };
+  check();
+  setInterval(check, 6 * 60 * 60 * 1000);
+}
+
+async function checkForUpdatesInteractive(): Promise<void> {
+  if (!app.isPackaged) {
+    await dialog.showMessageBox({ message: 'Updates apply to the installed app only.' });
+    return;
+  }
+  try {
+    const r = await autoUpdater.checkForUpdates();
+    const latest = r?.updateInfo.version;
+    if (!latest || latest === app.getVersion()) {
+      await dialog.showMessageBox({
+        message: 'You\u2019re up to date',
+        detail: `Paper Trail ${app.getVersion()} is the latest version.`,
+      });
+    } else {
+      await dialog.showMessageBox({
+        message: `Updating to ${latest}\u2026`,
+        detail: 'The update downloads in the background and installs when you quit.',
+      });
+    }
+  } catch (e) {
+    await dialog.showMessageBox({
+      type: 'error',
+      message: 'Update check failed',
+      detail: String(e),
+    });
+  }
+}
+
 // ---- menu ----
 
 function buildMenu(): void {
@@ -308,6 +361,7 @@ function buildMenu(): void {
       label: app.name,
       submenu: [
         { role: 'about' },
+        { label: 'Check for Updates\u2026', click: () => void checkForUpdatesInteractive() },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -517,6 +571,7 @@ ipcMain.on('pt-open-file-ready', (event) => {
 
 void app.whenReady().then(() => {
   registerAppProtocol();
+  setupAutoUpdates();
   // macOS gets the full native menu bar; Windows has none (its window
   // chrome integrates with the toolbar, and shortcuts live in the app).
   if (isMac) buildMenu();

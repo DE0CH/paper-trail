@@ -5,7 +5,9 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { NavStacks } from '../core/history';
-import { parseProgress, serializeProgress, PROGRESS_HEADER } from '../core/progressFormat';
+import {
+  parseProgress, serializeProgress, progressVersion, PROGRESS_HEADER, PROGRESS_VERSION,
+} from '../core/progressFormat';
 import type { ProgressFile, SerializedState } from '../core/types';
 
 const pos = (page: number, yRatio = 0) => ({ page, yRatio });
@@ -240,4 +242,19 @@ test('parse rejects garbage, wrong headers, and structureless files', () => {
   assert.equal(parseProgress('not a session file'), null);
   assert.equal(parseProgress(`${PROGRESS_HEADER}\nentry 1 0 orphan\n`), null);
   assert.equal(parseProgress(`${PROGRESS_HEADER}\nstack empty\n`), null);
+});
+
+test('the header carries the format version for future evolution', () => {
+  // written files declare the current version
+  const text = serializeProgress(fileFor(new NavStacks()));
+  assert.equal(progressVersion(text), PROGRESS_VERSION);
+  // declared versions are read back precisely
+  assert.equal(progressVersion('paper-trail-session v7\nstack x\n'), 7);
+  // non-session text has no version at all
+  assert.equal(progressVersion('not a session file'), null);
+  assert.equal(progressVersion('paper-trail-session vNaN\n'), null);
+  // a file from a newer major is refused rather than misread
+  const future = `paper-trail-session v${PROGRESS_VERSION + 1}\n`
+    + 'pdf.name X.pdf\nactive 0\n\nstack Main\ncursor 0\nentry 1 0 Start\n';
+  assert.equal(parseProgress(future), null);
 });

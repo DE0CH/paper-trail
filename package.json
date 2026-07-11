@@ -41,6 +41,11 @@
   "build": {
     "appId": "local.paper-trail",
     "productName": "Paper Trail",
+    "publish": {
+      "provider": "github",
+      "owner": "DE0CH",
+      "repo": "paper-trail"
+    },
     "directories": {
       "output": "dist-electron"
     },
@@ -102,6 +107,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "electron-context-menu": "^3.6.1"
+    "electron-context-menu": "^3.6.1",
+    "electron-updater": "^6.8.9"
   }
 }

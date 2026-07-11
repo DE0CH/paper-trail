@@ -31,6 +31,23 @@ import type { HistStack, ProgressFile } from './types';
 export const PROGRESS_HEADER = 'paper-trail-session v1';
 export const PROGRESS_EXT = '.ptl';
 
+/**
+ * The format version this build reads and writes. The header line
+ * (`paper-trail-session v<N>`) exists so the format can evolve: files
+ * from a newer major are refused with a clear message instead of being
+ * misread, and older ones can be migrated.
+ */
+export const PROGRESS_VERSION = 1;
+
+/**
+ * The version a session file declares in its header, or null when the
+ * text is not a session file at all.
+ */
+export function progressVersion(text: string): number | null {
+  const m = (text.split(/\r?\n/, 1)[0] ?? '').trim().match(/^paper-trail-session v(\d+)$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 const line = (s: string) => s.replace(/[\r\n]+/g, ' ').trimEnd();
 
 export function serializeProgress(p: ProgressFile): string {
@@ -61,7 +78,7 @@ export function serializeProgress(p: ProgressFile): string {
 
 export function parseProgress(text: string): ProgressFile | null {
   const lines = text.split(/\r?\n/);
-  if ((lines[0] ?? '').trim() !== PROGRESS_HEADER) return null;
+  if (progressVersion(text) !== PROGRESS_VERSION) return null;
 
   const kv: Record<string, string> = {};
   const stacks: HistStack[] = [];
