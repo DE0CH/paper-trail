@@ -81,8 +81,13 @@ active 0
 stack RoundTrip
 cursor 1
 entry 8 0.2998 Start
-entry 17 0.42 Lemma test-marker
+named 17 0.42 my own label
 ```
+
+`entry` lines have automatic labels (link text, `Marked p.N`, …);
+`named` lines are labels the user typed by hand — re-anchoring (⌖)
+refreshes automatic labels to the new position but never touches
+hand-written ones.
 
 Positions are scale-independent `{page, yRatio}`. The file identifies
 its PDF by NAME alone — deliberately no fingerprints, hashes, or paths,

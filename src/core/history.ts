@@ -99,18 +99,24 @@ export class NavStacks {
 
   renameEntry(i: number, label: string): void {
     const e = this.active.entries[i];
+    // Saving the same text is not an edit: the label stays automatic.
     if (!e || !label.trim() || e.label === label.trim()) return;
     this.recordUndo();
     e.label = label.trim();
+    e.edited = true;
     this.emit();
   }
 
-  /** Re-anchor an entry of the active stack to a new position (undoable). */
+  /**
+   * Re-anchor an entry of the active stack to a new position (undoable).
+   * Automatic labels follow the new position; hand-renamed ones stay.
+   */
   setEntryPos(i: number, pos: Pos): void {
     const e = this.active.entries[i];
     if (!e) return;
     this.recordUndo();
     e.pos = pos;
+    if (!e.edited) e.label = `p. ${pos.page}`;
     this.emit();
   }
 
@@ -148,7 +154,7 @@ export class NavStacks {
     const s = this.active;
     const copy = s.entries
       .slice(0, s.index + 1)
-      .map((e) => ({ label: e.label, pos: { ...e.pos } }));
+      .map((e) => ({ label: e.label, pos: { ...e.pos }, ...(e.edited ? { edited: true } : {}) }));
     copy.push(entry);
     const ns = this.mkStack(null, copy, copy.length - 1);
     this.stacks.push(ns);
@@ -221,7 +227,11 @@ export class NavStacks {
         id: s.id,
         name: s.name,
         index: s.index,
-        entries: s.entries.map((e) => ({ label: e.label, pos: e.pos })),
+        entries: s.entries.map((e) => ({
+          label: e.label,
+          pos: e.pos,
+          ...(e.edited ? { edited: true } : {}),
+        })),
       })),
     };
   }
@@ -234,7 +244,11 @@ export class NavStacks {
         id: s.id,
         name: String(s.name),
         index: Math.min(Math.max(s.index | 0, 0), s.entries.length - 1),
-        entries: s.entries.map((e) => ({ label: String(e.label), pos: e.pos })),
+        entries: s.entries.map((e) => ({
+          label: String(e.label),
+          pos: e.pos,
+          ...(e.edited ? { edited: true } : {}),
+        })),
       }));
       this.nextId = Math.max(...this.stacks.map((s) => s.id)) + 1;
       this.nameCounter = Math.max(d.nameCounter | 0, this.stacks.length + 1);

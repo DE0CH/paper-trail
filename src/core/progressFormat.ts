@@ -14,7 +14,10 @@
 //   stack RoundTrip
 //   cursor 1
 //   entry 8 0.29980178 Start
-//   entry 17 0.42 Lemma test-marker
+//   named 17 0.42 my own label
+//
+// `entry` lines carry automatic labels; `named` marks a label the user
+// typed by hand (re-anchoring refreshes automatic labels only).
 //
 // The PDF is identified by its NAME alone — deliberately no fingerprints,
 // hashes, or paths, so the file holds nothing the user can't see and
@@ -49,7 +52,7 @@ export function serializeProgress(p: ProgressFile): string {
     out.push(`stack ${line(s.name)}`);
     out.push(`cursor ${s.index}`);
     for (const e of s.entries) {
-      out.push(`entry ${e.pos.page} ${e.pos.yRatio} ${line(e.label)}`);
+      out.push(`${e.edited ? 'named' : 'entry'} ${e.pos.page} ${e.pos.yRatio} ${line(e.label)}`);
     }
   }
   out.push('');
@@ -80,13 +83,14 @@ export function parseProgress(text: string): ProgressFile | null {
         stacks.push(cur);
       } else if (key === 'cursor') {
         if (cur) cur.index = parseInt(rest, 10) | 0;
-      } else if (key === 'entry') {
+      } else if (key === 'entry' || key === 'named') {
         if (!cur) return null;
         const m = rest.match(/^(\d+) (\S+)(?: (.*))?$/);
         if (!m) return null;
         cur.entries.push({
           label: m[3] ?? '',
           pos: { page: parseInt(m[1], 10), yRatio: Number(m[2]) },
+          ...(key === 'named' ? { edited: true } : {}),
         });
       } else {
         kv[key] = rest;

@@ -750,6 +750,42 @@ async function run(): Promise<void> {
       anchored.page === 5 && Math.abs(anchored.yRatio - 0.3) < 0.02,
       JSON.stringify(anchored));
 
+    // --- re-anchoring and labels: automatic labels follow the anchor,
+    // hand-renamed ones stay; an unchanged rename is not an edit ---
+    const labels = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks & PtFormatHooks & {
+        hist: { setEntryPos(i: number, pos: { page: number; yRatio: number }): void };
+      } }).__pt;
+      const auto = pt.hist.active.entries[0].label; // re-anchored above
+      pt.hist.renameEntry(1, 'my special place');
+      pt.hist.setEntryPos(1, { page: 9, yRatio: 0.1 });
+      const renamed = pt.hist.active.entries[1].label;
+      pt.hist.renameEntry(0, pt.hist.active.entries[0].label); // no-op rename
+      pt.hist.setEntryPos(0, { page: 11, yRatio: 0 });
+      const still = pt.hist.active.entries[0].label;
+      const text = pt.progressText();
+      const parsed = pt.parseProgressText(text);
+      const parsedEdited = parsed?.state.hist.stacks.flatMap((st) => st.entries)
+        .filter((e) => (e as { edited?: boolean }).edited).map((e) => e.label);
+      return {
+        auto,
+        renamed,
+        still,
+        namedLine: text.split('\n').find((l) => l.startsWith('named ')),
+        parsedEdited,
+      };
+    });
+    check('re-anchoring refreshes an automatic label', labels.auto === 'p. 5',
+      JSON.stringify(labels));
+    check('re-anchoring keeps a hand-renamed label',
+      labels.renamed === 'my special place', JSON.stringify(labels));
+    check('a rename that changes nothing stays automatic',
+      labels.still === 'p. 11', JSON.stringify(labels));
+    check('hand-named entries round-trip via named lines',
+      /^named 9 0.1 my special place$/.test(labels.namedLine ?? '')
+        && JSON.stringify(labels.parsedEdited) === '["my special place"]',
+      JSON.stringify({ line: labels.namedLine, parsed: labels.parsedEdited }));
+
     // --- manually mark the current position onto the trail ---
     await page.evaluate(() => {
       (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 7, yRatio: 0.6 });

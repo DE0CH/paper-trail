@@ -11,6 +11,12 @@ export interface Pos {
 export interface HistEntry {
   label: string;
   pos: Pos;
+  /**
+   * True once the user renamed the entry by hand (a rename that leaves
+   * the text unchanged does not count). Re-anchoring keeps hand-written
+   * labels but refreshes automatic ones.
+   */
+  edited?: boolean;
 }
 
 export interface HistStack {
