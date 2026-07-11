@@ -1,8 +1,7 @@
-# The full test pyramid on every OS/CPU combination users run:
-# [Windows, macOS] x [x86-64, ARM64]. Each cell builds the app, runs the
-# unit tests, the browser e2e suite, the desktop e2e suite (offline),
-# the desktop-shell regression harnesses, then packages the real
-# installer artifacts and installs and smoke-tests them like a user.
+# The full test pyramid on every OS/CPU combination users run. Windows
+# and macOS need different steps (different packaging and installer
+# tests), so each has its own job — and each job runs on both CPU
+# architectures via a runner matrix.
 
 name: CI
 
@@ -13,12 +12,12 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  test:
+  windows:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, windows-11-arm, macos-latest, macos-15-intel]
-    runs-on: ${{ matrix.os }}
+        runner: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
 
@@ -63,7 +62,6 @@ jobs:
         run: npx electron build-node/test/desktopAutosave.js
 
       - name: Package the Windows app (unsigned)
-        if: runner.os == 'Windows'
         env:
           # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
           # which the NSIS extractor plugin can't decode — installs on ARM
@@ -71,23 +69,68 @@ jobs:
           ELECTRON_BUILDER_7Z_FILTER: BCJ2
         run: npx electron-builder --win --publish never
 
-      - name: Package the macOS app (unsigned)
-        if: runner.os == 'macOS'
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder --mac --publish never -c.mac.notarize=false
-
       - name: Smoke-test the packaged app
-        if: runner.os == 'Windows'
         shell: bash
         run: |
           "./dist-electron/win-unpacked/Paper Trail.exe" --smoke
 
       - name: Installer test (install, shortcuts, smoke, uninstall)
-        if: runner.os == 'Windows'
         shell: bash
         run: node build-node/test/installerWin.js
 
+  mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Unit tests
+        run: node --test build-node/test/unit.js
+
+      - name: Browser e2e suite (headless browser + node server)
+        shell: bash
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          node build-node/test/e2e.js
+
+      - name: Desktop e2e suite (Electron shell, fully offline)
+        shell: bash
+        run: node build-node/test/desktopE2e.js
+
+      - name: Desktop save regression (menu actions without user activation)
+        shell: bash
+        run: npx electron build-node/test/desktopSave.js
+
+      - name: Desktop offline regression (no network requests at all)
+        shell: bash
+        run: npx electron build-node/test/desktopOffline.js
+
+      - name: Desktop auto-save regression (Recents re-arm auto-save)
+        shell: bash
+        run: npx electron build-node/test/desktopAutosave.js
+
+      - name: Package the macOS app (unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac --publish never -c.mac.notarize=false
+
       - name: Installer test (dmg, zip, universal binary, smoke)
-        if: runner.os == 'macOS'
         run: node build-node/test/installerMac.js
