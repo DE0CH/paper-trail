@@ -34,6 +34,7 @@ const GROUPS: Array<{ title: string; rows: Array<{ keys: string[]; label: string
       { keys: [`${ALT}+→`, `${MOD}+]`], label: 'Forward' },
       { keys: [`${MOD}+click`], label: 'Follow a link in a new trail' },
       { keys: [`${ALT}+[`, `${ALT}+]`], label: 'Previous / next trail' },
+      { keys: [`${ALT}+⇧+D`], label: 'Duplicate the current trail' },
       { keys: [`${MOD}+D`], label: 'Mark the current position' },
       { keys: [`${MOD}+⇧+D`], label: 'Mark in a new trail' },
       { keys: [`${MOD}+⇧+E`], label: 'Re-anchor the current entry' },

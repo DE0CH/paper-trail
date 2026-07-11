@@ -95,6 +95,7 @@ export default function App() {
         else if (e.key === 'ArrowRight') { e.preventDefault(); controller.goForward(); }
         else if (e.code === 'BracketLeft') { e.preventDefault(); controller.stackCycle(-1); }
         else if (e.code === 'BracketRight') { e.preventDefault(); controller.stackCycle(1); }
+        else if (e.shiftKey && e.code === 'KeyD') { e.preventDefault(); controller.stackDuplicateActive(); }
         return;
       }
       if (!mod) return;
@@ -269,6 +270,7 @@ export default function App() {
         case 'help': toggleHelp(); break;
         case 'trail-prev': controller.stackCycle(-1); break;
         case 'trail-next': controller.stackCycle(1); break;
+        case 'trail-duplicate': controller.stackDuplicateActive(); break;
         default: break;
       }
     });

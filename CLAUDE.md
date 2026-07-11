@@ -41,8 +41,11 @@ re-litigate without asking.
   (never shell scripts); frameworks and tooling over hand-rolled code.
 - One commit per feature/fix, after its tests pass. Commit a draft
   before debugging. Signed commits via Bitwarden (owner approves in GUI).
-- Bug reports: reproduce first (scripted, headless), find the root
-  cause, fix, verify with a permanent regression test.
+- Bug reports, strict TDD order: (1) reproduce the bug; (2) find the
+  root cause; (3) write a regression test and WATCH IT FAIL on the bug;
+  (4) fix the bug; (5) watch the test pass. If the test itself needs
+  fixing afterwards, unapply the fix to see the corrected test fail,
+  then re-apply the fix to see it pass.
 - Measure before optimizing: use the profiler (`npm run perf`) to decide;
   document limits (hard vs soft) instead of enforcing caps.
 - e2e tests drive a **separate headless** Edge/Chrome — never the

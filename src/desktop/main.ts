@@ -334,6 +334,7 @@ function buildMenu(): void {
         { type: 'separator' },
         { label: 'Previous Trail', accelerator: 'Alt+[', click: () => send('trail-prev') },
         { label: 'Next Trail', accelerator: 'Alt+]', click: () => send('trail-next') },
+        { label: 'Duplicate Trail', accelerator: 'Alt+Shift+D', click: () => send('trail-duplicate') },
         { type: 'separator' },
         { label: 'Mark This Spot', accelerator: 'CmdOrCtrl+D', click: () => send('mark') },
         { label: 'Mark in a New Trail', accelerator: 'CmdOrCtrl+Shift+D', click: () => send('mark-branch') },

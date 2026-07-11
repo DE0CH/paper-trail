@@ -3,6 +3,22 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.4.4
+
+- Search is a floating find bar now: `Cmd/Ctrl+F` summons it, Escape
+  puts it away, and the toolbar never shifts. The undo/redo buttons are
+  gone too (`Cmd/Ctrl+Z` does that), leaving a leaner toolbar.
+- History entries show a hover × to remove just that entry (undoable),
+  and the page-number badge is gone.
+- The outline has Expand All / Collapse All buttons.
+- New shortcuts: `Alt+Shift+D` duplicates the current trail, and
+  re-anchoring is `Cmd/Ctrl+Shift+E` (plain `Cmd/Ctrl+E` belongs to the
+  browser and never worked there).
+- Windows: the window buttons sit at the platform's standard caption
+  size and can no longer cover toolbar content.
+- Right-clicking dead space no longer shows a stray menu, and the
+  empty-state drop overlay mentions session files.
+
 ## 0.4.3
 
 - Opening a PDF and loading a session are now fully separate actions:

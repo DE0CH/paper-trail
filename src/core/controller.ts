@@ -525,6 +525,11 @@ export class Controller {
     this.notify();
   }
 
+  /** Keyboard entry point: duplicate the active trail (Alt+Shift+D). */
+  stackDuplicateActive(): void {
+    this.stackDuplicate(this.hist.activeId);
+  }
+
   clearHistory(): void {
     if (!this.docOpen) return;
     this.hist.clearAll();

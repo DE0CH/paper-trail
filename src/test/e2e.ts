@@ -160,6 +160,19 @@ async function run(): Promise<void> {
     check('Alt+[ and Alt+] switch between trails',
       next !== beforeCycle && back2 === beforeCycle,
       JSON.stringify({ beforeCycle, next, back2 }));
+    const dupBefore = await page.evaluate(() =>
+      (window as never as { __pt: PtHooks }).__pt.hist.stacks.length);
+    await page.keyboard.press('Alt+Shift+D');
+    await page.waitForTimeout(200);
+    const dupState = await page.evaluate(() => {
+      const pt = (window as never as { __pt: PtHooks & { controller: { undoHist(): void } } }).__pt;
+      const out = { n: pt.hist.stacks.length, name: pt.hist.active.name };
+      pt.controller.undoHist();
+      return out;
+    });
+    check('Alt+Shift+D duplicates the current trail',
+      dupState.n === dupBefore + 1 && / copy$/.test(dupState.name),
+      JSON.stringify(dupState));
     await page.keyboard.press('Shift+/');
     await page.waitForSelector('#shortcutOverlay', { timeout: 3000 });
     const helpInfo = await page.evaluate(() => ({
