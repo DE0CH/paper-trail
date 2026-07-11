@@ -1263,20 +1263,16 @@ async function run(): Promise<void> {
       cjkAssets.cmap && cjkAssets.font, JSON.stringify(cjkAssets));
 
     // the fixture's only font is CID-encoded (UniGB-UCS2-H) with no
-    // embedded font program: without the cMaps nothing decodes at all
+    // embedded font program: without the cMaps nothing decodes at all.
+    // Wait for the decoded text to appear rather than sampling after a
+    // fixed delay — CI runners paint slowly and a fixed wait was flaky.
     await page.goto(BASE + '/?file=sample/cjk.pdf');
-    await page.waitForSelector('.page[data-page="1"]', { timeout: 20000 });
-    await page.waitForTimeout(2000);
-    const cjkText = await page.evaluate(() => {
-      const text = [...document.querySelectorAll('.textLayer')]
-        .map((el) => el.textContent ?? '').join('');
-      return {
-        hasLine: text.includes('你好世界'),
-        canvas: !!document.querySelector('.page[data-page="1"] canvas'),
-      };
-    });
-    check('CID-encoded (CJK) text decodes through the bundled cMaps',
-      cjkText.hasLine && cjkText.canvas, JSON.stringify(cjkText));
+    await page.waitForSelector('.page[data-page="1"] canvas', { timeout: 20000 });
+    const cjkDecoded = await page.waitForFunction(() =>
+      [...document.querySelectorAll('.textLayer')]
+        .map((el) => el.textContent ?? '').join('').includes('你好世界'),
+    undefined, { timeout: 15000 }).then(() => true).catch(() => false);
+    check('CID-encoded (CJK) text decodes through the bundled cMaps', cjkDecoded);
     const cjkSearch = await page.evaluate(async () => {
       const pt = (window as never as {
         __pt: { controller: {
