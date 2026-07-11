@@ -40,6 +40,11 @@ protocol.registerSchemesAsPrivileged([{
   },
 }]);
 
+// Dev affordance: run side-by-side with an installed copy (separate
+// profile => separate single-instance lock).
+if (process.env.PT_USERDATA) {
+  app.setPath('userData', process.env.PT_USERDATA);
+}
 // Smoke tests must not fight the user's running copy over the profile
 // directory or the single-instance lock.
 if (SMOKE) {
@@ -94,8 +99,12 @@ function createWindow(): BrowserWindow {
     y: bounds.y !== undefined ? bounds.y + offset : undefined,
     show: !SMOKE,
     backgroundColor: '#2b2d31',
-    // Traffic lights sit inside the app's own toolbar row.
-    ...(isMac ? { titleBarStyle: 'hiddenInset' as const } : {}),
+    // Traffic lights sit inside the app's own toolbar row (32.5px tall:
+    // h-10 at the 13px root font), vertically centered: (32.5 - 12) / 2.
+    ...(isMac ? {
+      titleBarStyle: 'hidden' as const,
+      trafficLightPosition: { x: 12, y: 10 },
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
