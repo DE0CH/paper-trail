@@ -100,14 +100,21 @@ function createWindow(): BrowserWindow {
     y: bounds.y !== undefined ? bounds.y + offset : undefined,
     show: !SMOKE && !process.env.PT_SHOT,
     backgroundColor: '#2b2d31',
-    // The toolbar follows the native unified-toolbar metrics (52 px, see
-    // globals.css body.desktopMac) and per the HIG the traffic lights sit
-    // vertically centered in it with the standard leading inset. The y
-    // value is calibrated by measuring rendered pixels — do not derive it
-    // arithmetically; macOS applies its own offsets.
+    // The window chrome integrates with the app's own toolbar row on
+    // both platforms. macOS: the traffic lights are at an OS-fixed
+    // position (measured: centers 18.75px below the window top), and the
+    // 38px toolbar in globals.css centers on them. Windows: the native
+    // min/max/close buttons overlay the same 38px row.
     ...(isMac ? {
       titleBarStyle: 'hiddenInset' as const,
-    } : {}),
+    } : {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: {
+        color: '#1e1f22',
+        symbolColor: '#9a9aa2',
+        height: 38,
+      },
+    }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -120,6 +127,16 @@ function createWindow(): BrowserWindow {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  // Windows has no menu bar, so New Window is handled here.
+  if (!isMac) {
+    win.webContents.on('before-input-event', (_event, input) => {
+      if (input.type === 'keyDown' && input.control && !input.shift
+        && input.key.toLowerCase() === 'n') {
+        createWindow();
+      }
+    });
+  }
 
   // The web app's beforeunload fires when there is unsaved reading progress;
   // surface it as a native dialog instead of silently refusing to close.
@@ -439,7 +456,10 @@ ipcMain.on('pt-open-file-ready', (event) => {
 
 void app.whenReady().then(() => {
   registerAppProtocol();
-  buildMenu();
+  // macOS gets the full native menu bar; Windows has none (its window
+  // chrome integrates with the toolbar, and shortcuts live in the app).
+  if (isMac) buildMenu();
+  else Menu.setApplicationMenu(null);
 
   const win = createWindow();
 

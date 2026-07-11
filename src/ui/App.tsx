@@ -100,7 +100,11 @@ export default function App() {
           e.preventDefault();
           if (e.shiftKey) toggleNav(); else setSidebarVisible((v) => !v);
           break;
-        case 'o': e.preventDefault(); void controller.pickFile(); break;
+        case 'o':
+          e.preventDefault();
+          if (e.shiftKey) void controller.requestLoadSession();
+          else void controller.pickFile();
+          break;
         case '[': e.preventDefault(); controller.goBack(); break;
         case ']': e.preventDefault(); controller.goForward(); break;
         case '=': case '+': e.preventDefault(); controller.zoomIn(); break;
@@ -119,6 +123,7 @@ export default function App() {
   useEffect(() => {
     if (!window.ptDesktop) return;
     if (window.ptDesktop.platform === 'darwin') document.body.classList.add('desktopMac');
+    if (window.ptDesktop.platform === 'win32') document.body.classList.add('desktopWin');
     window.ptDesktop.onOpenFile(({ name, data }) => {
       void controller.openFile(new File([data], name));
     });

@@ -28,9 +28,27 @@ https://github.com/user-attachments/assets/dcff790c-ce33-457b-9f59-79731156e724
   grab the `.dmg` (macOS) or installer (Windows) from the
   [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
 
-Then open a PDF with the **Open** button or drop it anywhere in the
-window. (Building from source is covered in
+Then open a PDF — **File ▸ Open** in the desktop app, the **Open**
+button in the browser, or just drop the file anywhere in the window.
+(Building from source is covered in
 [CONTRIBUTING.md](CONTRIBUTING.md).)
+
+## Trails and branches: how it works
+
+A **trail** is the path you took through the paper: every jump you make
+— following a reference, clicking an outline or thumbnail entry,
+marking a spot — appends a labelled entry to it, and the entry pins the
+exact position you jumped *from*, so Back always returns you precisely
+there. One trail behaves exactly like browser history: Back and Forward
+walk it, and jumping somewhere new while you're partway down discards
+the entries above you.
+
+A **branch** protects a trail from that overwriting. Branching copies
+your history so far into a fresh trail and continues there, so the
+original stays intact — like opening a link in a new browser tab,
+except Back still works in the copy. Use it whenever a side quest
+starts ("I'll just quickly check Lemma 2.3…") and switch between trails
+in the sidebar.
 
 ## Reading with trails
 
