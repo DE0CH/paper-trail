@@ -57,6 +57,33 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopOffline.js
 
+      - name: Installer test (install, shortcuts, smoke, uninstall)
+        shell: bash
+        run: node build-node/test/installerWin.js
+
       - name: List artifacts
         shell: bash
         run: ls -la dist-electron/*.exe dist-electron/*.zip
+
+  # The one Setup.exe serves x64 and ARM machines; this job checks the
+  # ARM half actually installs a working app (the x64 job can't — it
+  # would silently get the x64 payload).
+  windows-arm:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Package Windows app (unsigned)
+        run: npx electron-builder --win --publish never
+
+      - name: Installer test (install, shortcuts, smoke, uninstall)
+        shell: bash
+        run: node build-node/test/installerWin.js
