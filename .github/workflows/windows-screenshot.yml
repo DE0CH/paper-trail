@@ -25,7 +25,7 @@ jobs:
         shell: pwsh
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
-      - name: Launch the app and capture the screen
+      - name: Launch the app; capture the UI and the shortcut overlay
         shell: pwsh
         run: |
           $profile_dir = "$env:RUNNER_TEMP\pt-shot"
@@ -39,14 +39,48 @@ jobs:
             -WorkingDirectory $env:GITHUB_WORKSPACE
           Start-Sleep -Seconds 40
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save("windows-ui.png")
-          Get-Item windows-ui.png
+          function Snap($path) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save($path)
+          }
+          Snap "windows-ui.png"
+          # open the shortcut cheat-sheet with ? and capture it
+          [System.Windows.Forms.SendKeys]::SendWait('?')
+          Start-Sleep -Seconds 3
+          Snap "windows-ui-shortcuts.png"
+          Get-ChildItem windows-ui*.png
+
+      - name: Capture the web app's shortcut overlay in a Windows browser
+        shell: bash
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          cat > shot-web.js <<'EOF'
+          const { chromium } = require('playwright-core');
+          const { findBrowser } = require('./build-node/test/browsers.js');
+          (async () => {
+            const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
+            const page = await browser.newPage({ viewportSize: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
+            await page.goto('http://127.0.0.1:8377/?file=sample/WStarCats.pdf');
+            await page.waitForSelector('.pdfLink', { timeout: 30000 });
+            await page.keyboard.press('Shift+/');
+            await page.waitForSelector('#shortcutOverlay', { timeout: 5000 });
+            await page.waitForTimeout(400);
+            await page.screenshot({ path: 'windows-web-shortcuts.png' });
+            await browser.close();
+          })().catch((e) => { console.error(e); process.exit(1); });
+          EOF
+          node shot-web.js
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-ui
-          path: windows-ui.png
+          path: |
+            windows-ui*.png
+            windows-web-shortcuts.png
