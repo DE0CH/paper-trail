@@ -1,0 +1,41 @@
+# Captures the app's scrollbars on macOS (manual trigger) for review:
+# the runner is set to always show scroll bars (macOS normally uses
+# vanishing overlays), the desktop app opens the fixture PDF, and the
+# full screen is captured — the viewer's scrollbar rides the window's
+# right edge.
+
+name: macOS scrollbar screenshot
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  screenshot:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Show scroll bars always (macOS defaults to vanishing overlays)
+        run: defaults write NSGlobalDomain AppleShowScrollBars -string Always
+
+      - name: Launch the app on the fixture PDF and capture
+        run: |
+          PROFILE=$(mktemp -d)
+          echo '{"width":1400,"height":900,"x":20,"y":30}' > "$PROFILE/window-state.json"
+          PT_USERDATA="$PROFILE" PT_SHOT=1 npx electron build-node/desktop/main.js sample/WStarCats.pdf &
+          sleep 25
+          screencapture -x mac-scrollbar.png
+          ls -la mac-scrollbar.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-scrollbar
+          path: mac-scrollbar.png
