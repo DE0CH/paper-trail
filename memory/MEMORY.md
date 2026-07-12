@@ -162,9 +162,10 @@ Perf limits (measured, unenforced): localStorage auto-resume hard-fails
   just-added test code too. Needing different logic in a test = write
   a NEW test containing the new logic (even for a minor change), never
   patch. Any commit whose diff has red (-) lines in a test file MUST
-  start its commit message with "Test Deletion". Why so strict: tests
-  are the behavior contract; edits to them are the one channel where
-  an agent can convert a real failure signal into silence.
+  start its commit message with "Test Deletion". THE reason (owner's
+  words): tests are contracts the owner enforces onto the project;
+  the agent is not allowed to change the contract unilaterally — only
+  the owner has that right.
 - Non-test tooling (media/icons/perf/fixture generators) lives in
   src/tools/, not src/test/.
 - Commit per feature/iteration; draft→commit, post-debug→commit. Signed
