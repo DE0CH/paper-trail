@@ -162,16 +162,11 @@ async function run(): Promise<void> {
     await eApp.close().catch(() => { /* quit on its own */ });
   }
 
-  // Reopen at the WORST moment: the instant the installer process is
-  // seen (or the version already flipped — then the installer simply
-  // won the race and the reopen is an ordinary start).
-  const raceSeen = await waitFor(
-    () => running(installerName) || norm(exeVersion(exe)) === norm(newVersion),
-    120_000, 200);
-  check('the quit-install begins (installer process or already-new version)',
-    raceSeen, installerName);
-  const duringInstall = running(installerName);
-  console.log(`  reopening ${duringInstall ? 'DURING the install' : 'after it finished'}`);
+  // Reopen IMMEDIATELY — the real gesture: the user quits and
+  // double-clicks the app right back. Waiting for the installer to
+  // show up in tasklist first lets a fast install win the race and
+  // turns the test vacuous (witnessed on run 29208984460).
+  console.log(`  reopening immediately; installer visible: ${running(installerName)}`);
   spawn(exe, [pdf], { detached: true, stdio: 'ignore', env }).unref();
 
   // The end state is the whole contract: the update completed…
