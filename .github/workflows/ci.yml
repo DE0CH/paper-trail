@@ -236,5 +236,9 @@ jobs:
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacInstall.js
 
+      - name: Manual update install test (menu flow through Restart Now)
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacManualInstall.js
+
       - name: Closed-stdio regression (Finder launches must not crash)
         run: node build-node/test/desktopStdioClosed.js
