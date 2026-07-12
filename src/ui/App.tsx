@@ -288,7 +288,7 @@ export default function App() {
         case 'trail-duplicate': controller.stackDuplicateActive(); break;
         case 'update-ready':
           controller.showToast(
-            `Update ${payload ?? ''} downloaded \u2014 it installs when you quit Paper Trail`,
+            `Paper Trail ${payload ?? ''} is ready \u2014 quit the app to finish updating`,
             8000,
           );
           break;

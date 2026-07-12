@@ -98,6 +98,10 @@ jobs:
         shell: bash
         run: node build-node/test/installerWin.js
 
+      - name: Installer never force-closes a running app (unsaved work wins)
+        shell: bash
+        run: node build-node/test/installerCloseUnsaved.js
+
   # Update tests live in their own job so their two packaging runs
   # (current version + next-version feed) don't serialize behind the
   # main job's steps — jobs run in parallel, steps within one don't.
@@ -139,6 +143,10 @@ jobs:
       - name: Auto-update test (real install-update-install cycle)
         shell: bash
         run: node build-node/test/updateWin.js
+
+      - name: Install-on-quit test (background download, normal quit)
+        shell: bash
+        run: node build-node/test/updateWinQuitInstall.js
 
   mac:
     strategy:
