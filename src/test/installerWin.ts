@@ -126,6 +126,17 @@ async function run(): Promise<void> {
     check('installed app passes the smoke probe', smoke.status === 0,
       `exit ${smoke.status}${smoke.stdout ? ' ' + smoke.stdout.trim().slice(0, 200) : ''}`);
 
+    // The smoke probe's Electron children (GPU, crashpad) can outlive
+    // its exit by a moment; uninstalling while one still holds the exe
+    // leaves the app dir half-deleted (the intermittent arm failure on
+    // run 29206505841). A real user uninstalls a CLOSED app — wait for
+    // the processes to drain, an exit condition instead of a timing bet.
+    const image = path.basename(exe);
+    const drained = await waitFor(() => !spawnSync('tasklist',
+      ['/FI', `IMAGENAME eq ${image}`], { encoding: 'utf8' })
+      .stdout.includes(image), 60_000);
+    check('the app’s processes drain before the uninstall', drained);
+
     const uninstaller = path.join(path.dirname(exe), `Uninstall ${PRODUCT}.exe`);
     check('uninstaller exists', fs.existsSync(uninstaller), uninstaller);
     if (fs.existsSync(uninstaller)) {
