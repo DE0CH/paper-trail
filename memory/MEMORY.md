@@ -54,10 +54,14 @@
   dashes) but on-disk artifacts keep spaces — feed server must map;
   never spawnSync while the harness hosts the feed (blocks accepts);
   electron-updater's "Cannot download" message omits the port.
+- NEVER force push (owner rule, absolute): no `git push -f`/--force,
+  on any ref, branch or tag, for any reason. Everything is
+  append-only: fix forward with new commits and new tags.
 - NEVER reuse a version number (owner rule): if a version failed to
   build or its release was blocked by failing CI, skip that version
   and bump to the next one — no `git tag -f`, no tag moving, ever.
-  Rename the unshipped CHANGELOG section to the new version.
+  Rename the unshipped CHANGELOG section to the new version AND add a
+  "## <ver> (skipped)" section recording why it was skipped.
 - Owner pushes concurrently: if a push is rejected AFTER a tag went
   up, cancel the stale release run and ship the next version number
   (see above — never move tags).
