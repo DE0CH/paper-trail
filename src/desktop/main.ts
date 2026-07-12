@@ -166,7 +166,9 @@ function createWindow(): BrowserWindow {
       message: 'Do you want to save your reading session?',
       detail: 'Your changes will be lost if you don\u2019t save them.',
     });
-    if (choice === 0) win.webContents.send('pt-menu', 'save'); // window stays open
+    // Not plain 'save': right after a canceled unload the renderer's
+    // file picker never settles, so this save must use the shell dialog.
+    if (choice === 0) win.webContents.send('pt-menu', 'save-from-close'); // window stays open
     else if (choice === 1) event.preventDefault(); // Don't Save: allow the close
     // Cancel: keep the window open
   });

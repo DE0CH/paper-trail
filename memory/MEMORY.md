@@ -8,20 +8,23 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 (not a git repo; see paper-build.md pointer below).
 
 ## Current state (2026-07-12, session 3)
-- v0.5.5 published; its release was REPAIRED in place (6 alias assets
-  uploaded under the feed's dash names) after the update-404 bug hit
-  the owner's machine — update checks from ≤0.5.5 work again.
-- v0.5.7 tagged, gated release run in flight (verify: `gh release
-  view v0.5.7`): update-404 fix (space-free artifactNames + new
-  updateFeedNames regression test wired after every packaging step in
-  ci+release), Vercel deploy moved INTO release.yml (deploy-web job,
-  gated on check-version+ci like the desktop jobs; deploy.yml DELETED
-  — web deploys only on releases; vercel step act-guarded). ci.yml
-  has concurrency group "${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress (verified live: bump push auto-cancelled the
-  prior main run). v0.5.6 SKIPPED: run cancelled mid-build to include
-  the update fix (never reuse versions).
-- Latest released before that: 0.5.3. 0.5.4 also skipped (CHANGELOG).
+- v0.5.7 PUBLISHED and verified (all asset names match latest*.yml
+  exactly, download urls 200, deploy-web job deployed Vercel): the
+  update-404 fix (space-free artifactNames + updateFeedNames test),
+  release-gated Vercel deploy (deploy.yml DELETED), ci.yml
+  cancel-in-progress concurrency. v0.5.6 SKIPPED (see CHANGELOG);
+  v0.5.5 repaired in place with 6 alias assets.
+- In flight: 0.5.8 = Software Update window (Sparkle-style, replaces
+  the dialog chain; update.html + src/update/main.tsx + updatePreload,
+  states checking/none/available/downloading/downloaded/error, ids
+  pt-update-root[data-state]/-title/-detail/-progress/-primary/
+  -secondary) + Windows Jump List "New Window" task (--new-window via
+  second-instance). New tests: updateWindow, updateRestartUnsaved
+  (Cancel/Save at the unsaved prompt abandon restart cleanly),
+  updateMacWindowInstall (signed install successor), newWindowTask.
+  updateMacManualInstall RETIRED in a Test Deletion commit
+  (owner-authorized). Waiting on branch CI of 48be301 before tagging
+  v0.5.8.
 - Native Win32 menus (src/desktop/winMenu.ts, koffi): validated
   visually via windows-screenshot.yml artifact; koffi EXCLUDED from
   mac bundles (universal-merge rejects per-arch prebuilds).
@@ -95,6 +98,10 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 - NEVER force push (owner rule, absolute): no `git push -f`/--force,
   on any ref, branch or tag, for any reason. Everything is
   append-only: fix forward with new commits and new tags.
+- Release process (owner rule, 2026-07-12): after pushing to main,
+  WAIT for the branch CI run to complete and SUCCEED before bumping
+  the version and tagging. The release workflow's ci gate is only a
+  guard, never the validation vehicle.
 - NEVER reuse a version number (owner rule): if a version failed to
   build or its release was blocked by failing CI, skip that version
   and bump to the next one — no `git tag -f`, no tag moving, ever.

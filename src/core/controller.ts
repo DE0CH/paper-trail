@@ -377,7 +377,7 @@ export class Controller {
     }
   }
 
-  async saveProgress(): Promise<void> {
+  async saveProgress({ viaShellDialog = false } = {}): Promise<void> {
     if (!this.docOpen) return;
     if (this.session.handle) {
       // User-initiated save: the right moment for a permission prompt if
@@ -394,11 +394,25 @@ export class Controller {
       } catch { /* proceed; writeProgress surfaces real failures */ }
     }
     if (!this.session.handle) {
+      const suggestedName = this.currentName.replace(/\.pdf$/i, '') + PROGRESS_EXT;
+      // The unsaved-close prompt's Save must not touch the file picker:
+      // right after a canceled unload, showSaveFilePicker never settles
+      // (it neither resolves nor rejects), so the save would silently
+      // vanish. The shell dialog is the only picker that works there.
+      if (viaShellDialog && window.ptDesktop?.saveSessionFallback) {
+        const saved = await window.ptDesktop.saveSessionFallback(
+          serializeProgress(this.progressFileObject()), suggestedName);
+        if (saved) {
+          this.session.dirty = false;
+          this.showToast('Session saved');
+          this.notify();
+        }
+        return;
+      }
       if (!window.showSaveFilePicker) {
         this.showToast('Saving progress files requires a Chromium-based browser');
         return;
       }
-      const suggestedName = this.currentName.replace(/\.pdf$/i, '') + PROGRESS_EXT;
       let handle: FileSystemFileHandle;
       try {
         handle = await window.showSaveFilePicker({
@@ -439,8 +453,8 @@ export class Controller {
     this.showToast('Progress saved');
   }
 
-  saveProgressSafe(): void {
-    this.saveProgress().catch((e) =>
+  saveProgressSafe(opts?: { viaShellDialog?: boolean }): void {
+    this.saveProgress(opts).catch((e) =>
       this.showToast('Save failed: ' + ((e as Error)?.message ?? String(e))));
   }
 
