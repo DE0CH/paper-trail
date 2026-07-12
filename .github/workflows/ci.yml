@@ -178,7 +178,8 @@ jobs:
         run: node build-node/test/installerWin.js
 
       - name: Documents get their own icons, never the app's
-        if: ${{ !cancelled() }}
+        # no !cancelled() — it installs the packaged Setup exe, so it
+        # must skip (like the other installer tests) when packaging did
         shell: bash
         run: node build-node/test/winDocIcons.js
 
@@ -379,7 +380,8 @@ jobs:
         run: node build-node/test/installerMac.js
 
       - name: Documents get their own icons, never the app's
-        if: ${{ !cancelled() }}
+        # no !cancelled() — it inspects the packaged .app, so it must
+        # skip (like the other installer tests) when packaging did
         run: node build-node/test/macDocIcons.js
 
   # Same parallel split as windows-update: the update tests build twice
