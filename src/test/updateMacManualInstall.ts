@@ -69,11 +69,17 @@ async function waitFor(cond: () => boolean, ms: number): Promise<boolean> {
 async function run(): Promise<void> {
   const newVersion = /version:\s*(\S+)/.exec(
     fs.readFileSync(path.join(FEED, 'latest-mac.yml'), 'utf8'))?.[1] ?? '';
-  const app = findApp();
-  if (!app) {
+  const packaged = findApp();
+  if (!packaged) {
     console.error('FAIL  no packaged Paper Trail.app in dist-electron');
     process.exit(1);
   }
+  // Run against a COPY: Squirrel replaces the bundle it updates, and
+  // the packaged original must stay pristine for the other tests
+  // (ditto preserves the code signature; cp can drop xattrs).
+  const app = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-updmi-app-')),
+    'Paper Trail.app');
+  execFileSync('ditto', [packaged, app]);
   const bin = path.join(app, 'Contents', 'MacOS', 'Paper Trail');
   console.log(`manual update to install: ${bundleVersion(app)} -> ${newVersion} (${os.arch()})`);
 

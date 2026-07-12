@@ -232,13 +232,15 @@ jobs:
       - name: Manual update test (Check for Updates menu flow)
         run: node build-node/test/updateMacManual.js
 
-      - name: Auto-update install test (Squirrel, signed builds only)
-        if: env.HAS_CERT == 'true'
-        run: node build-node/test/updateMacInstall.js
+      - name: Closed-stdio regression (Finder launches must not crash)
+        run: node build-node/test/desktopStdioClosed.js
 
       - name: Manual update install test (menu flow through Restart Now)
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacManualInstall.js
 
-      - name: Closed-stdio regression (Finder launches must not crash)
-        run: node build-node/test/desktopStdioClosed.js
+      # LAST: this one replaces the packaged bundle with the new version,
+      # so every test needing the current version must run before it.
+      - name: Auto-update install test (Squirrel, signed builds only)
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacInstall.js
