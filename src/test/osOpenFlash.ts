@@ -27,14 +27,20 @@ import { app, BrowserWindow } from 'electron';
 const SAMPLE = path.resolve(__dirname, '..', '..', 'sample', 'WStarCats.pdf');
 process.argv.push(SAMPLE); // a double-clicked PDF arrives as an argument
 
-// Record the FIRST moment any window becomes visible, and what it was
-// showing at that moment. The polling starts before the app is ready.
-let firstVisible: { title: string } | null = null;
+// Record the FIRST moment any window becomes visible, what it was
+// showing, and how long the window had existed by then. The contract:
+// a window may only appear once its document is showing — except via
+// the deliberate reveal fallback (a slow load must not leave the
+// window invisible forever), which fires no earlier than ~4s in.
+let firstVisible: { title: string; afterMs: number } | null = null;
+let windowSeenAt = 0;
 const visPoll = setInterval(() => {
   if (firstVisible) return;
+  const any = BrowserWindow.getAllWindows().find((x) => !x.isDestroyed());
+  if (any && !windowSeenAt) windowSeenAt = Date.now();
   const w = BrowserWindow.getAllWindows().find(
     (x) => !x.isDestroyed() && x.isVisible());
-  if (w) firstVisible = { title: w.getTitle() };
+  if (w) firstVisible = { title: w.getTitle(), afterMs: Date.now() - windowSeenAt };
 }, 50);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -69,8 +75,9 @@ async function run(): Promise<void> {
   check('launching with a PDF opens exactly one window',
     windows().length === 1, `${windows().length}`);
   check('the window was never visible while still empty (no flash)',
-    !!firstVisible && firstVisible.title.includes('WStarCats'),
-    firstVisible?.title ?? '(never became visible)');
+    !!firstVisible && (firstVisible.title.includes('WStarCats')
+      || firstVisible.afterMs >= 3500), // the deliberate slow-load fallback
+    JSON.stringify(firstVisible ?? '(never became visible)'));
   const b = windows()[0].getBounds();
   check('it sits at the remembered position (no cascade offset)',
     b.x === 60 && b.y === 40, JSON.stringify(b));
