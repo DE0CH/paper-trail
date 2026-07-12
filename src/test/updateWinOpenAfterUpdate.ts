@@ -151,6 +151,19 @@ async function run(): Promise<void> {
   });
   try {
     const page = await second.firstWindow();
+    // Toasts live 8 seconds; the announcement can come and go while
+    // the PDF still renders. Record every toast from the start.
+    await page.evaluate(() => {
+      const w = window as never as { __toastLog: string[] };
+      w.__toastLog = [];
+      const record = () => {
+        const t = document.getElementById('toast')?.textContent ?? '';
+        if (t && !w.__toastLog.includes(t)) w.__toastLog.push(t);
+      };
+      new MutationObserver(record).observe(document.documentElement,
+        { subtree: true, childList: true, characterData: true });
+      record();
+    });
     let opened = false;
     try {
       await page.waitForFunction(
@@ -166,12 +179,15 @@ async function run(): Promise<void> {
     let announced = false;
     try {
       await page.waitForFunction((v) => {
-        const t = document.getElementById('toast')?.textContent ?? '';
-        return t.includes('updated to') && t.includes(v);
+        const log = (window as never as { __toastLog?: string[] }).__toastLog ?? [];
+        return log.some((t) => t.includes('updated to') && t.includes(v));
       }, norm(newVersion), { timeout: 30_000 });
       announced = true;
     } catch { /* reported below */ }
-    check('...and announcing the update it applied', announced);
+    const toasts = await page.evaluate(() =>
+      (window as never as { __toastLog?: string[] }).__toastLog ?? []);
+    check('...and announcing the update it applied', announced,
+      toasts.join(' | ') || '(no toasts recorded)');
   } finally {
     await second.close().catch(() => { /* fine */ });
     server.close();
