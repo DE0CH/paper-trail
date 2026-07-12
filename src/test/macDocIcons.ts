@@ -1,8 +1,12 @@
 // Documents opened with the app must not wear the app's own icon (a
 // folder of PDFs showing the Paper Trail logo reads as a folder of
-// apps). On macOS the document icon lives in the bundle: every
-// CFBundleDocumentTypes entry must name its own CFBundleTypeIconFile,
-// that .icns must exist in Resources, and it must not be the app icon.
+// apps). On macOS the right document icon is the one LaunchServices
+// composes itself — the app icon superimposed on the system page
+// template with an extension label — and that composition happens
+// exactly when a document type declares NO CFBundleTypeIconFile.
+// electron-builder always writes one (substituting the app icon —
+// the original bug), so an afterPack hook strips the key; this test
+// pins that contract on the packaged bundle.
 // Run (CI, macOS, after packaging): node build-node/test/macDocIcons.js
 
 import { execFileSync } from 'node:child_process';
@@ -46,37 +50,19 @@ function run(): void {
   const plist = path.join(app, 'Contents', 'Info.plist');
   const info = JSON.parse(execFileSync('plutil',
     ['-convert', 'json', '-o', '-', plist], { encoding: 'utf8' }));
-  const resources = path.join(app, 'Contents', 'Resources');
-  const appIcns = path.join(resources, String(info.CFBundleIconFile ?? 'icon.icns'));
-
   const docTypes: DocType[] = info.CFBundleDocumentTypes ?? [];
   for (const ext of ['pdf', 'ptl']) {
     const doc = docTypes.find((d) => d.CFBundleTypeExtensions?.includes(ext));
     check(`the bundle declares a document type for .${ext}`, !!doc,
       JSON.stringify(docTypes.map((d) => d.CFBundleTypeExtensions)));
     if (!doc) continue;
-    const iconName = doc.CFBundleTypeIconFile ?? '';
-    check(`.${ext} names its own CFBundleTypeIconFile`, iconName !== '',
-      iconName || '(none)');
-    if (!iconName) continue;
-    const icns = path.join(resources,
-      iconName.endsWith('.icns') ? iconName : `${iconName}.icns`);
-    check(`.${ext} icon exists in Resources`, fs.existsSync(icns), icns);
-    check(`.${ext} icon is not the app icon`,
-      path.resolve(icns) !== path.resolve(appIcns)
-        && fs.existsSync(icns) && fs.existsSync(appIcns)
-        && !fs.readFileSync(icns).equals(fs.readFileSync(appIcns)),
-      `${path.basename(icns)} vs ${path.basename(appIcns)}`);
+    // No icon declared: LaunchServices composes app-icon-on-page with
+    // the extension label. A declared icon would be electron-builder's
+    // app-icon substitute — a folder of PDFs dressed as apps.
+    check(`.${ext} declares no CFBundleTypeIconFile (macOS composes it)`,
+      doc.CFBundleTypeIconFile === undefined,
+      doc.CFBundleTypeIconFile ?? '(absent)');
   }
-
-  // The two documents must also be told apart FROM EACH OTHER.
-  const iconOf = (ext: string): string => {
-    const doc = docTypes.find((d) => d.CFBundleTypeExtensions?.includes(ext));
-    return doc?.CFBundleTypeIconFile ?? '';
-  };
-  check('.pdf and .ptl wear different icons',
-    iconOf('pdf') !== '' && iconOf('ptl') !== '' && iconOf('pdf') !== iconOf('ptl'),
-    JSON.stringify({ pdf: iconOf('pdf'), ptl: iconOf('ptl') }));
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
