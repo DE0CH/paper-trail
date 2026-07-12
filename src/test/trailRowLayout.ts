@@ -155,7 +155,10 @@ async function run(): Promise<void> {
       const fromRight = (el: Element | null, panel: Element | null) => {
         if (!el || !panel) return null;
         const r = el.getBoundingClientRect();
-        return panel.getBoundingClientRect().right - (r.left + r.width / 2);
+        // The axis lives inside the panel: anchor on the padding box,
+        // not the border box (some panels carry a 1px divider border).
+        const border = parseFloat(getComputedStyle(panel).borderRightWidth || '0');
+        return panel.getBoundingClientRect().right - border - (r.left + r.width / 2);
       };
       const navCol = document.getElementById('navCol');
       const stacksCol = document.getElementById('stacksCol');

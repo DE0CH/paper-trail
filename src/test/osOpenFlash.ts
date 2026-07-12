@@ -16,8 +16,10 @@ const userData = nodeFs.mkdtempSync(
   nodePath.join((require('node:os') as typeof import('node:os')).tmpdir(), 'pt-osopen-'));
 process.env.PT_USERDATA = userData;
 // The remembered position: any cascade offset shows up against it.
+// Small enough for the runners' 1024x768 displays — the OS clamps
+// anything larger and the clamp would masquerade as an offset.
 nodeFs.writeFileSync(nodePath.join(userData, 'window-state.json'),
-  JSON.stringify({ x: 180, y: 120, width: 1200, height: 800 }));
+  JSON.stringify({ x: 60, y: 40, width: 800, height: 560 }));
 
 import * as path from 'node:path';
 import { app, BrowserWindow } from 'electron';
@@ -71,7 +73,7 @@ async function run(): Promise<void> {
     firstVisible?.title ?? '(never became visible)');
   const b = windows()[0].getBounds();
   check('it sits at the remembered position (no cascade offset)',
-    b.x === 180 && b.y === 120, JSON.stringify(b));
+    b.x === 60 && b.y === 40, JSON.stringify(b));
 
   // While running: an empty second window exists; an OS open must
   // land in it, not spawn an offset third window.
