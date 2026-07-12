@@ -225,6 +225,14 @@ gotchas, stable test hook ids).
 - NEVER run tests locally (rule tightened 2026-07-12, supersedes the
   old "web e2e OK locally"): ALL tests run on GitHub runners only.
   Local `npm run build` (compile) is fine.
+- MERGE branches, never cherry-pick ("there aren't many good reasons
+  to cherry pick" — owner, 2026-07-12).
+- CI must report ALL failures in a run, never fail fast, AND keep
+  per-suite verdicts visible in the step list (owner rejected an
+  aggregating shell loop for hiding which suite failed): one step per
+  suite, each `if: ${{ !cancelled() }}`; the web server starts in its
+  own step (background processes outlive steps on runners); only
+  artifact-dependent chains (package→smoke→installer) stay gated.
 - Tests/automation: headless playwright-core with installed Edge/Chrome,
   never their browser. Exception: when the user explicitly asks to watch
   (claude-in-chrome on their tab; small step first, confirm they see it).
