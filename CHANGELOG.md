@@ -18,6 +18,12 @@ matching section into the GitHub Release notes.
   including installer and self-update tests — passes on all four
   machine types (Windows and macOS, Intel and ARM each).
 
+## 0.5.4 (skipped)
+
+Never released: its build was blocked by failing CI (the macOS
+packaging step rejected a Windows-only native module in the universal
+build). Version numbers are not reused, so the fix shipped as 0.5.5.
+
 ## 0.5.3
 
 - Checking for updates is now a real conversation: if a new version
