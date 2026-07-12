@@ -37,7 +37,7 @@ let jumpList: JumpCategory[] | null = null;
 const realSetJump = app.setJumpList?.bind(app);
 (app as { setJumpList: unknown }).setJumpList = (cats: JumpCategory[]) => {
   jumpList = cats;
-  realSetJump?.(cats);
+  realSetJump?.(cats as Electron.JumpListCategory[]);
 };
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
