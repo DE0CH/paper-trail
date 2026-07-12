@@ -5,9 +5,12 @@
 //   build/ptl.* / build/pdf.*  (document icons: the default page with
 //     the logo superimposed and an extension label; Windows only —
 //     macOS composes its own, see afterPackMac)
-//   build/installer.ico  (the plated icon with a download badge)
 // Every surface shares the same plated icon: the trail on the dark
 // squircle, identical on macOS, Windows, and the web.
+// NOT generated here: build/installer.ico and build/uninstaller.ico
+// are NSIS's stock modern-install/-uninstall icons (zlib licensed) —
+// the standard, instantly recognizable installer look — committed
+// verbatim, never drawn.
 // The generated binaries are committed so CI never needs macOS tooling.
 // Usage: npm run icons
 
@@ -50,20 +53,6 @@ function docSvg(label: string): string {
 `;
 }
 
-// The Windows installer icon: the plated app icon wearing a green
-// download-arrow badge — visibly FOR the app without BEING the app.
-function installerSvg(): string {
-  const badge = `
-  <g id="installer-badge">
-    <circle cx="788" cy="788" r="150" fill="#2ea043" stroke="#0f1115" stroke-width="16"/>
-    <path d="M 788 700 v 106 M 726 752 l 62 64 62 -64"
-          fill="none" stroke="#ffffff" stroke-width="42"
-          stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-</svg>`;
-  return fs.readFileSync(SVG, 'utf8').replace('</svg>', badge);
-}
-
 function makeIcns(master: string, out: string, tmp: string): void {
   const iconset = path.join(tmp, `${path.basename(out, '.icns')}.iconset`);
   fs.mkdirSync(iconset);
@@ -89,15 +78,12 @@ async function run(): Promise<void> {
   const docPng = path.join(tmp, 'icon-doc-1024.png');
   const pdfFile = path.join(tmp, 'icon-pdf.svg');
   const pdfPng = path.join(tmp, 'icon-pdf-1024.png');
-  const instFile = path.join(tmp, 'icon-installer.svg');
-  const instPng = path.join(tmp, 'icon-installer-1024.png');
   fs.writeFileSync(docFile, docSvg('PTL'));
   fs.writeFileSync(pdfFile, docSvg('PDF'));
-  fs.writeFileSync(instFile, installerSvg());
 
   const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
   const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
-  for (const [svg, png] of [[SVG, master], [docFile, docPng], [pdfFile, pdfPng], [instFile, instPng]] as const) {
+  for (const [svg, png] of [[SVG, master], [docFile, docPng], [pdfFile, pdfPng]] as const) {
     await page.goto('file://' + svg);
     await page.evaluate(() => {
       document.documentElement.style.background = 'transparent';
@@ -118,8 +104,6 @@ async function run(): Promise<void> {
     path.join(BUILD, 'ptl.ico')], { stdio: 'ignore' });
   execFileSync('ffmpeg', ['-y', '-i', pdfPng, '-vf', 'scale=256:256',
     path.join(BUILD, 'pdf.ico')], { stdio: 'ignore' });
-  execFileSync('ffmpeg', ['-y', '-i', instPng, '-vf', 'scale=256:256',
-    path.join(BUILD, 'installer.ico')], { stdio: 'ignore' });
 
   // favicon: the plated icon, verbatim
   fs.mkdirSync(path.join(ROOT, 'public'), { recursive: true });
@@ -127,8 +111,7 @@ async function run(): Promise<void> {
 
   fs.rmSync(tmp, { recursive: true, force: true });
   for (const f of ['build/icon.icns', 'build/icon.ico', 'build/ptl.icns',
-    'build/ptl.ico', 'build/pdf.icns', 'build/pdf.ico',
-    'build/installer.ico', 'public/icon.svg']) {
+    'build/ptl.ico', 'build/pdf.icns', 'build/pdf.ico', 'public/icon.svg']) {
     console.log('wrote', f, `${Math.round(fs.statSync(path.join(ROOT, f)).size / 1024)}KB`);
   }
 }
