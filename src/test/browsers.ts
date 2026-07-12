@@ -1,7 +1,11 @@
-// Locate an installed Chromium-family browser per platform (the test
-// tooling drives a separate headless instance; nothing is downloaded).
+// Locate the browser the test tooling drives (a separate headless
+// instance — never the owner's browser). Playwright's version-pinned
+// Chromium is preferred so every machine and CI runner renders with
+// the SAME browser build; an installed Edge/Chrome is the fallback
+// where that build isn't available (e.g. Windows on ARM).
 
 import * as fs from 'node:fs';
+import { chromium } from 'playwright-core';
 
 const CANDIDATES: Record<string, string[]> = {
   darwin: [
@@ -25,6 +29,10 @@ const CANDIDATES: Record<string, string[]> = {
 };
 
 export function findBrowser(): string {
+  try {
+    const pinned = chromium.executablePath();
+    if (pinned && fs.existsSync(pinned)) return pinned;
+  } catch { /* pinned build not installed for this platform */ }
   const list = CANDIDATES[process.platform] ?? [];
   const found = list.find((p) => fs.existsSync(p));
   if (!found) {
