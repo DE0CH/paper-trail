@@ -21,6 +21,7 @@ import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'elec
 import contextMenu from 'electron-context-menu';
 import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
+import { popupWin32, type WinMenuItem } from './winMenu';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
 // other end is already closed; a console write (electron-updater logs
@@ -170,29 +171,69 @@ function createWindow(): BrowserWindow {
     // Cancel: keep the window open
   });
 
-  // Native right-click menus for text fields and selections come from
-  // electron-context-menu (spell-check suggestions, Look Up, the full
-  // edit menu with proper disabled states). App-specific targets (links,
-  // trail/history rows, the viewer) preventDefault() in the renderer and
-  // go through the pt-context-menu IPC instead.
-  contextMenu({
-    window: win,
-    showSearchWithGoogle: false,
-    showSaveImageAs: false,
-    showCopyImage: false,
-    showSelectAll: true,
-    showLookUpSelection: true,
-    showLearnSpelling: true,
-    showInspectElement: false,
-    prepend: (_defaults, params) => (
-      params.selectionText.trim() && !params.isEditable
-        ? [{
-          label: `Search Document for \u201c${params.selectionText.trim().slice(0, 24)}\u201d`,
-          click: () => win.webContents.send('pt-menu', 'search-selection', params.selectionText.trim()),
-        }]
-        : []
-    ),
-  });
+  // Native right-click menus for text fields and selections. On mac
+  // they come from electron-context-menu (spell-check suggestions, Look
+  // Up, the full edit menu with proper disabled states \u2014 all native
+  // there); on Windows Electron's menus are Chromium-drawn, so the same
+  // items are shown through a REAL Win32 menu instead. App-specific
+  // targets (links, trail/history rows, the viewer) preventDefault() in
+  // the renderer and go through the pt-context-menu IPC.
+  if (process.platform === 'win32') {
+    win.webContents.on('context-menu', (_event, params) => {
+      const wc = win.webContents;
+      const selection = params.selectionText.trim();
+      const items: WinMenuItem[] = [];
+      const acts = new Map<string, () => void>();
+      const add = (id: string, label: string, enabled: boolean, act: () => void) => {
+        items.push({ id, label, enabled });
+        acts.set(id, act);
+      };
+      for (const [i, s] of params.dictionarySuggestions.entries()) {
+        add(`sugg-${i}`, s, true, () => wc.replaceMisspelling(s));
+      }
+      if (params.misspelledWord) {
+        add('learn', 'Add to Dictionary', true,
+          () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord));
+        items.push({ type: 'separator' });
+      }
+      if (selection && !params.isEditable) {
+        add('search', `Search Document for \u201c${selection.slice(0, 24)}\u201d`, true,
+          () => wc.send('pt-menu', 'search-selection', selection));
+        items.push({ type: 'separator' });
+      }
+      if (params.isEditable) {
+        add('cut', 'Cut', params.editFlags.canCut, () => wc.cut());
+        add('copy', 'Copy', params.editFlags.canCopy, () => wc.copy());
+        add('paste', 'Paste', params.editFlags.canPaste, () => wc.paste());
+        items.push({ type: 'separator' });
+        add('select-all', 'Select All', params.editFlags.canSelectAll, () => wc.selectAll());
+      } else if (selection) {
+        add('copy', 'Copy', params.editFlags.canCopy, () => wc.copy());
+      }
+      if (!items.length) return;
+      const choice = popupWin32(win, items);
+      if (choice) acts.get(choice)?.();
+    });
+  } else {
+    contextMenu({
+      window: win,
+      showSearchWithGoogle: false,
+      showSaveImageAs: false,
+      showCopyImage: false,
+      showSelectAll: true,
+      showLookUpSelection: true,
+      showLearnSpelling: true,
+      showInspectElement: false,
+      prepend: (_defaults, params) => (
+        params.selectionText.trim() && !params.isEditable
+          ? [{
+            label: `Search Document for \u201c${params.selectionText.trim().slice(0, 24)}\u201d`,
+            click: () => win.webContents.send('pt-menu', 'search-selection', params.selectionText.trim()),
+          }]
+          : []
+      ),
+    });
+  }
 
   // Screenshot tooling: show the window WITHOUT activating it (no focus
   // steal, may stay buried); it is then captured by window id.
@@ -584,12 +625,11 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
 }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return null;
-  return await new Promise<string | null>((resolve) => {
-    let choice: string | null = null;
-    const item = (id: string, label: string, enabled = true): Electron.MenuItemConstructorOptions =>
-      ({ label, enabled, click: () => { choice = id; } });
-    const sep: Electron.MenuItemConstructorOptions = { type: 'separator' };
-    let tpl: Electron.MenuItemConstructorOptions[] = [];
+  const item = (id: string, label: string, enabled = true): WinMenuItem =>
+    ({ id, label, enabled });
+  const sep: WinMenuItem = { type: 'separator' };
+  let tpl: WinMenuItem[] = [];
+  {
     switch (ctx.type) {
       case 'link':
         tpl = [
@@ -628,10 +668,17 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
         ];
         break;
       default:
-        resolve(null);
-        return;
+        return null;
     }
-    const menu = Menu.buildFromTemplate(tpl);
+  }
+  // Windows gets a REAL OS menu (Electron's is a Chromium-drawn widget
+  // there); the mac popup is already native.
+  if (process.platform === 'win32') return popupWin32(win, tpl);
+  return await new Promise<string | null>((resolve) => {
+    let choice: string | null = null;
+    const menu = Menu.buildFromTemplate(tpl.map((e) => ('type' in e
+      ? { type: 'separator' as const }
+      : { label: e.label, enabled: e.enabled, click: () => { choice = e.id; } })));
     menu.popup({
       window: win,
       // give the click handler a beat to run before the close callback
