@@ -108,6 +108,11 @@ jobs:
         shell: bash
         run: node build-node/test/previewClamp.js
 
+      - name: The preview survives an annotation-layer rebuild
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/previewRebuild.js
+
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
         shell: bash
@@ -314,6 +319,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/previewClamp.js
+
+      - name: The preview survives an annotation-layer rebuild
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/previewRebuild.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}

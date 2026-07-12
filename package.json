@@ -17,6 +17,7 @@
     "test:e2e:edges": "node build-node/test/e2eEdges.js",
     "test:e2e:scrollbars": "node build-node/test/darkScrollbars.js",
     "test:e2e:preview-clamp": "node build-node/test/previewClamp.js",
+    "test:e2e:preview-rebuild": "node build-node/test/previewRebuild.js",
     "test:desktop:edges": "electron build-node/test/desktopEdges.js",
     "test:os-open-flash": "electron build-node/test/osOpenFlash.js",
     "test:os-open-derived": "electron build-node/test/osOpenDerivedTitle.js",
