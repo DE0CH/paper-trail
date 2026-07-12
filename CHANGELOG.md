@@ -3,6 +3,25 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.9
+
+- The Windows installer never force-closes a running Paper Trail
+  anymore. It asks the app to close — you get the usual chance to save
+  an unsaved reading session — and if you keep the app open, the
+  installer stops with a message instead of killing it.
+- Updates that download in the background are now completely silent:
+  no progress bar on the taskbar or Dock icon, no pop-up asking you to
+  restart. The update simply installs when you quit, and the next
+  start greets you with "Paper Trail was updated to …". (The progress
+  bar still appears for downloads you start yourself in the update
+  window.)
+- Restarting for an update with several windows open now asks the
+  windows with unsaved sessions first — cancelling keeps every window
+  exactly as it was.
+- Closing the update window during a download and checking again now
+  returns to the download's progress instead of offering the update
+  from scratch.
+
 ## 0.5.8
 
 - Checking for updates now opens a standard update window: it shows
