@@ -40,6 +40,10 @@ const dbg = (...a: unknown[]): void => {
 };
 
 app.setName('Paper Trail');
+// Windows attaches Jump Lists (and groups taskbar buttons) by
+// AppUserModelID; it must be the appId the installer stamps on the
+// shortcuts, or the Jump List's New Window task never shows.
+if (process.platform === 'win32') app.setAppUserModelId('local.paper-trail');
 
 protocol.registerSchemesAsPrivileged([{
   scheme: SCHEME,
