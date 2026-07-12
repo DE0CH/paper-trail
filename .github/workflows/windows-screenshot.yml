@@ -51,6 +51,20 @@ jobs:
           [System.Windows.Forms.SendKeys]::SendWait('?')
           Start-Sleep -Seconds 3
           Snap "windows-ui-shortcuts.png"
+          # dismiss it, then real-right-click the viewer: the context
+          # menu must be a REAL Win32 menu (native look, not Chromium's)
+          [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+          Start-Sleep -Seconds 2
+          Add-Type -Name U32 -Namespace PT -MemberDefinition '
+          [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+          [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, System.UIntPtr e);
+          '
+          [PT.U32]::SetCursorPos(800, 500) | Out-Null
+          Start-Sleep -Milliseconds 400
+          [PT.U32]::mouse_event(0x0008, 0, 0, 0, [UIntPtr]::Zero)
+          [PT.U32]::mouse_event(0x0010, 0, 0, 0, [UIntPtr]::Zero)
+          Start-Sleep -Seconds 3
+          Snap "windows-ui-context-menu.png"
           Get-ChildItem windows-ui*.png
 
       - name: Capture the web app's shortcut overlay in a Windows browser
