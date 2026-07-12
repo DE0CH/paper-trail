@@ -226,7 +226,8 @@ gotchas, stable test hook ids).
   old "web e2e OK locally"): ALL tests run on GitHub runners only.
   Local `npm run build` (compile) is fine.
 - MERGE branches, never cherry-pick ("there aren't many good reasons
-  to cherry pick" — owner, 2026-07-12).
+  to cherry pick" — owner, 2026-07-12), and always merge with
+  --no-ff: a branch integration always gets a merge commit.
 - CI must report ALL failures in a run, never fail fast, AND keep
   per-suite verdicts visible in the step list (owner rejected an
   aggregating shell loop for hiding which suite failed): one step per
