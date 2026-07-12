@@ -50,7 +50,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
-      - name: Browser e2e suite (headless browser + node server)
+      # The server outlives its step (runners keep background processes
+      # until the job ends), so every browser suite below gets its own
+      # pass/fail row while sharing one server.
+      - name: Start the web server for the browser suites
         if: ${{ !cancelled() }}
         shell: bash
         run: |
@@ -60,13 +63,31 @@ jobs:
             sleep 0.5
           done
           node build-node/tools/geometry.js
-          # Every suite runs even when an earlier one fails, so a
-          # single run reports the full picture; the step still fails.
-          rc=0
-          for t in e2e e2eEdges darkScrollbars trailRowLayout focusRing; do
-            node "build-node/test/$t.js" || rc=1
-          done
-          exit $rc
+
+      - name: Browser e2e suite
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/e2e.js
+
+      - name: Browser edge cases
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/e2eEdges.js
+
+      - name: Dark blended scrollbars
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/darkScrollbars.js
+
+      - name: Panel rows and headers share one layout system
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/trailRowLayout.js
+
+      - name: No stray focus rings, no Tab cycling
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/focusRing.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
@@ -220,7 +241,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
-      - name: Browser e2e suite (headless browser + node server)
+      # The server outlives its step (runners keep background processes
+      # until the job ends), so every browser suite below gets its own
+      # pass/fail row while sharing one server.
+      - name: Start the web server for the browser suites
         if: ${{ !cancelled() }}
         shell: bash
         run: |
@@ -230,13 +254,31 @@ jobs:
             sleep 0.5
           done
           node build-node/tools/geometry.js
-          # Every suite runs even when an earlier one fails, so a
-          # single run reports the full picture; the step still fails.
-          rc=0
-          for t in e2e e2eEdges darkScrollbars trailRowLayout focusRing; do
-            node "build-node/test/$t.js" || rc=1
-          done
-          exit $rc
+
+      - name: Browser e2e suite
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/e2e.js
+
+      - name: Browser edge cases
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/e2eEdges.js
+
+      - name: Dark blended scrollbars
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/darkScrollbars.js
+
+      - name: Panel rows and headers share one layout system
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/trailRowLayout.js
+
+      - name: No stray focus rings, no Tab cycling
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/focusRing.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
