@@ -19,6 +19,7 @@
     "test:offline": "electron build-node/test/desktopOffline.js",
     "test:autosave": "electron build-node/test/desktopAutosave.js",
     "test:install:win": "node build-node/test/installerWin.js",
+    "test:install:win:dpi": "node build-node/test/installerDpiAware.js",
     "test:install:win:close": "node build-node/test/installerCloseUnsaved.js",
     "test:install:mac": "node build-node/test/installerMac.js",
     "test:update:win": "node build-node/test/updateWin.js",

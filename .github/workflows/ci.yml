@@ -102,6 +102,10 @@ jobs:
         shell: bash
         run: node build-node/test/updateFeedNames.js dist-electron
 
+      - name: Installer declares DPI awareness (no HiDPI pixelation)
+        shell: bash
+        run: node build-node/test/installerDpiAware.js
+
       - name: Installer test (install, shortcuts, smoke, uninstall)
         shell: bash
         run: node build-node/test/installerWin.js
