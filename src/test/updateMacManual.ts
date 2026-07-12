@@ -67,7 +67,8 @@ async function run(): Promise<void> {
   });
   try {
     // Record every dialog and answer like a user: "Update Now" (0) at
-    // the offer, "Later" (1) at the restart prompt.
+    // the offer, "Later" (1) at the restart prompt. Download progress
+    // is recorded too so a timeout failure shows how far it got.
     await eApp.evaluate(({ dialog }) => {
       const seen: string[] = [];
       (globalThis as { __ptDialogs?: string[] }).__ptDialogs = seen;
@@ -76,13 +77,30 @@ async function run(): Promise<void> {
         seen.push(opts.message);
         return { response: seen.length === 1 ? 0 : 1, checkboxChecked: false };
       }) as typeof dialog.showMessageBox;
+      // best-effort download diagnostics (playwright's evaluate has no
+      // `require` in scope; go through the main module's loader)
+      try {
+        const req = (process as unknown as {
+          mainModule?: { require: (m: string) => typeof import('electron-updater') };
+        }).mainModule?.require;
+        const g = globalThis as { __ptProgress?: string };
+        if (req) {
+          const { autoUpdater } = req('electron-updater');
+          autoUpdater.on('download-progress', (p) => {
+            g.__ptProgress = `${p.percent.toFixed(1)}%`;
+          });
+          autoUpdater.on('update-downloaded', () => { g.__ptProgress = 'downloaded'; });
+          autoUpdater.on('error', (e) => { g.__ptProgress = `error: ${String(e)}`; });
+        }
+      } catch { /* diagnostics only */ }
     });
     await eApp.firstWindow();
     await eApp.evaluate(({ Menu }) => {
       Menu.getApplicationMenu()?.getMenuItemById('check-updates')?.click();
     });
-    // wait for both prompts (offer + downloaded/ready)
-    const deadline = Date.now() + 240_000;
+    // wait for both prompts (offer + downloaded/ready); Intel runners
+    // are slow enough that the download itself dominates
+    const deadline = Date.now() + 480_000;
     let dialogs: string[] = [];
     while (Date.now() < deadline) {
       dialogs = await eApp.evaluate(() =>
@@ -90,11 +108,13 @@ async function run(): Promise<void> {
       if (dialogs.length >= 2) break;
       await new Promise((r) => setTimeout(r, 2000));
     }
+    const progress = await eApp.evaluate(() =>
+      (globalThis as { __ptProgress?: string }).__ptProgress ?? 'no download activity');
     const ok = dialogs.length >= 2
       && dialogs[0].includes(`${newVersion} is available`)
       && dialogs[1].includes(`${newVersion} is ready`);
     console.log(`${ok ? 'PASS' : 'FAIL'}  Check for Updates offers, downloads, and asks to restart`
-      + `  — ${JSON.stringify(dialogs)}`);
+      + `  — ${JSON.stringify(dialogs)} (download: ${progress})`);
     process.exit(ok ? 0 : 1);
   } finally {
     await eApp.close().catch(() => { /* app may already be gone */ });

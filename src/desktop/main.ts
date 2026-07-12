@@ -414,7 +414,22 @@ async function checkForUpdatesInteractive(): Promise<void> {
       cancelId: 1,
     });
     if (response !== 0) return;
-    if (downloadedVersion !== latest) await r?.downloadPromise;
+    if (downloadedVersion !== latest) {
+      // The background check may already be downloading, in which case
+      // this result carries no downloadPromise — watch the downloaded
+      // marker as well rather than waiting on the promise alone.
+      await Promise.race([
+        r?.downloadPromise ?? new Promise(() => { /* never */ }),
+        new Promise<void>((resolve) => {
+          const timer = setInterval(() => {
+            if (downloadedVersion === latest) {
+              clearInterval(timer);
+              resolve();
+            }
+          }, 500);
+        }),
+      ]);
+    }
     await promptRestart(latest);
   } catch (e) {
     await dialog.showMessageBox({
