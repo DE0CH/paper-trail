@@ -47,9 +47,11 @@ jobs:
         run: node --test build-node/test/unit.js
 
       - name: Unit edge cases (hostile session files, model invariants)
+        if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
       - name: Browser e2e suite (headless browser + node server)
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           node build-node/node/server.js 8377 &
@@ -67,22 +69,27 @@ jobs:
           exit $rc
 
       - name: Desktop e2e suite (Electron shell, fully offline)
+        if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/desktopE2e.js
 
       - name: Desktop save regression (menu actions without user activation)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopSave.js
 
       - name: Desktop offline regression (no network requests at all)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopOffline.js
 
       - name: Desktop auto-save regression (Recents re-arm auto-save)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
 
       - name: Desktop edge cases (open routing, external links, bounds)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopEdges.js
 
@@ -94,10 +101,12 @@ jobs:
         run: npx electron build-node/test/osOpenFlash.js
 
       - name: Jump List New Window task opens a fresh window
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/newWindowTask.js
 
       - name: Jump List registration carries the New Window task (right identity)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/jumpListRegistration.js
 
@@ -200,9 +209,11 @@ jobs:
         run: node --test build-node/test/unit.js
 
       - name: Unit edge cases (hostile session files, model invariants)
+        if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
       - name: Browser e2e suite (headless browser + node server)
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           node build-node/node/server.js 8377 &
@@ -220,22 +231,27 @@ jobs:
           exit $rc
 
       - name: Desktop e2e suite (Electron shell, fully offline)
+        if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/desktopE2e.js
 
       - name: Desktop save regression (menu actions without user activation)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopSave.js
 
       - name: Desktop offline regression (no network requests at all)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopOffline.js
 
       - name: Desktop auto-save regression (Recents re-arm auto-save)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
 
       - name: Desktop edge cases (open routing, external links, bounds)
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopEdges.js
 
@@ -247,18 +263,23 @@ jobs:
         run: npx electron build-node/test/osOpenFlash.js
 
       - name: Jump List New Window task opens a fresh window
+        if: ${{ !cancelled() }}
         run: npx electron build-node/test/newWindowTask.js
 
       - name: Software Update window flow (states, buttons, Later)
+        if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateWindow.js
 
       - name: Restart to Update guards unsaved sessions (Cancel/Save)
+        if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateRestartUnsaved.js
 
       - name: Update window edge cases (up to date, errors, resume, no re-download)
+        if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateWindowEdges.js
 
       - name: Restart edge cases (re-check after Cancel, second window, Don't Save)
+        if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateRestartEdges.js
 
       - name: Package the macOS app (unsigned)
