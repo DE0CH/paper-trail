@@ -220,6 +220,9 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 In memory/product-design.md (trails model, session-file philosophy,
 two-file flow, preview/panels/rendering rules, perf limits, pdfjs v6
 gotchas, stable test hook ids).
+- [Flakes are bug reports](flakes-are-bug-reports.md) — root-cause
+  intermittent failures and pin them with a deterministic test
+  (owner rule 2026-07-12; e.g. osOpenDerivedTitle).
 - [Existing components over custom](existing-components-over-custom.md)
   — never hand-draw/hand-roll where a native/stock component exists
   (owner rule 2026-07-12: scrollbars, mac doc icons, installer icon).
