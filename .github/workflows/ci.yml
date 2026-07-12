@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: node build-node/test/e2eEdges.js
 
-      - name: Dark blended scrollbars
+      - name: Native dark scrollbars (rail and arrows intact)
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/darkScrollbars.js
@@ -295,7 +295,7 @@ jobs:
         shell: bash
         run: node build-node/test/e2eEdges.js
 
-      - name: Dark blended scrollbars
+      - name: Native dark scrollbars (rail and arrows intact)
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/darkScrollbars.js

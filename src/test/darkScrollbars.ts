@@ -1,9 +1,10 @@
-// The app has exactly one theme — dark — so scrollbars must blend
-// with the surfaces they ride on. Chromium renders native LIGHT
-// scrollbars (a glaring white rail next to the dark panels) unless
-// the page both declares `color-scheme: dark` and styles the
-// scrollbar parts: this checks the declaration, a dark thumb, and a
-// track that disappears into the background.
+// The app has exactly one theme — dark — and its scrollbars must be
+// the NATIVE dark ones: normal width, a visible rail, arrow buttons,
+// native drag. Chromium provides all of that from `color-scheme:
+// dark` alone; styling ANY ::-webkit-scrollbar part switches the
+// whole widget to legacy custom rendering, which silently drops the
+// rail and the arrows (the bug this pins). So: dark scheme declared,
+// zero scrollbar styling anywhere.
 // Run: node build-node/test/darkScrollbars.js   (server on 8377 first)
 
 import { findBrowser } from './browsers';
@@ -28,31 +29,29 @@ async function run(): Promise<void> {
     await page.waitForSelector('.page canvas', { timeout: 20_000 });
 
     const style = await page.evaluate(() => {
-      const viewer = document.getElementById('viewerContainer') ?? document.body;
-      const luminance = (color: string): number | null => {
-        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(color);
-        if (!m) return null;
-        if (m[4] !== undefined && Number(m[4]) === 0) return -1; // transparent
-        return (Number(m[1]) + Number(m[2]) + Number(m[3])) / 3;
-      };
-      const thumb = getComputedStyle(viewer, '::-webkit-scrollbar-thumb').backgroundColor;
-      const track = getComputedStyle(viewer, '::-webkit-scrollbar-track').backgroundColor;
+      const scrollbarSelectors: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue; // cross-origin sheet: not ours, cannot style our bars
+        }
+        for (const rule of Array.from(rules)) {
+          const sel = (rule as CSSStyleRule).selectorText ?? '';
+          if (sel.includes('::-webkit-scrollbar')) scrollbarSelectors.push(sel);
+        }
+      }
       return {
         scheme: getComputedStyle(document.documentElement).colorScheme,
-        thumb,
-        thumbLum: luminance(thumb),
-        track,
-        trackLum: luminance(track),
+        scrollbarSelectors,
       };
     });
     check('the document declares a dark color scheme',
       style.scheme === 'dark', style.scheme);
-    check('the scrollbar thumb is dark, not a white rail',
-      style.thumbLum !== null && style.thumbLum >= 0 && style.thumbLum < 128,
-      `${style.thumb} (luminance ${style.thumbLum})`);
-    check('the scrollbar track blends into the background',
-      style.trackLum !== null && (style.trackLum === -1 || style.trackLum < 128),
-      `${style.track} (luminance ${style.trackLum})`);
+    check('no stylesheet customizes the scrollbars (native rail and arrows)',
+      style.scrollbarSelectors.length === 0,
+      style.scrollbarSelectors.join(', ') || '(none)');
 
     await page.evaluate(() => {
       const pt = (window as never as { __pt: { session: { dirty: boolean } } }).__pt;
