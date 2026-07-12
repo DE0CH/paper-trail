@@ -17,7 +17,7 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
   updateFeedNames test), release-gated Vercel deploy (deploy.yml
   DELETED), ci.yml cancel-in-progress concurrency. v0.5.6 SKIPPED;
   v0.5.5 repaired in place with 6 alias assets.
-- v0.5.9 tagged, release in flight (verify `gh release view v0.5.9`):
+- v0.5.9 PUBLISHED and verified (10 assets, urls 200, deploy-web ok):
   NSIS graceful-close (build/installer.nsh customCheckAppRunning —
   asks, never taskkill /F, exit 4 on refusal), SILENT background
   updates (no icon progress/toast; install on quit; next start toasts
