@@ -87,9 +87,12 @@ async function run(): Promise<void> {
   check('...and never becomes an in-app window', windows().length === before,
     `${windows().length} windows`);
 
-  // Window bounds are remembered from the window closed last.
-  second.setBounds({ width: 1111, height: 777 });
+  // Window bounds are remembered from the window closed last. The
+  // asked-for size must fit the runner's small display, and the OS may
+  // clamp it — what counts is whatever size the window REALLY had.
+  second.setBounds({ width: 901, height: 641 });
   await new Promise((r) => setTimeout(r, 300));
+  const actual = second.getBounds();
   second.close();
   await waitFor(() => windows().length, (n) => n === 1, 15_000);
   app.emit('second-instance', {}, [process.execPath, '--new-window'], {});
@@ -97,7 +100,8 @@ async function run(): Promise<void> {
     () => windows().find((w) => w !== first), (w) => !!w, 15_000);
   const b = reopened?.getBounds();
   check('a new window opens at the size the last one was closed with',
-    !!b && b.width === 1111 && b.height === 777, JSON.stringify(b));
+    !!b && b.width === actual.width && b.height === actual.height,
+    JSON.stringify({ closedWith: actual, reopened: b }));
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
