@@ -159,6 +159,9 @@ jobs:
 
       - run: npm run build
 
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
       - name: Package the current version (installer only)
         env:
           ELECTRON_BUILDER_7Z_FILTER: BCJ2
@@ -184,6 +187,11 @@ jobs:
       - name: Install-on-quit test (background download, normal quit)
         shell: bash
         run: node build-node/test/updateWinQuitInstall.js
+
+      - name: Double-click a PDF against a quit-installed update
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinOpenAfterUpdate.js
 
   mac:
     strategy:
