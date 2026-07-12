@@ -66,6 +66,10 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "files": [
+        "!node_modules/koffi/**",
+        "!node_modules/@koromix/**"
+      ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "notarize": true,
