@@ -85,9 +85,15 @@ async function launchDirty(exe: string, answer: number): Promise<ElectronApplica
       };
   }, answer);
   const page = await eApp.firstWindow();
-  // With a listener registered, playwright leaves dialogs alone — the
-  // shell's stubbed native prompt is the one doing the answering.
-  page.on('dialog', (d) => { d.dismiss().catch(() => { /* shell got it */ }); });
+  // With a listener registered, playwright leaves dialogs alone. The
+  // shell's stubbed native prompt is the real answerer, but this
+  // response can land first, so it must agree with the phase: Cancel
+  // keeps the page (dismiss), Don't Save lets the unload proceed
+  // (accept).
+  page.on('dialog', (d) => {
+    (answer === 2 ? d.dismiss() : d.accept())
+      .catch(() => { /* the shell answered first */ });
+  });
   await page.waitForFunction(
     () => !!(window as { __pt?: unknown }).__pt, undefined, { timeout: 60_000 });
   await new Promise((r) => setTimeout(r, 5000)); // let the PDF settle
@@ -135,11 +141,19 @@ async function run(): Promise<void> {
   check('the close request went through the unsaved-session prompt',
     prompts.some((m) => m === SAVE_PROMPT), prompts.join(' | ') || '(none)');
 
-  // Clean shutdown for phase 2: answer Don't Save from now on.
+  // Clean shutdown for phase 2: answer Don't Save from now on — on
+  // both answerers (the shell stub and the page dialog listener).
   if (alive) {
     await cancelApp.evaluate(({ dialog }) => {
       (dialog as { showMessageBoxSync: unknown }).showMessageBoxSync = () => 1;
     });
+    const page1 = await cancelApp.firstWindow().catch(() => null);
+    if (page1) {
+      page1.removeAllListeners('dialog');
+      page1.on('dialog', (d) => {
+        d.accept().catch(() => { /* the shell answered first */ });
+      });
+    }
     await cancelApp.close().catch(() => { /* closing is the point */ });
     await waitFor(() =>
       spawnSync('tasklist', ['/FI', `IMAGENAME eq ${path.basename(exe)}`],
