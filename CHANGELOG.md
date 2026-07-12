@@ -3,6 +3,21 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.4
+
+- Fixed: on macOS, opening a session or PDF by double-clicking it in
+  Finder could crash the app with a "JavaScript error" dialog the
+  moment it launched.
+- Session files now carry their own document icon in Finder and
+  Explorer: a page with the trail-and-target logo.
+- The reference preview popup no longer extends up into the toolbar —
+  dragging its top edge stops just below it.
+- Windows: right-click menus are now real Windows menus with the
+  native look, instead of the browser-style menus Electron draws.
+- Releases are now published only after the complete test suite —
+  including installer and self-update tests — passes on all four
+  machine types (Windows and macOS, Intel and ARM each).
+
 ## 0.5.3
 
 - Checking for updates is now a real conversation: if a new version

@@ -31,8 +31,14 @@ jobs:
           grep -q "^## $TAG$" CHANGELOG.md \
             || { echo "::error::CHANGELOG.md has no '## $TAG' section — write the user-facing summary first"; exit 1; }
 
+  # The complete CI pyramid (all suites, installers, update tests on
+  # every OS/CPU combination) must pass before anything is published.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
   windows:
-    needs: [check-version]
+    needs: [check-version, ci]
     if: ${{ !failure() && !cancelled() }}
     runs-on: windows-latest
     steps:
@@ -88,7 +94,7 @@ jobs:
           generate_release_notes: true
 
   mac:
-    needs: [check-version]
+    needs: [check-version, ci]
     if: ${{ !failure() && !cancelled() }}
     runs-on: macos-latest
     steps:
