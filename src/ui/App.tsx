@@ -90,6 +90,12 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      if (e.key === 'Tab') {
+        // No keyboard focus cycling: it rings arbitrary buttons with
+        // the UA focus outline. (Deliberate a11y revisit pending.)
+        e.preventDefault();
+        return;
+      }
       if (e.key === 'Escape') {
         setHelpOpen(false);
         return;
@@ -142,8 +148,18 @@ export default function App() {
         default: break;
       }
     };
+    // A pointer-clicked button must not keep focus: any later
+    // keystroke would upgrade it to :focus-visible and paint the UA
+    // ring. (Keyboard "clicks" have detail 0 and keep focus.)
+    const onClick = (e: MouseEvent) => {
+      if (e.detail > 0) (e.target as HTMLElement | null)?.closest?.('button')?.blur();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('click', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('click', onClick);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

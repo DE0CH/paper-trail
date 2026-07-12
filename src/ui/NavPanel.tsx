@@ -26,7 +26,7 @@ function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
   return (
     <li>
       <div
-        className="outlineItem flex items-center px-1.5 py-0.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
+        className="outlineItem flex items-center h-6 px-1.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
         title={n.title}
         onClick={(e) => void controller.outlineJump(n, e.metaKey || e.ctrlKey)}
       >
@@ -160,13 +160,19 @@ export default function NavPanel({
     </button>
   );
 
-  const headerBtn = 'inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer';
+  // flex-none: header buttons never shrink, or the close button would
+  // compress off the shared right-edge axis on narrow panels.
+  const headerBtn = 'flex-none inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer';
 
   return (
     <div id="navCol" className="flex flex-col overflow-hidden border-r border-borderapp h-full">
-      <div className="flex items-stretch h-9 border-b border-borderapp px-1.5 flex-none">
-        {tabBtn('outline', 'Outline')}
-        {tabBtn('pages', 'Pages')}
+      <div className="flex items-stretch h-9 border-b border-borderapp pl-1.5 pr-2 flex-none">
+        {/* The tabs give way on narrow panels; the buttons hold their
+            size so the close button stays on the shared right axis. */}
+        <div className="flex items-stretch min-w-0 overflow-hidden">
+          {tabBtn('outline', 'Outline')}
+          {tabBtn('pages', 'Pages')}
+        </div>
         <span className="flex-1" />
         {tab === 'outline' && hasSections && (
           <>
@@ -190,7 +196,7 @@ export default function NavPanel({
         )}
         <button
           id="btnNavClose"
-          className="inline-flex items-center self-center h-7 text-dim hover:text-fgapp cursor-pointer px-1.5"
+          className="flex-none inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
           title="Close panel"
           onClick={onClose}
         >

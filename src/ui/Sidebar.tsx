@@ -9,6 +9,12 @@ const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 my-px rounded-md cursor-po
 // fixed height, padding compensated by negative margin) so nothing shifts.
 const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[13px] border border-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
+// One shape for every small row button; the close button additionally
+// keeps a permanent flex slot so all rows align on it.
+const toolBtn = 'inline-flex items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer';
+// Hover tools overlay the text instead of reserving space: absolutely
+// positioned just left of the close slot, on the row's own background.
+const toolsOverlay = 'absolute inset-y-0 hidden group-hover:flex items-center gap-1.5 pl-1 bg-inherit';
 
 function StackRow({ snap, id, name }: {
   snap: Snapshot; id: number; name: string;
@@ -25,7 +31,7 @@ function StackRow({ snap, id, name }: {
   const active = id === snap.activeStackId;
   return (
     <div
-      className={`stackRow group ${rowBase} ${active ? rowActive : ''}`}
+      className={`stackRow group relative ${rowBase} ${active ? rowActive : ''}`}
       data-id={id}
       title={`${name} — double-click to rename`}
       onClick={() => controller.stackSwitch(id)}
@@ -62,36 +68,38 @@ function StackRow({ snap, id, name }: {
         </span>
       )}
       {!editing && (
-        <button
-          className="editName flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
-          title="Rename this trail"
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditing(true);
-          }}
-        >
-          <IconEdit />
-        </button>
+        <span className={`${toolsOverlay} right-[22px]`}>
+          <button
+            className={`editName ${toolBtn}`}
+            title="Rename this trail"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing(true);
+            }}
+          >
+            <IconEdit />
+          </button>
+          <button
+            className={`dup ${toolBtn}`}
+            title="Duplicate this trail"
+            onClick={(e) => {
+              e.stopPropagation();
+              controller.stackDuplicate(id);
+            }}
+          >
+            <IconCopy />
+          </button>
+        </span>
       )}
       <button
-        className="dup flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
-        title="Duplicate this trail"
-        onClick={(e) => {
-          e.stopPropagation();
-          controller.stackDuplicate(id);
-        }}
-      >
-        <IconCopy />
-      </button>
-      <button
-        className="x flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+        className={`x ${toolBtn} flex-none ${active ? '' : 'opacity-0'} group-hover:opacity-100`}
         title="Close this trail"
         onClick={(e) => {
           e.stopPropagation();
           controller.stackClose(id);
         }}
       >
-        <IconClose />
+        <IconClose size={14} />
       </button>
     </div>
   );
@@ -111,7 +119,7 @@ function HistRow({ label, page, current, index, removable }: {
 
   return (
     <div
-      className={`histItem group ${rowBase} ${current ? `current ${rowActive}` : ''}`}
+      className={`histItem group relative ${rowBase} ${current ? `current ${rowActive}` : ''}`}
       data-idx={index}
       title={`${label} — page ${page} — double-click to rename`}
       onClick={() => controller.histEntryClick(index)}
@@ -148,37 +156,39 @@ function HistRow({ label, page, current, index, removable }: {
         </span>
       )}
       {!editing && (
-        <button
-          className="editName flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
-          title="Rename this entry"
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditing(true);
-          }}
-        >
-          <IconEdit />
-        </button>
+        <span className={`${toolsOverlay} ${removable ? 'right-[22px]' : 'right-1.5'}`}>
+          <button
+            className={`editName ${toolBtn}`}
+            title="Rename this entry"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing(true);
+            }}
+          >
+            <IconEdit />
+          </button>
+          <button
+            className={`setPos ${toolBtn}`}
+            title="Set this entry to the current position"
+            onClick={(e) => {
+              e.stopPropagation();
+              controller.entrySetPos(index);
+            }}
+          >
+            <IconAnchor />
+          </button>
+        </span>
       )}
-      <button
-        className="setPos flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
-        title="Set this entry to the current position"
-        onClick={(e) => {
-          e.stopPropagation();
-          controller.entrySetPos(index);
-        }}
-      >
-        <IconAnchor />
-      </button>
       {removable && (
         <button
-          className="rmEntry flex-none inline-flex items-center justify-center w-5 h-5 rounded text-dim opacity-0 group-hover:opacity-100 hover:bg-[#45474e] hover:text-fgapp cursor-pointer"
+          className={`rmEntry ${toolBtn} flex-none ${current ? '' : 'opacity-0'} group-hover:opacity-100`}
           title="Remove this entry from the trail"
           onClick={(e) => {
             e.stopPropagation();
             controller.entryRemove(index);
           }}
         >
-          <IconClose />
+          <IconClose size={14} />
         </button>
       )}
     </div>
@@ -232,7 +242,7 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
-        <div className="flex items-center h-9 flex-none border-b border-borderapp px-1.5">
+        <div className="flex items-center h-9 flex-none border-b border-borderapp pl-1.5 pr-2">
           <span className="text-dim text-[12.5px] px-1">Trails</span>
           <span className="flex-1" />
           <button
@@ -263,7 +273,7 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden"
         style={{ width: widths.side, minWidth: widths.side }}
       >
-        <div className="flex items-center h-9 flex-none border-b border-borderapp px-1.5">
+        <div className="flex items-center h-9 flex-none border-b border-borderapp pl-1.5 pr-2">
           <span className="text-dim text-[12.5px] px-1">History</span>
           <span className="flex-1" />
           <button

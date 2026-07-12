@@ -22,6 +22,31 @@ html, body, #root {
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* The app has exactly one theme — dark — so scrollbars blend with the
+   surfaces they ride on: a transparent track and a border-toned thumb
+   instead of Chromium's light rails. color-scheme keeps the few
+   remaining native bits (form controls, overlay scrollbars) dark. */
+html {
+  color-scheme: dark;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-borderapp);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-hoverrow);
+}
+
 /* ------------------------------------------------------------------ */
 /* pdf.js page / text / annotation layers — inherently non-utility CSS */
 /* ------------------------------------------------------------------ */
