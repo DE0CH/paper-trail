@@ -231,9 +231,9 @@ gotchas, stable test hook ids).
 - Background-work heartbeat (owner rule): whenever a background
   command is expected to wake Claude on completion, ALSO set a
   periodic alarm (ScheduleWakeup, 5 minutes) that does NOTHING but
-  wake — regardless of the task's status; never wrap watchers in
-  kill-timeouts. What to do upon waking (re-check, re-arm, intervene,
-  nothing) is entirely the woken agent's decision.
+  wake — regardless of the task's status. What to do upon waking
+  (re-check, re-arm, intervene, nothing) is entirely the woken
+  agent's decision.
 - CI must report ALL failures in a run, never fail fast, AND keep
   per-suite verdicts visible in the step list (owner rejected an
   aggregating shell loop for hiding which suite failed): one step per
