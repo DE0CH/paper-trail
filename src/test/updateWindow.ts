@@ -14,9 +14,17 @@ process.env.PT_SHOT = '1'; // show without stealing focus
 process.env.PT_UPDATE_URL = 'http://127.0.0.1:8771';
 
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
 import { app, BrowserWindow, Menu } from 'electron';
+
+// electron-updater in a dev (unpackaged) run reads dev-app-update.yml
+// from the app path for its cache-directory name even though the feed
+// itself comes from PT_UPDATE_URL — without it the download rejects
+// with ENOENT before it starts. Provide one next to the entry module.
+fs.writeFileSync(path.join(__dirname, 'dev-app-update.yml'),
+  'provider: generic\nurl: http://127.0.0.1:8771\nupdaterCacheDirName: pt-updwin-harness\n');
 
 // A fake update feed: any zip whose sha512 matches the yml downloads
 // and verifies fine (installing it would fail, but the window flow

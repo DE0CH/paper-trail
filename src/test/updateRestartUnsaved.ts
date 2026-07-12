@@ -20,6 +20,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { app, BrowserWindow, dialog, Menu } from 'electron';
 
+// electron-updater in a dev (unpackaged) run reads dev-app-update.yml
+// from the app path for its cache-directory name even though the feed
+// itself comes from PT_UPDATE_URL — without it the download rejects
+// with ENOENT before it starts. Provide one next to the entry module.
+fs.writeFileSync(path.join(__dirname, 'dev-app-update.yml'),
+  'provider: generic\nurl: http://127.0.0.1:8772\nupdaterCacheDirName: pt-updrst-harness\n');
+
 // Stub the native prompts before the shell registers its handlers.
 // The unsaved-session prompt is synchronous; its answer is switched
 // per phase (2 = Cancel, 0 = Save…).
