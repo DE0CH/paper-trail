@@ -65,6 +65,35 @@ function docSvg(): string {
 `;
 }
 
+// The .pdf document icon: the same page shape, but marked as a PDF
+// with a red badge — documents opened with the app must not wear the
+// app's own icon.
+function pdfSvg(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e9eaee"/>
+    </linearGradient>
+  </defs>
+  <path d="M218 62 h414 l230 230 v620 a50 50 0 0 1 -50 50 h-594 a50 50 0 0 1 -50 -50 v-800 a50 50 0 0 1 50 -50 z"
+        fill="url(#page)" stroke="#b9bdc7" stroke-width="8"/>
+  <path d="M632 62 l230 230 h-180 a50 50 0 0 1 -50 -50 z" fill="#c5c9d3"/>
+  <g stroke="#ccd0d9" stroke-width="26" stroke-linecap="round">
+    <line x1="268" y1="240" x2="520" y2="240"/>
+    <line x1="268" y1="344" x2="700" y2="344"/>
+    <line x1="268" y1="448" x2="660" y2="448"/>
+    <line x1="268" y1="552" x2="700" y2="552"/>
+  </g>
+  <rect x="218" y="640" width="430" height="220" rx="44" fill="#d93025"/>
+  <text x="433" y="800" text-anchor="middle"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="150" font-weight="700" fill="#ffffff"
+        letter-spacing="8">PDF</text>
+</svg>
+`;
+}
+
 function makeIcns(master: string, out: string, tmp: string): void {
   const iconset = path.join(tmp, `${path.basename(out, '.icns')}.iconset`);
   fs.mkdirSync(iconset);
@@ -90,12 +119,15 @@ async function run(): Promise<void> {
   const flatPng = path.join(tmp, 'icon-flat-1024.png');
   const docFile = path.join(tmp, 'icon-doc.svg');
   const docPng = path.join(tmp, 'icon-doc-1024.png');
+  const pdfFile = path.join(tmp, 'icon-pdf.svg');
+  const pdfPng = path.join(tmp, 'icon-pdf-1024.png');
   fs.writeFileSync(flatFile, flatSvg());
   fs.writeFileSync(docFile, docSvg());
+  fs.writeFileSync(pdfFile, pdfSvg());
 
   const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
   const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
-  for (const [svg, png] of [[SVG, master], [flatFile, flatPng], [docFile, docPng]] as const) {
+  for (const [svg, png] of [[SVG, master], [flatFile, flatPng], [docFile, docPng], [pdfFile, pdfPng]] as const) {
     await page.goto('file://' + svg);
     await page.evaluate(() => {
       document.documentElement.style.background = 'transparent';
@@ -104,15 +136,18 @@ async function run(): Promise<void> {
   }
   await browser.close();
 
-  // macOS .icns: the app icon and the .ptl document icon
+  // macOS .icns: the app icon and the two document icons
   makeIcns(master, path.join(BUILD, 'icon.icns'), tmp);
   makeIcns(docPng, path.join(BUILD, 'ptl.icns'), tmp);
+  makeIcns(pdfPng, path.join(BUILD, 'pdf.icns'), tmp);
 
-  // Windows .ico (256px): flat artwork for the app, page for .ptl
+  // Windows .ico (256px): flat artwork for the app, pages for documents
   execFileSync('ffmpeg', ['-y', '-i', flatPng, '-vf', 'scale=256:256',
     path.join(BUILD, 'icon.ico')], { stdio: 'ignore' });
   execFileSync('ffmpeg', ['-y', '-i', docPng, '-vf', 'scale=256:256',
     path.join(BUILD, 'ptl.ico')], { stdio: 'ignore' });
+  execFileSync('ffmpeg', ['-y', '-i', pdfPng, '-vf', 'scale=256:256',
+    path.join(BUILD, 'pdf.ico')], { stdio: 'ignore' });
 
   // favicon (flat artwork)
   fs.mkdirSync(path.join(ROOT, 'public'), { recursive: true });
@@ -120,7 +155,7 @@ async function run(): Promise<void> {
 
   fs.rmSync(tmp, { recursive: true, force: true });
   for (const f of ['build/icon.icns', 'build/icon.ico', 'build/ptl.icns',
-    'build/ptl.ico', 'public/icon.svg']) {
+    'build/ptl.ico', 'build/pdf.icns', 'build/pdf.ico', 'public/icon.svg']) {
     console.log('wrote', f, `${Math.round(fs.statSync(path.join(ROOT, f)).size / 1024)}KB`);
   }
 }

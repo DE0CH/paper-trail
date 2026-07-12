@@ -144,7 +144,8 @@
         "ext": "pdf",
         "name": "PDF Document",
         "role": "Viewer",
-        "mimeType": "application/pdf"
+        "mimeType": "application/pdf",
+        "icon": "pdf"
       },
       {
         "ext": "ptl",
