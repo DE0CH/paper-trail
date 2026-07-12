@@ -1,11 +1,12 @@
 // Reopening the app WHILE a quit-install is replacing its files must
 // not flash-close and vanish (the owner's report: "looks like it's
-// corrupt"). The contract: a reopen attempted as early as possible
-// during the install ends with the app RUNNING, on the NEW version —
-// on the fixed shell via a small detached "Updating Paper Trail…"
-// window that holds no locks and starts the app when the installer
-// exits. Race-tolerant by design: if the installer wins the race the
-// app simply starts normally, and the assertions still hold.
+// corrupt"). The contract: a reopen that lands mid-install ends with
+// the app RUNNING, on the NEW version, with the double-clicked
+// document open. Runners install in ~2s, so a raced reopen keeps
+// missing the window (runs 29208984460, 29209714448); this witness
+// removes the race: it FREEZES the installer process the moment it
+// appears (NtSuspendProcess), reopens against the frozen mid-install
+// state, then thaws the installer and asserts the end state.
 // Run (CI, Windows): node build-node/test/updateWinOpenDuringInstall.js
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -62,6 +63,18 @@ function running(imageName: string): boolean {
     .includes(imageName.toLowerCase());
 }
 
+// The app's window titles, for asserting the reopened document made it
+// through (the reopen carries a file argument, like a real double-click).
+function windowTitles(imageName: string): string {
+  const base = imageName.replace(/\.exe$/i, '').replace(/'/g, "''");
+  try {
+    return ps(`(Get-Process -Name '${base}' -ErrorAction SilentlyContinue |
+      ForEach-Object { $_.MainWindowTitle }) -join ' | '`);
+  } catch {
+    return '';
+  }
+}
+
 async function waitFor(cond: () => boolean, ms: number, step = 1000): Promise<boolean> {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
@@ -88,6 +101,66 @@ function serveFeed(): http.Server {
   });
   server.listen(8776, '127.0.0.1');
   return server;
+}
+
+// ntdll suspend/resume: the only deterministic way to hold an NSIS
+// installer mid-install (its internal waits freeze with it, so nothing
+// times out while frozen).
+const NATIVE = `
+Add-Type -Name Native -Namespace PT -MemberDefinition @'
+[DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr h);
+[DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr h);
+'@
+`;
+
+/**
+ * Watch for a process with this image name and freeze it the instant
+ * it appears. A single long-lived PowerShell polls at 25ms — spawning
+ * one per poll would be far too coarse for a ~2s installer. Resolves
+ * with the frozen PID, or null if none appeared in time.
+ */
+function freezeOnSight(imageName: string): { armed: Promise<void>; frozen: Promise<number | null> } {
+  const base = imageName.replace(/\.exe$/i, '').replace(/'/g, "''");
+  const script = `
+${NATIVE}
+Write-Output 'ARMED'
+$deadline = (Get-Date).AddSeconds(120)
+while ((Get-Date) -lt $deadline) {
+  $p = Get-Process -Name '${base}' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($p) {
+    [PT.Native]::NtSuspendProcess($p.Handle) | Out-Null
+    Write-Output "FROZEN $($p.Id)"
+    exit 0
+  }
+  Start-Sleep -Milliseconds 25
+}
+Write-Output 'TIMEOUT'
+exit 1
+`;
+  const child = spawn('powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand',
+      Buffer.from(script, 'utf16le').toString('base64')],
+    { stdio: ['ignore', 'pipe', 'ignore'] });
+  let armedResolve: () => void;
+  let frozenResolve: (pid: number | null) => void;
+  const armed = new Promise<void>((r) => { armedResolve = r; });
+  const frozen = new Promise<number | null>((r) => { frozenResolve = r; });
+  let buf = '';
+  child.stdout.on('data', (d: Buffer) => {
+    buf += d.toString();
+    if (buf.includes('ARMED')) armedResolve();
+    const m = /FROZEN (\d+)/.exec(buf);
+    if (m) frozenResolve(Number(m[1]));
+    if (buf.includes('TIMEOUT')) frozenResolve(null);
+  });
+  child.on('exit', () => frozenResolve(null));
+  return { armed, frozen };
+}
+
+function thaw(pid: number): void {
+  ps(`${NATIVE}
+$p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue
+if ($p) { [PT.Native]::NtResumeProcess($p.Handle) | Out-Null }`);
 }
 
 async function run(): Promise<void> {
@@ -125,7 +198,9 @@ async function run(): Promise<void> {
   const feedSetup = fs.readdirSync(FEED).find((f) => /Setup.*\.exe$/i.test(f));
   const feedSize = feedSetup ? fs.statSync(path.join(FEED, feedSetup)).size : -1;
 
-  // The reopen carries a file argument, like a real double-click.
+  // The reopen carries a file argument, like a real double-click. The
+  // name keeps a space on purpose: the argument must survive whatever
+  // hands the reopen to the new version.
   const pdf = path.join(userData, 'Reopened Paper.pdf');
   fs.copyFileSync(path.join(ROOT, 'sample', 'WStarCats.pdf'), pdf);
 
@@ -140,6 +215,7 @@ async function run(): Promise<void> {
 
   const eApp = await _electron.launch({ executablePath: exe, args: [], env });
   let installerName = '';
+  let watcher: ReturnType<typeof freezeOnSight> | null = null;
   try {
     await eApp.firstWindow();
     const downloaded = await waitFor(() =>
@@ -154,6 +230,11 @@ async function run(): Promise<void> {
     installerName = fs.readdirSync(pending)
       .find((f) => f.toLowerCase().endsWith('.exe')) ?? '';
 
+    // Arm the freeze BEFORE the quit spawns the installer: nothing to
+    // race — the watcher polls at 25ms, the install takes ~2s.
+    watcher = freezeOnSight(installerName);
+    await watcher.armed;
+
     // A normal quit: install-on-quit kicks off the installer.
     await eApp.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows().forEach((w) => w.close());
@@ -162,23 +243,45 @@ async function run(): Promise<void> {
     await eApp.close().catch(() => { /* quit on its own */ });
   }
 
-  // Reopen IMMEDIATELY — the real gesture: the user quits and
-  // double-clicks the app right back. Waiting for the installer to
-  // show up in tasklist first lets a fast install win the race and
-  // turns the test vacuous (witnessed on run 29208984460).
-  console.log(`  reopening immediately; installer visible: ${running(installerName)}`);
+  // The installer is now frozen mid-install; the old app process has
+  // exited. This is the exact state the owner's double-click meets —
+  // and it stays that way until we thaw.
+  if (!watcher) process.exit(1);
+  const frozenPid = await watcher.frozen;
+  check('the quit-install spawned an installer (now frozen mid-install)',
+    frozenPid !== null, `pid ${frozenPid}`);
+  if (frozenPid === null) process.exit(1);
+  const appGone = await waitFor(() => !running(appImage), 60_000);
+  check('the quitting app exited (the reopen is a fresh process)', appGone);
+
+  console.log(`  exe mid-install: version "${exeVersion(exe) || '(unreadable)'}";`
+    + ` reopening now`);
   spawn(exe, [pdf], { detached: true, stdio: 'ignore', env }).unref();
+
+  // Let the reopen do whatever it does against the frozen install —
+  // start the old version, crash, or (fixed) hand off and get out of
+  // the way. Observe, don't assert: the contract is the end state.
+  await waitFor(() => running(appImage), 15_000, 500);
+  console.log(`  reopen settled: app running=${running(appImage)};`
+    + ` thawing the installer`);
+  thaw(frozenPid);
 
   // The end state is the whole contract: the update completed…
   const updated = await waitFor(
-    () => norm(exeVersion(exe)) === norm(newVersion), 300_000);
+    () => norm(exeVersion(exe)) === norm(newVersion), 180_000);
   check('the update still completes (the reopen must not wedge it)',
     updated, `exe now ${exeVersion(exe) || '(unreadable)'}`);
 
-  // …and the app the user asked for is actually running — no flash.
-  const appUp = await waitFor(() => running(appImage), 180_000);
+  // …the app the user asked for is actually running — no flash…
+  const appUp = await waitFor(() => running(appImage), 120_000);
   check('the reopened app ends up running the new version (no flash-close)',
     appUp && updated, `running=${appUp}`);
+
+  // …and it opened the document the user double-clicked.
+  const docOpen = await waitFor(
+    () => windowTitles(appImage).includes('Reopened Paper'), 60_000);
+  check('…with the double-clicked document open',
+    docOpen, windowTitles(appImage) || '(no window titles)');
 
   // Cleanup: the reopened app is a detached process.
   spawnSync('taskkill', ['/F', '/IM', appImage], { timeout: 60_000 });
