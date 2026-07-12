@@ -1,9 +1,11 @@
-# Records the README media (demo.mp4 + screenshots) on a runner and
-# commits the result. The generator drives a scripted reading session
-# in a headless browser with a cursor/key HUD and VERIFIES the
+# Records the README media (demo.mp4 + screenshots) on a Windows
+# runner AGAINST THE DESKTOP APP: the real Electron window on the
+# runner's screen, captured with ffmpeg so the recording includes the
+# genuine window chrome and top toolbar. The generator verifies the
 # recording programmatically (distinct labels, trail depth, branch
-# count) before anything is written. macOS runner: the recording's
-# typography must match the app's real look.
+# count); after infrastructure changes the frames are additionally
+# reviewed visually before the result is trusted. Media is committed
+# back and also uploaded as an artifact for review.
 
 name: Record README media
 
@@ -19,7 +21,7 @@ concurrency:
 
 jobs:
   record:
-    runs-on: macos-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -35,25 +37,36 @@ jobs:
         run: node build-node/tools/fixture.js
 
       - name: Fetch the demo paper (arXiv 2411.01678)
+        shell: bash
         run: |
           mkdir -p sample/real
           curl -fsSL --retry 3 -o sample/real/WStarCats.pdf \
             "https://arxiv.org/pdf/2411.01678v1"
           test -s sample/real/WStarCats.pdf
 
-      - name: Ensure ffmpeg
-        run: command -v ffmpeg || brew install ffmpeg
+      - name: Raise the display resolution
+        shell: pwsh
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
-      - name: Record and verify the media
+      - name: Ensure ffmpeg
+        shell: pwsh
         run: |
-          node build-node/node/server.js 8377 &
-          for i in $(seq 1 60); do
-            curl -s -o /dev/null http://127.0.0.1:8377/ && break
-            sleep 0.5
-          done
-          npm run media
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+          }
+
+      - name: Record and verify the media against the desktop app
+        shell: bash
+        run: node build-node/tools/mediaDesktop.js
+
+      - name: Upload the media for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: readme-media
+          path: docs/media/
 
       - name: Commit the media
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -62,6 +75,6 @@ jobs:
             echo "media unchanged"
             exit 0
           fi
-          git commit -m "Record README media on CI [skip ci]"
+          git commit -m "Record README media on CI [skip actions]"
           git pull --rebase origin main
           git push

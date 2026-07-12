@@ -26,7 +26,7 @@ function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
   return (
     <li>
       <div
-        className="outlineItem flex items-center h-6 px-1.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
+        className="outlineItem flex items-center h-[22px] px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
         title={n.title}
         onClick={(e) => void controller.outlineJump(n, e.metaKey || e.ctrlKey)}
       >
