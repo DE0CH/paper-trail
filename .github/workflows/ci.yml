@@ -85,6 +85,10 @@ jobs:
         shell: bash
         run: npx electron build-node/test/newWindowTask.js
 
+      - name: Jump List registration carries the New Window task (right identity)
+        shell: bash
+        run: npx electron build-node/test/jumpListRegistration.js
+
       - name: Package the Windows app (unsigned)
         env:
           # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,

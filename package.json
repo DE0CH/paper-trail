@@ -32,6 +32,7 @@
     "test:update:unsaved": "electron build-node/test/updateRestartUnsaved.js",
     "test:update:restart-edges": "electron build-node/test/updateRestartEdges.js",
     "test:new-window-task": "electron build-node/test/newWindowTask.js",
+    "test:jump-list": "electron build-node/test/jumpListRegistration.js",
     "test:stdio": "node build-node/test/desktopStdioClosed.js",
     "perf": "node build-node/tools/perf.js",
     "media": "node build-node/tools/media.js",
