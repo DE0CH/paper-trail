@@ -3,6 +3,21 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.8
+
+- Checking for updates now opens a standard update window: it shows
+  the available version, a progress bar while downloading, and a
+  "Restart to Update" button when the download is ready — instead of
+  a chain of alert boxes.
+- Restarting for an update protects unsaved reading sessions: you are
+  asked to save first, and cancelling simply returns you to the app
+  with the update still ready.
+- Fixed: choosing "Save…" when closing a window with a never-saved
+  session did nothing — the window stayed open but no file was
+  written. The save dialog now always appears.
+- Windows: right-clicking the Paper Trail taskbar icon now offers a
+  "New Window" task, like the macOS Dock menu.
+
 ## 0.5.7
 
 - Fixed: checking for updates failed with "Update check failed …
