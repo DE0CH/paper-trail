@@ -5,7 +5,7 @@
 # Paper Trail
 
 [![CI](https://github.com/DE0CH/paper-trail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DE0CH/paper-trail/actions/workflows/ci.yml)
-[![Unit coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fblog.deyaochen.com%2Fpaper-trail%2Fbadge.json)](https://blog.deyaochen.com/paper-trail/report/)
+[![codecov](https://codecov.io/gh/DE0CH/paper-trail/branch/main/graph/badge.svg)](https://codecov.io/gh/DE0CH/paper-trail)
 
 **A PDF reader that remembers how you got where you are.**
 
