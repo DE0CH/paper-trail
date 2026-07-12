@@ -95,6 +95,9 @@ jobs:
         shell: bash
         run: |
           "./dist-electron/win-unpacked/Paper Trail.exe" --smoke
+      - name: Update-feed names match the packaged artifacts
+        shell: bash
+        run: node build-node/test/updateFeedNames.js dist-electron
       - name: Extract the changelog section for the release notes
         if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
         shell: bash
@@ -197,6 +200,9 @@ jobs:
           APP=$(find dist-electron -maxdepth 3 -name "Paper Trail.app" | head -1)
           echo "smoke-testing: $APP"
           "$APP/Contents/MacOS/Paper Trail" --smoke
+
+      - name: Update-feed names match the packaged artifacts
+        run: node build-node/test/updateFeedNames.js dist-electron
 
       - name: List artifacts
         run: ls -la dist-electron/*.dmg dist-electron/*.zip

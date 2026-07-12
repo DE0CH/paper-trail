@@ -65,6 +65,7 @@
       "dist-web/**"
     ],
     "mac": {
+      "artifactName": "Paper-Trail-${version}-${arch}-mac.${ext}",
       "category": "public.app-category.productivity",
       "files": [
         "!node_modules/koffi/**",
@@ -88,13 +89,18 @@
         }
       ]
     },
+    "dmg": {
+      "artifactName": "Paper-Trail-${version}-${arch}.${ext}"
+    },
     "nsis": {
+      "artifactName": "Paper-Trail-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
     "win": {
+      "artifactName": "Paper-Trail-${version}-${arch}-win.${ext}",
       "target": [
         {
           "target": "nsis",

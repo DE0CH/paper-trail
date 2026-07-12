@@ -86,6 +86,10 @@ jobs:
         run: |
           "./dist-electron/win-unpacked/Paper Trail.exe" --smoke
 
+      - name: Update-feed names match the packaged artifacts
+        shell: bash
+        run: node build-node/test/updateFeedNames.js dist-electron
+
       - name: Installer test (install, shortcuts, smoke, uninstall)
         shell: bash
         run: node build-node/test/installerWin.js
@@ -123,6 +127,10 @@ jobs:
           npm version patch --no-git-tag-version
           npx electron-builder --win nsis --publish never -c.directories.output=dist-update-feed
           git checkout -- package.json package-lock.json
+
+      - name: Update-feed names match the packaged artifacts
+        shell: bash
+        run: node build-node/test/updateFeedNames.js dist-electron dist-update-feed
 
       - name: Auto-update test (real install-update-install cycle)
         shell: bash
@@ -183,6 +191,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npx electron-builder --mac --publish never -c.mac.notarize=false
 
+      - name: Update-feed names match the packaged artifacts
+        run: node build-node/test/updateFeedNames.js dist-electron
+
       - name: Installer test (dmg, zip, universal binary, smoke)
         run: node build-node/test/installerMac.js
 
@@ -238,6 +249,9 @@ jobs:
           npm version patch --no-git-tag-version
           npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none -c.directories.output=dist-update-feed
           git checkout -- package.json package-lock.json
+
+      - name: Update-feed names match the packaged artifacts
+        run: node build-node/test/updateFeedNames.js dist-electron dist-update-feed
 
       - name: Closed-stdio regression (Finder launches must not crash)
         run: node build-node/test/desktopStdioClosed.js
