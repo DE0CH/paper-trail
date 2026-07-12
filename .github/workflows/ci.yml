@@ -14,6 +14,14 @@ on:
   # only when every job passes
   workflow_call: {}
 
+# A new push to the same branch/PR supersedes the running CI: cancel it
+# instead of finishing a run of stale code. The group includes the
+# workflow name so release runs (which call this workflow on unique
+# tag refs anyway) can never collide with branch runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     strategy:

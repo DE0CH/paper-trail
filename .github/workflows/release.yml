@@ -1,6 +1,7 @@
-# Builds the macOS (signed + notarized) and Windows desktop apps and
-# attaches them to a GitHub Release ("Downloads"). Triggered by version
-# tags (v1.2.3) or manually.
+# Builds the macOS (signed + notarized) and Windows desktop apps,
+# attaches them to a GitHub Release ("Downloads"), and deploys the web
+# app to Vercel production. Triggered by version tags (v1.2.3) or
+# manually.
 #
 # Test locally with act (runs the job natively on your Mac):
 #   act workflow_dispatch -W .github/workflows/release.yml -P macos-latest=-self-hosted
@@ -36,6 +37,26 @@ jobs:
   ci:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
+
+  # The web app ships together with the desktop apps: Vercel builds from
+  # source (vercel.json: npm run build -> dist-web) once the CI pyramid
+  # is green, not on every push to main.
+  deploy-web:
+    needs: [check-version, ci]
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm i -g vercel
+      - name: Deploy to Vercel production
+        if: ${{ !env.ACT }}
+        run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
 
   windows:
     needs: [check-version, ci]
