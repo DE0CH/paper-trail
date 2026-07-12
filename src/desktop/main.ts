@@ -256,7 +256,9 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
     win.webContents.on('page-title-updated', (_event, title) => {
       if (title !== 'Paper Trail') reveal();
     });
-    setTimeout(reveal, 2500);
+    // Patient enough that a slow cold start (pdf.js on a weak machine)
+    // does not fall through to an empty reveal.
+    setTimeout(reveal, 4000);
   }
 
   win.on('close', () => saveBounds(win));
