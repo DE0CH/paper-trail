@@ -3,7 +3,7 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
-## 0.5.10
+## 0.5.11
 
 - The Windows installer is no longer pixelated on HiDPI screens.
 - Right-clicking the Paper Trail taskbar icon on Windows now really
@@ -23,6 +23,16 @@ matching section into the GitHub Release notes.
 - List rows across the outline, trails and history panels breathe a
   little more: a comfortable fixed height with the text vertically
   centered, identical in all three lists.
+- The reference preview can no longer be dragged past the bottom of
+  the app window.
+- Opening a document on a slow machine no longer briefly shows an
+  empty window while the PDF is still loading.
+
+## 0.5.10 (skipped)
+
+Never released: its release run was blocked by a one-off test flake
+in the CI gate. Version numbers are not reused, so the changes
+shipped as 0.5.11.
 
 ## 0.5.9
 
