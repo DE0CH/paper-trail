@@ -59,7 +59,9 @@ jobs:
         shell: bash
         run: node build-node/tools/mediaDesktop.js
 
-      - name: Upload the media for review
+      - name: Upload the media for review (also on failure — the
+              capture is the diagnostic)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: readme-media

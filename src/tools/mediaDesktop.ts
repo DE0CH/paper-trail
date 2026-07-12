@@ -150,7 +150,9 @@ async function run(): Promise<void> {
     // chrome, toolbar and all — on a true 1080p canvas. The realtime
     // pass encodes ultrafast; a second, unhurried pass below produces
     // the compact final file. 'q' on stdin finalizes cleanly.
-    const cap = path.join(OUT, '.capture.mp4');
+    // MPEG-TS container: playable even when truncated by a crash, so
+    // a failed run still leaves a reviewable capture.
+    const cap = path.join(OUT, 'capture.ts');
     ffmpeg = spawn('ffmpeg', [
       '-y', '-f', 'gdigrab', '-framerate', '60', '-draw_mouse', '0',
       '-i', 'desktop',
@@ -229,6 +231,19 @@ async function run(): Promise<void> {
     // 2. click it, then keep following real references
     await page.mouse.down(); await page.mouse.up();
     await page.waitForTimeout(1300);
+    const state = () => page.evaluate(() => {
+      const pt = (window as never as {
+        __pt: {
+          hist: { active: { entries: unknown[] } };
+          viewer: { currentPosition(): { page: number } };
+        };
+      }).__pt;
+      return {
+        entries: pt.hist.active.entries.length,
+        page: pt.viewer.currentPosition().page,
+      };
+    });
+    console.log('after first click:', JSON.stringify(await state()));
     let hops = 0;
     for (let attempts = 0; hops < 3 && attempts < 8; attempts++) {
       await page.mouse.wheel(0, 460);
@@ -246,10 +261,16 @@ async function run(): Promise<void> {
         await page.waitForTimeout(600);
       }
     }
+    console.log('after the hops:', hops, JSON.stringify(await state()));
     // 3. pop back one level
     await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForTimeout(1100);
     // 4. jump back arbitrarily via the history panel
+    const s4 = await state();
+    if (s4.entries < 2) {
+      throw new Error('the demo never navigated: the first reference click '
+        + `did not push a history entry (${JSON.stringify(s4)})`);
+    }
     const entries = page.locator('#historyPanel .histItem');
     const second = (await entries.nth(1).boundingBox())!;
     await glide(center(second).x, center(second).y, 700);
@@ -371,6 +392,10 @@ async function run(): Promise<void> {
   } finally {
     if (ffmpeg) {
       try { ffmpeg.stdin!.write('q'); } catch { /* already gone */ }
+      await Promise.race([
+        new Promise((r) => ffmpeg!.on('exit', r)),
+        new Promise((r) => setTimeout(r, 10_000)),
+      ]);
     }
     await eApp.close().catch(() => { /* fine */ });
   }
