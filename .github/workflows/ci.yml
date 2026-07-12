@@ -244,6 +244,11 @@ jobs:
         shell: bash
         run: node build-node/test/updateWinOpenAfterUpdate.js
 
+      - name: Reopening DURING the quit-install never flash-closes
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinOpenDuringInstall.js
+
   mac:
     strategy:
       fail-fast: false
