@@ -241,6 +241,9 @@ export default function App() {
       switch (action) {
         case 'open': void controller.pickFile(); break;
         case 'save': controller.saveProgressSafe(); break;
+        case 'save-from-close':
+          controller.saveProgressSafe({ viaShellDialog: true });
+          break;
         case 'load-session': void controller.requestLoadSession(); break;
         case 'replace-pdf': void controller.requestReplacePdf(); break;
         case 'back': controller.goBack(); break;
