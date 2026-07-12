@@ -545,6 +545,7 @@ async function checkForUpdatesInteractive(): Promise<void> {
     return;
   }
   openUpdateWindow();
+  const before = updateUi;
   setUpdateUi({ state: 'checking' });
   try {
     const r = await autoUpdater.checkForUpdates();
@@ -556,6 +557,11 @@ async function checkForUpdatesInteractive(): Promise<void> {
     availableVersion = latest;
     if (downloadedVersion === latest) {
       setUpdateUi({ state: 'downloaded', version: latest });
+    } else if (before.state === 'downloading' && before.version === latest) {
+      // Checking again mid-download (the window was closed and
+      // reopened) resumes the progress view instead of re-offering
+      // the update; the next progress event refreshes the percent.
+      setUpdateUi(before);
     } else {
       setUpdateUi({ state: 'available', version: latest });
     }

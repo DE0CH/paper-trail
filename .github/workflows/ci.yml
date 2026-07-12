@@ -207,6 +207,12 @@ jobs:
       - name: Restart to Update guards unsaved sessions (Cancel/Save)
         run: npx electron build-node/test/updateRestartUnsaved.js
 
+      - name: Update window edge cases (up to date, errors, resume, no re-download)
+        run: npx electron build-node/test/updateWindowEdges.js
+
+      - name: Restart edge cases (re-check after Cancel, second window, Don't Save)
+        run: npx electron build-node/test/updateRestartEdges.js
+
       - name: Package the macOS app (unsigned)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
