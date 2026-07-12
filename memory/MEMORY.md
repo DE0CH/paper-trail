@@ -65,6 +65,10 @@
 - Owner pushes concurrently: if a push is rejected AFTER a tag went
   up, cancel the stale release run and ship the next version number
   (see above — never move tags).
+- Releases gate on the full CI pyramid via a reusable workflow_call of
+  ci.yml INSIDE release.yml — yes this duplicates the branch-push CI
+  run; owner explicitly prefers the clearer self-contained logic over
+  saving runners (rejected a wait-for-branch-CI dedup; reverted).
 - npm run media regenerates README media (mp4 + screenshots, cursor+key
   HUD overlay); it SELF-VERIFIES content (distinct labels, depth,
   branches) — user rule after eyeball review missed repeated labels.
