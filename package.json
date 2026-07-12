@@ -21,6 +21,8 @@
     "test:update:mac:install": "node build-node/test/updateMacInstall.js",
     "test:update:mac:manual-install": "node build-node/test/updateMacManualInstall.js",
     "test:stdio": "node build-node/test/desktopStdioClosed.js",
+    "test:realdrag:mac": "node build-node/test/realDragMac.js",
+    "test:realdrag:win": "node build-node/test/realDragWin.js",
     "perf": "node build-node/tools/perf.js",
     "media": "node build-node/tools/media.js",
     "dist:mac": "electron-builder --mac --publish never",
