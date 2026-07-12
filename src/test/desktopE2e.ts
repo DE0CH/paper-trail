@@ -1443,59 +1443,6 @@ async function run(): Promise<void> {
     check('pinch release does not jump (deep in the document)',
       jump.delta < 4, `delta ${jump.delta.toFixed(1)}px`);
 
-    // --- the preview's top edge may be dragged above the toolbar; the
-    // drag must win over hover-dismissal (regression: crossing into the
-    // toolbar band lost the popup mid-drag on the desktop) ---
-    await page.evaluate(() => {
-      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
-    });
-    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
-    await page.waitForSelector(LINK_SEL, { timeout: 20000 });
-    await page.locator(LINK_SEL).nth(3).hover();
-    await page.waitForSelector('#preview:not(.hidden)', { timeout: 8000 });
-    await page.waitForTimeout(600);
-    const pvDrag = (await page.locator('#preview').boundingBox())!;
-    await page.mouse.move(pvDrag.x + pvDrag.width / 2, pvDrag.y + 1);
-    await page.mouse.down();
-    await page.mouse.move(pvDrag.x + pvDrag.width / 2, 15, { steps: 10 });
-    await page.waitForTimeout(700); // well past the hide delay
-    const midDrag = await page.evaluate(() =>
-      !document.getElementById('preview')!.classList.contains('hidden'));
-    await page.mouse.up();
-    const pvAfterUp = await page.locator('#preview').boundingBox();
-    check('dragging the top edge over the toolbar keeps the preview open',
-      midDrag && pvAfterUp !== null && pvAfterUp.y <= 20,
-      JSON.stringify({ midDrag, pvAfterUp }));
-
-    // --- overshooting the top resize handle into the toolbar band must
-    // not lose the popup right away: that exit direction gets a long
-    // grace period (the handle sits right under the toolbar), while
-    // normal hover-out semantics still hide it eventually ---
-    await page.mouse.move(700, 500, { steps: 12 }); // leave through the popup
-    await page.waitForSelector('#preview.hidden', { state: 'attached', timeout: 8000 });
-    await page.locator(LINK_SEL).nth(3).hover();
-    await page.waitForSelector('#preview:not(.hidden)', { timeout: 8000 });
-    await page.waitForTimeout(600);
-    // shrink via the top edge first so the popup no longer reaches the
-    // toolbar itself (its remembered height grew in the drag above)
-    let pvOver = (await page.locator('#preview').boundingBox())!;
-    await page.mouse.move(pvOver.x + pvOver.width / 2, pvOver.y + 1);
-    await page.mouse.down();
-    await page.mouse.move(pvOver.x + pvOver.width / 2, pvOver.y + 180, { steps: 6 });
-    await page.mouse.up();
-    await page.waitForTimeout(200);
-    pvOver = (await page.locator('#preview').boundingBox())!;
-    await page.mouse.move(pvOver.x + pvOver.width / 2, pvOver.y + 40, { steps: 4 });
-    await page.mouse.move(pvOver.x + pvOver.width / 2, 15, { steps: 8 }); // overshoot
-    await page.waitForTimeout(500); // past the normal hide delay
-    const graceHeld = await page.evaluate(() =>
-      !document.getElementById('preview')!.classList.contains('hidden'));
-    await page.waitForTimeout(900); // grace expires
-    const graceExpired = await page.evaluate(() =>
-      document.getElementById('preview')!.classList.contains('hidden'));
-    check('overshooting into the toolbar keeps the preview up briefly',
-      graceHeld && graceExpired, JSON.stringify({ graceHeld, graceExpired }));
-
     // --- the whole suite ran with HTTP(S) unreachable; the app must
     // also never have TRIED to reach the network ---
     const attempted = await eApp.evaluate(() =>

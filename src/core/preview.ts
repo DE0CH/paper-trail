@@ -10,7 +10,6 @@ import type { Viewer } from './viewer';
 
 const HOVER_DELAY_MS = 350;
 const HIDE_DELAY_MS = 250;
-const TOP_EXIT_GRACE_MS = 1000;
 const MIN_H = 160;
 const DEFAULT_H_RATIO = 0.45;
 
@@ -22,7 +21,6 @@ export class Preview {
   private pageLabel: HTMLElement;
   private showTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private hideTimer: ReturnType<typeof setTimeout> | 0 = 0;
-  private resizing = false;
   private token = 0;
   private height: number;
   private built = ''; // fingerprint of the holder set currently in the DOM
@@ -38,14 +36,7 @@ export class Preview {
 
     // Moving into the popup keeps it open.
     el.addEventListener('mouseenter', () => clearTimeout(this.hideTimer));
-    el.addEventListener('mouseleave', (e) => {
-      if (this.resizing) return; // an active resize drag always wins
-      // Leaving through the TOP edge is usually an overshoot while
-      // reaching for the resize handle (it sits right under the
-      // toolbar), so that direction gets a long grace period.
-      const overshoot = e.clientY <= this.el.getBoundingClientRect().top + 10;
-      this.scheduleHide(overshoot ? TOP_EXIT_GRACE_MS : HIDE_DELAY_MS);
-    });
+    el.addEventListener('mouseleave', () => this.scheduleHide());
 
     // Keep the page label current while scrolling through the document.
     this.scroller.addEventListener('scroll', () => this.updateLabel());
@@ -57,11 +48,6 @@ export class Preview {
       handle.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         handle.setPointerCapture(e.pointerId);
-        // The drag wins over hover-dismissal, and (desktop) over the
-        // toolbar's window-drag region the cursor may cross.
-        this.resizing = true;
-        clearTimeout(this.hideTimer);
-        document.body.classList.add('previewResizing');
         const startY = e.clientY;
         const rect = this.el.getBoundingClientRect();
         const move = (ev: PointerEvent) => {
@@ -78,19 +64,10 @@ export class Preview {
           }
           this.el.style.height = `${this.height}px`;
         };
-        const up = (ev: PointerEvent) => {
+        const up = () => {
           handle.removeEventListener('pointermove', move);
           handle.removeEventListener('pointerup', up);
-          this.resizing = false;
-          document.body.classList.remove('previewResizing');
           saveUI({ previewH: Math.round(this.height) });
-          // released outside the popup (e.g. above it, in the toolbar
-          // band): give the usual grace before hiding
-          const r = this.el.getBoundingClientRect();
-          if (ev.clientX < r.left || ev.clientX > r.right
-            || ev.clientY < r.top || ev.clientY > r.bottom) {
-            this.scheduleHide(TOP_EXIT_GRACE_MS);
-          }
         };
         handle.addEventListener('pointermove', move);
         handle.addEventListener('pointerup', up);
@@ -109,11 +86,10 @@ export class Preview {
   }
 
   /** Called when the pointer leaves the link; entering the popup cancels it. */
-  scheduleHide(delay = HIDE_DELAY_MS): void {
-    if (this.resizing) return;
+  scheduleHide(): void {
     clearTimeout(this.showTimer);
     clearTimeout(this.hideTimer);
-    this.hideTimer = setTimeout(() => this.hide(), delay);
+    this.hideTimer = setTimeout(() => this.hide(), HIDE_DELAY_MS);
   }
 
   hide(): void {
