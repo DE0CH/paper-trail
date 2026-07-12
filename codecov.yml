@@ -1,0 +1,14 @@
+# Coverage is a map, not a gate: statuses are informational (never
+# fail a commit for a coverage change) and there is no PR comment bot.
+# The number covers the unit suites only — the e2e and desktop suites
+# run real browsers/Electron and are not instrumented.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment: false

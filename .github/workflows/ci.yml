@@ -60,6 +60,9 @@ jobs:
         with:
           files: coverage/lcov.info
           use_oidc: true
+          # a rejected upload must be a red step, not a silent skip
+          # (a pre-activation upload failed invisibly once)
+          fail_ci_if_error: true
 
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
