@@ -33,26 +33,26 @@ async function run(): Promise<void> {
     await page.waitForSelector('#preview:not(.hidden)', { timeout: 5_000 });
     await page.waitForTimeout(400);
 
-    // Drag the bottom handle far past the window bottom.
+    // Drag the bottom handle far past the window bottom with the REAL
+    // mouse: on Windows the OS pointer keeps reporting positions below
+    // the window while captured, which synthetic in-page events cannot
+    // reproduce (an earlier synthetic version of this drag silently
+    // did nothing and passed vacuously).
+    const handle = page.locator('#preview .previewResize');
+    const hb = (await handle.boundingBox())!;
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(hb.x + hb.width / 2, 900 + 600, { steps: 12 });
     const dragged = await page.evaluate(() => {
-      const el = document.getElementById('preview')!;
-      const handle = el.querySelector<HTMLElement>('.previewResize')!;
-      const start = handle.getBoundingClientRect();
-      const opts = (y: number): PointerEventInit => ({
-        bubbles: true, cancelable: true, pointerId: 7,
-        clientX: start.left + start.width / 2, clientY: y,
-      });
-      handle.dispatchEvent(new PointerEvent('pointerdown', opts(start.top + 2)));
-      handle.dispatchEvent(new PointerEvent('pointermove', opts(window.innerHeight + 600)));
-      handle.dispatchEvent(new PointerEvent('pointerup', opts(window.innerHeight + 600)));
-      const r = el.getBoundingClientRect();
+      const r = document.getElementById('preview')!.getBoundingClientRect();
       return { top: r.top, bottom: r.bottom, innerHeight: window.innerHeight };
     });
+    await page.mouse.up();
+    check('the drag really engaged the resize (the popup grew)',
+      dragged.bottom - dragged.top > 120, JSON.stringify(dragged));
     check('the preview bottom never leaves the app window',
       dragged.bottom <= dragged.innerHeight,
       JSON.stringify(dragged));
-    check('...while the popup itself survives the drag',
-      dragged.bottom - dragged.top > 50, JSON.stringify(dragged));
 
     await page.evaluate(() => {
       (window as never as { __pt: { session: { dirty: boolean } } })
