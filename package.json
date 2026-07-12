@@ -118,7 +118,8 @@
       {
         "ext": "ptl",
         "name": "Paper Trail Reading Session",
-        "role": "Editor"
+        "role": "Editor",
+        "icon": "ptl"
       }
     ]
   },
