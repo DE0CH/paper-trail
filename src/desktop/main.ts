@@ -461,22 +461,23 @@ function setupAutoUpdates(): void {
     return;
   }
   autoUpdater.autoInstallOnAppQuit = true;
-  // Download progress shows on the Dock / taskbar icon.
+  // Background downloads are completely silent: no Dock/taskbar
+  // progress, no toast nagging to restart — the update installs on the
+  // next normal quit and the next start announces it (see
+  // announceUpdateOnFirstRun). Only a download the user asked for in
+  // the update window shows progress on the app icon.
   autoUpdater.on('download-progress', (p) => {
-    for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(p.percent / 100);
-    }
     if (updateUi.state === 'downloading') {
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(p.percent / 100);
+      }
       setUpdateUi({ ...updateUi, percent: p.percent });
     }
   });
   autoUpdater.on('update-downloaded', (info) => {
     downloadedVersion = info.version;
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed() && w !== updateWin) {
-        w.setProgressBar(-1);
-        w.webContents.send('pt-menu', 'update-ready', info.version);
-      }
+      if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(-1);
     }
     if (updateUi.state === 'downloading') {
       setUpdateUi({ state: 'downloaded', version: info.version });
@@ -791,10 +792,33 @@ ipcMain.on('pt-open-file-ready', (event) => {
   const queued = queuedFiles.get(event.sender.id);
   queuedFiles.delete(event.sender.id);
   if (win) queued?.forEach((f) => sendFileTo(win, f));
+  // Background updates install silently on quit; the first window of
+  // the next start carries the only announcement the user gets.
+  if (announceVersion) {
+    event.sender.send('pt-menu', 'updated', announceVersion);
+    announceVersion = null;
+  }
 });
+
+/**
+ * A quit-installed update is announced once on the next start. The
+ * previous version lives in a userData marker; the very first run just
+ * writes it and stays quiet.
+ */
+let announceVersion: string | null = null;
+function detectQuitInstalledUpdate(): string | null {
+  const marker = path.join(app.getPath('userData'), 'last-version.txt');
+  let prev = '';
+  try { prev = fs.readFileSync(marker, 'utf8').trim(); } catch { /* first run */ }
+  const cur = app.getVersion();
+  if (prev === cur) return null;
+  try { fs.writeFileSync(marker, `${cur}\n`); } catch (e) { dbg('version marker write failed', e); }
+  return prev ? cur : null;
+}
 
 void app.whenReady().then(() => {
   registerAppProtocol();
+  announceVersion = detectQuitInstalledUpdate();
   setupAutoUpdates();
   // macOS gets the full native menu bar; Windows has none (its window
   // chrome integrates with the toolbar, and shortcuts live in the app).
