@@ -47,24 +47,48 @@ const cursorOverlay = () => {
       ring.style.opacity = '0.9';
       setTimeout(() => { ring.style.opacity = '0'; }, 280);
     }, true);
-    // key HUD: show a keycap while modifier keys are held (so viewers can
-    // see the cmd+click in the recording)
+    // key HUD: every key press appears as a keycap \u2014 held modifiers
+    // stay lit, full shortcuts flash momentarily. Bottom-LEFT, so it
+    // never covers the app's own toast (bottom-center).
     const hud = document.createElement('div');
     hud.style.cssText =
-      'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);'
+      'position:fixed;left:24px;bottom:24px;'
       + 'z-index:2147483647;pointer-events:none;padding:10px 22px;'
       + 'border-radius:12px;background:rgba(17,17,20,0.92);color:#fff;'
       + 'font:600 20px -apple-system,sans-serif;letter-spacing:.5px;'
       + 'border:1px solid #4f8cff;opacity:0;transition:opacity .15s;';
     document.documentElement.append(hud);
+    const MODS = ['Meta', 'Control', 'Alt', 'Shift'];
+    const keyLabel = (e: KeyboardEvent) => {
+      const parts: string[] = [];
+      if (e.metaKey) parts.push('\u2318');
+      if (e.ctrlKey) parts.push('ctrl');
+      if (e.altKey) parts.push('alt');
+      if (e.shiftKey) parts.push('shift');
+      if (!MODS.includes(e.key)) {
+        parts.push(e.key === 'ArrowLeft' ? '\u2190'
+          : e.key === 'ArrowRight' ? '\u2192'
+            : e.key.length === 1 ? e.key.toUpperCase() : e.key);
+      }
+      return parts.join(' + ');
+    };
+    let hideTimer = 0;
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Meta' || e.key === 'Control') {
-        hud.textContent = e.key === 'Meta' ? '\u2318 command' : 'ctrl';
-        hud.style.opacity = '1';
+      const text = keyLabel(e);
+      if (!text) return;
+      hud.textContent = text;
+      hud.style.opacity = '1';
+      clearTimeout(hideTimer);
+      if (!MODS.includes(e.key)) {
+        hideTimer = window.setTimeout(() => { hud.style.opacity = '0'; }, 1100);
       }
     }, true);
     window.addEventListener('keyup', (e) => {
-      if (e.key === 'Meta' || e.key === 'Control') hud.style.opacity = '0';
+      if (MODS.includes(e.key)
+        && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        clearTimeout(hideTimer);
+        hud.style.opacity = '0';
+      }
     }, true);
   };
   if (document.readyState !== 'loading') mk();
