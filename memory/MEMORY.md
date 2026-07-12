@@ -17,17 +17,29 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
   updateFeedNames test), release-gated Vercel deploy (deploy.yml
   DELETED), ci.yml cancel-in-progress concurrency. v0.5.6 SKIPPED;
   v0.5.5 repaired in place with 6 alias assets.
-- In flight: 0.5.8 = Software Update window (Sparkle-style, replaces
-  the dialog chain; update.html + src/update/main.tsx + updatePreload,
-  states checking/none/available/downloading/downloaded/error, ids
-  pt-update-root[data-state]/-title/-detail/-progress/-primary/
-  -secondary) + Windows Jump List "New Window" task (--new-window via
-  second-instance). New tests: updateWindow, updateRestartUnsaved
-  (Cancel/Save at the unsaved prompt abandon restart cleanly),
-  updateMacWindowInstall (signed install successor), newWindowTask.
-  updateMacManualInstall RETIRED in a Test Deletion commit
-  (owner-authorized). Waiting on branch CI of 48be301 before tagging
-  v0.5.8.
+- v0.5.9 tagged, release in flight (verify `gh release view v0.5.9`):
+  NSIS graceful-close (build/installer.nsh customCheckAppRunning —
+  asks, never taskkill /F, exit 4 on refusal), SILENT background
+  updates (no icon progress/toast; install on quit; next start toasts
+  "was updated to X" via userData last-version.txt marker + 'updated'
+  pt-menu action), restart asks edited windows first (editedWindows
+  set via pt-document-edited), mid-download re-check resumes progress
+  view. Update window (0.5.8): update.html + src/update/main.tsx,
+  ids pt-update-root[data-state]/-title/-detail/-progress/-primary/
+  -secondary; menu-driven, mac-only entry point.
+- Test battery added this session: updateWindow(+Edges),
+  updateRestartUnsaved(+Edges), updateMacWindowInstall,
+  updateMacCancelThenQuit (no self-relaunch after abandoned restart),
+  updateWinQuitInstall (silent download→quit-install→stays
+  closed→announcement), installerCloseUnsaved, newWindowTask,
+  unitEdges, e2eEdges, desktopEdges. updateMacManualInstall retired
+  (Test Deletion, owner-authorized). Harness gotchas learned: dev
+  runs need dev-app-update.yml next to the entry module; playwright
+  dialog listeners must answer beforeunload dialogs to MATCH intent
+  (accept=leave) and never spawnSync while a debugger-attached app
+  must close (frozen node stalls the close); shared updater cache
+  between tests must be wiped; runner displays are 1024x768 (OS
+  clamps window sizes).
 - Native Win32 menus (src/desktop/winMenu.ts, koffi): validated
   visually via windows-screenshot.yml artifact; koffi EXCLUDED from
   mac bundles (universal-merge rejects per-arch prebuilds).
