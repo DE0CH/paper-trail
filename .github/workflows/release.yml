@@ -33,9 +33,35 @@ jobs:
 
   # The complete CI pyramid (all suites, installers, update tests on
   # every OS/CPU combination) must pass before anything is published.
+  # The branch push that carried the release commit already started
+  # that CI run, so this job WAITS for it instead of running a second
+  # identical pyramid — one set of runners, same guarantee.
   ci:
-    uses: ./.github/workflows/ci.yml
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on the CI run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 90); do
+            run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow=ci.yml \
+              --commit "$GITHUB_SHA" --limit 1 \
+              --json status,conclusion,databaseId --jq '.[0] // empty')
+            if [ -n "$run" ]; then
+              status=$(echo "$run" | jq -r .status)
+              if [ "$status" = "completed" ]; then
+                conclusion=$(echo "$run" | jq -r .conclusion)
+                echo "CI run $(echo "$run" | jq -r .databaseId) concluded: $conclusion"
+                if [ "$conclusion" = "success" ]; then exit 0; else exit 1; fi
+              fi
+              echo "CI run $(echo "$run" | jq -r .databaseId): $status — waiting"
+            else
+              echo "no CI run found for $GITHUB_SHA yet — waiting"
+            fi
+            sleep 30
+          done
+          echo "::error::timed out waiting for the CI run on $GITHUB_SHA"
+          exit 1
 
   windows:
     needs: [check-version, ci]
