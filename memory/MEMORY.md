@@ -54,9 +54,13 @@
   dashes) but on-disk artifacts keep spaces — feed server must map;
   never spawnSync while the harness hosts the feed (blocks accepts);
   electron-updater's "Cannot download" message omits the port.
-- Owner pushes concurrently: if a push is rejected AFTER a tag went up,
-  pull --rebase orphans the tagged commit — cancel the stale release
-  run, `git tag -f` onto the rebased head, force-push the tag.
+- NEVER reuse a version number (owner rule): if a version failed to
+  build or its release was blocked by failing CI, skip that version
+  and bump to the next one — no `git tag -f`, no tag moving, ever.
+  Rename the unshipped CHANGELOG section to the new version.
+- Owner pushes concurrently: if a push is rejected AFTER a tag went
+  up, cancel the stale release run and ship the next version number
+  (see above — never move tags).
 - npm run media regenerates README media (mp4 + screenshots, cursor+key
   HUD overlay); it SELF-VERIFIES content (distinct labels, depth,
   branches) — user rule after eyeball review missed repeated labels.

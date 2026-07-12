@@ -3,7 +3,7 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
-## 0.5.4
+## 0.5.5
 
 - Fixed: on macOS, opening a session or PDF by double-clicking it in
   Finder could crash the app with a "JavaScript error" dialog the
