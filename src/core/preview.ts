@@ -57,9 +57,13 @@ export class Preview {
             this.height = rect.bottom - newTop;
             this.el.style.top = `${newTop}px`;
           } else {
+            // The bottom edge stops at the window's bottom: the cap is
+            // measured from the popup's actual top, not a fixed margin
+            // (a low-sitting popup could otherwise be dragged past the
+            // window bounds).
             this.height = Math.min(
               Math.max(rect.height + dy, MIN_H),
-              window.innerHeight - 40,
+              window.innerHeight - rect.top - 8,
             );
           }
           this.el.style.height = `${this.height}px`;
