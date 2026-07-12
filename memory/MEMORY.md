@@ -7,7 +7,22 @@ symlinks for the new path AND both old project dirs all point here.
 The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 (not a git repo; see paper-build.md pointer below).
 
-## Current state (2026-07-12, session 3)
+## Current state (2026-07-12, session 3 END — see docs/handoff.md)
+- Session 3 ended mid-flight; docs/handoff.md is the authoritative
+  to-do: merge preview-rebuild when green; REBUILD the update UI as
+  native macOS prompts (owner order — custom CSS window rejected) +
+  full-display cursor recording of the whole flow; update-flash-close
+  witness did NOT reproduce (holding commit 6925b16, do not merge —
+  investigate); verify queue green; then release v0.5.12.
+- Since 0.5.11 on main: derived-title no-flash fix, native doc icons
+  (mac: afterPackMac strips CFBundleTypeIconFile → LaunchServices
+  composes; win: page+logo+label), plated app icon everywhere (win/web
+  too), NSIS stock installer icons, native scrollbars (custom CSS
+  deleted), core-gap tests + parseProgress hardening, c8+Codecov
+  (OIDC, 96.18%, informational statuses), CI on every branch push,
+  review workflows: mac-screenshot, windows-file-icons, mac-scrollbar,
+  mac-update-ui. tauri-experiment branch = separate Linux-box session.
+
 - v0.5.8 PUBLISHED and verified (10 dash-named assets, updater urls
   200, deploy-web green): Software Update window, restart guards
   unsaved sessions, save-from-close data-loss fix (picker never
