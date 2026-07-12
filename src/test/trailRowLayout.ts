@@ -148,6 +148,24 @@ async function run(): Promise<void> {
         && rows.every((r) => Math.abs(r.step - rows[0].step) <= 1),
       JSON.stringify(rhythm));
 
+    // 2e — ...and the lists start on one line: the first row of the
+    // outline, trails and history sit at the same height, so the
+    // three panels read as one aligned surface.
+    const tops = await page.evaluate(() => {
+      const top = (sel: string) =>
+        document.querySelector(sel)?.getBoundingClientRect().top ?? null;
+      return {
+        outline: top('.outlineItem'),
+        trail: top('.stackRow'),
+        hist: top('.histItem'),
+      };
+    });
+    const topVals = Object.values(tops).filter((v): v is number => v !== null);
+    check('the outline, trail and history lists start on one line',
+      topVals.length === 3
+        && Math.max(...topVals) - Math.min(...topVals) <= 1,
+      JSON.stringify(tops));
+
     // 3 — one alignment system: every header's rightmost button and
     // every row's rightmost button sit at the same distance from
     // their panel's right edge.

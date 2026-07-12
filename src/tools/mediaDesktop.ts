@@ -365,8 +365,11 @@ async function run(): Promise<void> {
     });
     await page.waitForSelector('.page[data-page="3"] canvas', { timeout: 15000 });
     await page.waitForTimeout(900); // let the page render crisply
-    await glide(stacks.x + 60, stacks.y + 40, 300); // park the cursor off the text
-    await page.waitForTimeout(300);
+    // Park the cursor on neutral page margin: resting on a trail row
+    // pops its tooltip and hover tools into the still.
+    const viewerBox = (await page.locator('#viewerContainer').boundingBox())!;
+    await glide(viewerBox.x + viewerBox.width - 60, viewerBox.y + 50, 300);
+    await page.waitForTimeout(400);
     snapStill(rect, path.join(OUT, 'main.png'));
 
     // preview still: hover a reference that lands on CONTENT (not the
