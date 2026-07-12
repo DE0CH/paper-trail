@@ -356,6 +356,92 @@ function loadSessionDialog(): void {
 
 let downloadedVersion: string | null = null;
 
+// ---- the Software Update window ----
+// The standard fixed-size update window: checking → available →
+// downloading (progress bar) → "Restart to Update", driven entirely by
+// the main process. The window is a passive view: it renders the last
+// pushed state and sends back button actions.
+
+type UpdateUiState =
+  | { state: 'checking' }
+  | { state: 'none' }
+  | { state: 'available'; version: string }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; detail: string };
+
+let updateWin: BrowserWindow | null = null;
+let updateUi: UpdateUiState = { state: 'checking' };
+let availableVersion: string | null = null;
+
+function setUpdateUi(s: UpdateUiState): void {
+  updateUi = s;
+  if (updateWin && !updateWin.isDestroyed()) {
+    updateWin.webContents.send('pt-update-state',
+      { ...s, appVersion: app.getVersion() });
+  }
+}
+
+function openUpdateWindow(): void {
+  if (updateWin && !updateWin.isDestroyed()) {
+    updateWin.focus();
+    return;
+  }
+  updateWin = new BrowserWindow({
+    width: 540,
+    height: 190,
+    useContentSize: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    title: 'Software Update',
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'updatePreload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  updateWin.once('ready-to-show', () => {
+    if (!updateWin || updateWin.isDestroyed()) return;
+    if (process.env.PT_SHOT) updateWin.showInactive();
+    else updateWin.show();
+  });
+  updateWin.on('closed', () => { updateWin = null; });
+  void updateWin.loadURL(`${SCHEME}://app/update.html`);
+}
+
+ipcMain.on('pt-update-ready', (event) => {
+  if (updateWin && !updateWin.isDestroyed()
+    && event.sender === updateWin.webContents) {
+    event.sender.send('pt-update-state',
+      { ...updateUi, appVersion: app.getVersion() });
+  }
+});
+
+ipcMain.on('pt-update-action', (event, action: string) => {
+  if (!updateWin || updateWin.isDestroyed()
+    || event.sender !== updateWin.webContents) return;
+  if (action === 'later') updateWin.close();
+  else if (action === 'download') startInteractiveDownload();
+  else if (action === 'restart') void restartToUpdate();
+});
+
+function startInteractiveDownload(): void {
+  const version = availableVersion;
+  if (!version) return;
+  if (downloadedVersion === version) {
+    setUpdateUi({ state: 'downloaded', version });
+    return;
+  }
+  setUpdateUi({ state: 'downloading', version, percent: 0 });
+  // The background check usually has this download in flight already;
+  // re-checking is a no-op then, and restarts the download after an
+  // earlier network failure. Failures surface via the 'error' event.
+  autoUpdater.checkForUpdates().catch(() => { /* the event reports it */ });
+}
+
 /**
  * Updates download in the background and install when the app quits.
  * A toast in the renderer announces a downloaded update; the macOS menu
@@ -375,16 +461,22 @@ function setupAutoUpdates(): void {
   // Download progress shows on the Dock / taskbar icon.
   autoUpdater.on('download-progress', (p) => {
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) w.setProgressBar(p.percent / 100);
+      if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(p.percent / 100);
+    }
+    if (updateUi.state === 'downloading') {
+      setUpdateUi({ ...updateUi, percent: p.percent });
     }
   });
   autoUpdater.on('update-downloaded', (info) => {
     downloadedVersion = info.version;
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) {
+      if (!w.isDestroyed() && w !== updateWin) {
         w.setProgressBar(-1);
         w.webContents.send('pt-menu', 'update-ready', info.version);
       }
+    }
+    if (updateUi.state === 'downloading') {
+      setUpdateUi({ state: 'downloaded', version: info.version });
     }
     if (process.env.PT_UPDATE_TEST === 'download') {
       console.log(`PT_UPDATE_DOWNLOADED ${info.version}`);
@@ -395,6 +487,11 @@ function setupAutoUpdates(): void {
   });
   autoUpdater.on('error', (e) => {
     dbg('auto-update error', e);
+    // Only states the window is actively waiting on turn into an error
+    // view; a failed background re-check never hijacks a settled one.
+    if (updateUi.state === 'checking' || updateUi.state === 'downloading') {
+      setUpdateUi({ state: 'error', detail: String(e) });
+    }
     if (process.env.PT_UPDATE_TEST) {
       console.error('PT_UPDATE_ERROR', String(e));
       app.exit(1);
@@ -408,14 +505,15 @@ function setupAutoUpdates(): void {
 }
 
 /**
- * Restart into the new version. Windows close one by one first, so the
- * standard unsaved-session prompt protects every window; if the user
- * keeps any window open (Save… or Cancel), the restart is abandoned —
- * the update still installs on the next normal quit.
+ * Restart into the new version. Document windows close one by one
+ * first, so the standard unsaved-session prompt protects every window;
+ * if the user keeps any window open (Save… or Cancel), the restart is
+ * abandoned and the update window returns to its ready state — the
+ * update still installs on the next normal quit.
  */
 async function restartToUpdate(): Promise<void> {
   for (const w of [...BrowserWindow.getAllWindows()]) {
-    if (w.isDestroyed()) continue;
+    if (w.isDestroyed() || w === updateWin) continue;
     const closed = new Promise<boolean>((resolve) => {
       w.once('closed', () => resolve(true));
       // Counts only unblocked time: the close prompt is a synchronous
@@ -423,20 +521,16 @@ async function restartToUpdate(): Promise<void> {
       setTimeout(() => resolve(false), 1500);
     });
     w.close();
-    if (!(await closed)) return;
+    if (!(await closed)) {
+      // A window stayed open (Save or Cancel): the restart is
+      // abandoned; the update window returns to its ready state.
+      if (downloadedVersion) {
+        setUpdateUi({ state: 'downloaded', version: downloadedVersion });
+      }
+      return;
+    }
   }
   autoUpdater.quitAndInstall();
-}
-
-async function promptRestart(version: string): Promise<void> {
-  const { response } = await dialog.showMessageBox({
-    message: `Paper Trail ${version} is ready`,
-    detail: 'Restart the app to finish updating.',
-    buttons: ['Restart Now', 'Later'],
-    defaultId: 0,
-    cancelId: 1,
-  });
-  if (response === 0) await restartToUpdate();
 }
 
 async function checkForUpdatesInteractive(): Promise<void> {
@@ -444,47 +538,23 @@ async function checkForUpdatesInteractive(): Promise<void> {
     await dialog.showMessageBox({ message: 'Updates apply to the installed app only.' });
     return;
   }
+  openUpdateWindow();
+  setUpdateUi({ state: 'checking' });
   try {
     const r = await autoUpdater.checkForUpdates();
     const latest = r?.updateInfo.version;
     if (!latest || latest === app.getVersion()) {
-      await dialog.showMessageBox({
-        message: 'You\u2019re up to date',
-        detail: `Paper Trail ${app.getVersion()} is the latest version.`,
-      });
+      setUpdateUi({ state: 'none' });
       return;
     }
-    const { response } = await dialog.showMessageBox({
-      message: `Paper Trail ${latest} is available`,
-      detail: `You have ${app.getVersion()}. The download shows its progress on the app icon; you can keep reading meanwhile.`,
-      buttons: ['Update Now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-    });
-    if (response !== 0) return;
-    if (downloadedVersion !== latest) {
-      // The background check may already be downloading, in which case
-      // this result carries no downloadPromise — watch the downloaded
-      // marker as well rather than waiting on the promise alone.
-      await Promise.race([
-        r?.downloadPromise ?? new Promise(() => { /* never */ }),
-        new Promise<void>((resolve) => {
-          const timer = setInterval(() => {
-            if (downloadedVersion === latest) {
-              clearInterval(timer);
-              resolve();
-            }
-          }, 500);
-        }),
-      ]);
+    availableVersion = latest;
+    if (downloadedVersion === latest) {
+      setUpdateUi({ state: 'downloaded', version: latest });
+    } else {
+      setUpdateUi({ state: 'available', version: latest });
     }
-    await promptRestart(latest);
   } catch (e) {
-    await dialog.showMessageBox({
-      type: 'error',
-      message: 'Update check failed',
-      detail: String(e),
-    });
+    setUpdateUi({ state: 'error', detail: String(e) });
   }
 }
 

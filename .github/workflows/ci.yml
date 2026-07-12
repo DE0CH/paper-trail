@@ -186,6 +186,12 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
 
+      - name: Software Update window flow (states, buttons, Later)
+        run: npx electron build-node/test/updateWindow.js
+
+      - name: Restart to Update guards unsaved sessions (Cancel/Save)
+        run: npx electron build-node/test/updateRestartUnsaved.js
+
       - name: Package the macOS app (unsigned)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -259,6 +265,10 @@ jobs:
       - name: Manual update install test (menu flow through Restart Now)
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacManualInstall.js
+
+      - name: Window update install test (update window through Restart to Update)
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacWindowInstall.js
 
       # LAST: this one replaces the packaged bundle with the new version,
       # so every test needing the current version must run before it.

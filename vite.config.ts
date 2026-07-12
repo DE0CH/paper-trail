@@ -21,6 +21,13 @@ export default defineConfig({
     outDir: 'dist-web',
     // pdf.js is large; keep the report quiet, we don't code-split it.
     chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      input: {
+        // the desktop shell's Software Update window is its own page
+        index: 'index.html',
+        update: 'update.html',
+      },
+    },
   },
   server: {
     port: 5173,
