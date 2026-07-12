@@ -1,0 +1,61 @@
+# Captures what Windows Explorer actually shows for the app's file
+# associations (manual trigger) so the document icons can be reviewed
+# without a Windows machine: packages the NSIS installer, installs it
+# silently, drops sample .pdf/.ptl files on the Desktop, and
+# screenshots an Explorer window in extra-large-icons view.
+
+name: Windows file-icon screenshot
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  screenshot:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Package the Windows installer
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Install silently and refresh the icon cache
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist-electron -Filter 'Paper-Trail-Setup-*.exe' | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+          ie4uinit.exe -show
+          Start-Sleep -Seconds 3
+
+      - name: Explorer screenshot of the Desktop files (extra large icons)
+        shell: pwsh
+        run: |
+          Copy-Item sample/WStarCats.pdf "$env:USERPROFILE\Desktop\Sample Paper.pdf"
+          Copy-Item sample/WStarCats.ptl "$env:USERPROFILE\Desktop\Sample Session.ptl"
+          Start-Process explorer.exe "$env:USERPROFILE\Desktop"
+          Start-Sleep -Seconds 8
+          Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+          # extra large icons so the 256px document icons are reviewable
+          [System.Windows.Forms.SendKeys]::SendWait('^+1')
+          Start-Sleep -Seconds 4
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("win-explorer.png")
+          Get-ChildItem win-*.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: win-file-icons
+          path: win-*.png
