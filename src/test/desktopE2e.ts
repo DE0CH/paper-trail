@@ -290,20 +290,27 @@ async function run(): Promise<void> {
         JSON.stringify(span));
 
       // The top edge resizes the popup too (bottom edge stays put).
+      // On the desktop the popup spawns right under the toolbar, so
+      // upward room is clamped away; resize is verified downward and
+      // back, which also restores the popup's state exactly.
       const pvBox = (await page.locator('#preview').boundingBox())!;
-      // 30px, not the browser suite's 60: the desktop toolbar is
-      // shorter, the popup starts higher, and a 60px drag would hit
-      // the 8px viewport clamp instead of measuring the resize.
       await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y + 1);
       await page.mouse.down();
-      await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y - 29, { steps: 6 });
+      await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y + 61, { steps: 6 });
       await page.mouse.up();
-      const pvBox2 = (await page.locator('#preview').boundingBox())!;
-      check('dragging the preview top edge resizes it upward',
-        Math.abs((pvBox2.height - pvBox.height) - 30) < 6
-          && Math.abs((pvBox.y - pvBox2.y) - 30) < 6
-          && Math.abs((pvBox2.y + pvBox2.height) - (pvBox.y + pvBox.height)) < 3,
-        JSON.stringify({ before: pvBox, after: pvBox2 }));
+      const pvSmall = (await page.locator('#preview').boundingBox())!;
+      await page.mouse.move(pvSmall.x + pvSmall.width / 2, pvSmall.y + 1);
+      await page.mouse.down();
+      await page.mouse.move(pvSmall.x + pvSmall.width / 2, pvSmall.y - 59, { steps: 6 });
+      await page.mouse.up();
+      const pvRestored = (await page.locator('#preview').boundingBox())!;
+      check('dragging the top edge resizes both ways (bottom stays put)',
+        Math.abs((pvSmall.y - pvBox.y) - 60) < 6
+          && Math.abs((pvBox.height - pvSmall.height) - 60) < 6
+          && Math.abs((pvSmall.y + pvSmall.height) - (pvBox.y + pvBox.height)) < 3
+          && Math.abs(pvRestored.y - pvBox.y) < 6
+          && Math.abs(pvRestored.height - pvBox.height) < 6,
+        JSON.stringify({ before: pvBox, small: pvSmall, restored: pvRestored }));
 
       // Regression: an oversized remembered preview height in a smaller
       // window must never cover the hovered link (it blocked clicking).
