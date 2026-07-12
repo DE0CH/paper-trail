@@ -230,7 +230,7 @@ gotchas, stable test hook ids).
   --no-ff: a branch integration always gets a merge commit.
 - Background-work heartbeat (owner rule): whenever a background
   command is expected to wake Claude on completion, ALSO set a
-  periodic alarm (ScheduleWakeup, ~20-30 min) that does NOTHING but
+  periodic alarm (ScheduleWakeup, 5 minutes) that does NOTHING but
   wake — regardless of the task's status; never wrap watchers in
   kill-timeouts. What to do upon waking (re-check, re-arm, intervene,
   nothing) is entirely the woken agent's decision.
