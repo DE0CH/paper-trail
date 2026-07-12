@@ -242,6 +242,7 @@ function createWindow(): BrowserWindow {
   if (process.env.PT_SHOT) win.showInactive();
 
   win.on('close', () => saveBounds(win));
+  win.on('closed', () => editedWindows.delete(win.id));
 
   void win.loadURL(`${SCHEME}://app/index.html`);
   return win;
@@ -463,22 +464,23 @@ function setupAutoUpdates(): void {
     return;
   }
   autoUpdater.autoInstallOnAppQuit = true;
-  // Download progress shows on the Dock / taskbar icon.
+  // Background downloads are completely silent: no Dock/taskbar
+  // progress, no toast nagging to restart — the update installs on the
+  // next normal quit and the next start announces it (see
+  // announceUpdateOnFirstRun). Only a download the user asked for in
+  // the update window shows progress on the app icon.
   autoUpdater.on('download-progress', (p) => {
-    for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(p.percent / 100);
-    }
     if (updateUi.state === 'downloading') {
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(p.percent / 100);
+      }
       setUpdateUi({ ...updateUi, percent: p.percent });
     }
   });
   autoUpdater.on('update-downloaded', (info) => {
     downloadedVersion = info.version;
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed() && w !== updateWin) {
-        w.setProgressBar(-1);
-        w.webContents.send('pt-menu', 'update-ready', info.version);
-      }
+      if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(-1);
     }
     if (updateUi.state === 'downloading') {
       setUpdateUi({ state: 'downloaded', version: info.version });
@@ -516,9 +518,21 @@ function setupAutoUpdates(): void {
  * abandoned and the update window returns to its ready state — the
  * update still installs on the next normal quit.
  */
+const editedWindows = new Set<number>();
+
 async function restartToUpdate(): Promise<void> {
-  for (const w of [...BrowserWindow.getAllWindows()]) {
-    if (w.isDestroyed() || w === updateWin) continue;
+  const all = [...BrowserWindow.getAllWindows()]
+    .filter((w) => !w.isDestroyed() && w !== updateWin);
+  // Windows with unsaved sessions hold the veto, so they are asked
+  // FIRST; clean windows only close once every unsaved session has
+  // agreed. (getAllWindows has no useful order — without this, a
+  // Cancel could leave a half-closed workspace.)
+  const ordered = [
+    ...all.filter((w) => editedWindows.has(w.id)),
+    ...all.filter((w) => !editedWindows.has(w.id)),
+  ];
+  for (const w of ordered) {
+    if (w.isDestroyed()) continue;
     const closed = new Promise<boolean>((resolve) => {
       w.once('closed', () => resolve(true));
       // Counts only unblocked time: the close prompt is a synchronous
@@ -544,6 +558,7 @@ async function checkForUpdatesInteractive(): Promise<void> {
     return;
   }
   openUpdateWindow();
+  const before = updateUi;
   setUpdateUi({ state: 'checking' });
   try {
     const r = await autoUpdater.checkForUpdates();
@@ -555,6 +570,11 @@ async function checkForUpdatesInteractive(): Promise<void> {
     availableVersion = latest;
     if (downloadedVersion === latest) {
       setUpdateUi({ state: 'downloaded', version: latest });
+    } else if (before.state === 'downloading' && before.version === latest) {
+      // Checking again mid-download (the window was closed and
+      // reopened) resumes the progress view instead of re-offering
+      // the update; the next progress event refreshes the percent.
+      setUpdateUi(before);
     } else {
       setUpdateUi({ state: 'available', version: latest });
     }
@@ -778,7 +798,12 @@ ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedNa
 
 // The dot in the macOS close button mirrors unsaved session changes.
 ipcMain.on('pt-document-edited', (event, edited: boolean) => {
-  BrowserWindow.fromWebContents(event.sender)?.setDocumentEdited(!!edited);
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  win.setDocumentEdited(!!edited);
+  // restartToUpdate asks windows with unsaved sessions first.
+  if (edited) editedWindows.add(win.id);
+  else editedWindows.delete(win.id);
 });
 
 // A PDF picked in an occupied window opens in a window of its own.
@@ -793,10 +818,33 @@ ipcMain.on('pt-open-file-ready', (event) => {
   const queued = queuedFiles.get(event.sender.id);
   queuedFiles.delete(event.sender.id);
   if (win) queued?.forEach((f) => sendFileTo(win, f));
+  // Background updates install silently on quit; the first window of
+  // the next start carries the only announcement the user gets.
+  if (announceVersion) {
+    event.sender.send('pt-menu', 'updated', announceVersion);
+    announceVersion = null;
+  }
 });
+
+/**
+ * A quit-installed update is announced once on the next start. The
+ * previous version lives in a userData marker; the very first run just
+ * writes it and stays quiet.
+ */
+let announceVersion: string | null = null;
+function detectQuitInstalledUpdate(): string | null {
+  const marker = path.join(app.getPath('userData'), 'last-version.txt');
+  let prev = '';
+  try { prev = fs.readFileSync(marker, 'utf8').trim(); } catch { /* first run */ }
+  const cur = app.getVersion();
+  if (prev === cur) return null;
+  try { fs.writeFileSync(marker, `${cur}\n`); } catch (e) { dbg('version marker write failed', e); }
+  return prev ? cur : null;
+}
 
 void app.whenReady().then(() => {
   registerAppProtocol();
+  announceVersion = detectQuitInstalledUpdate();
   setupAutoUpdates();
   // macOS gets the full native menu bar; Windows has none (its window
   // chrome integrates with the toolbar, and shortcuts live in the app).

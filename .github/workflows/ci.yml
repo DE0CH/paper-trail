@@ -106,6 +106,10 @@ jobs:
         shell: bash
         run: node build-node/test/installerWin.js
 
+      - name: Installer never force-closes a running app (unsaved work wins)
+        shell: bash
+        run: node build-node/test/installerCloseUnsaved.js
+
   # Update tests live in their own job so their two packaging runs
   # (current version + next-version feed) don't serialize behind the
   # main job's steps — jobs run in parallel, steps within one don't.
@@ -147,6 +151,10 @@ jobs:
       - name: Auto-update test (real install-update-install cycle)
         shell: bash
         run: node build-node/test/updateWin.js
+
+      - name: Install-on-quit test (background download, normal quit)
+        shell: bash
+        run: node build-node/test/updateWinQuitInstall.js
 
   mac:
     strategy:
@@ -215,6 +223,12 @@ jobs:
       - name: Restart to Update guards unsaved sessions (Cancel/Save)
         run: npx electron build-node/test/updateRestartUnsaved.js
 
+      - name: Update window edge cases (up to date, errors, resume, no re-download)
+        run: npx electron build-node/test/updateWindowEdges.js
+
+      - name: Restart edge cases (re-check after Cancel, second window, Don't Save)
+        run: npx electron build-node/test/updateRestartEdges.js
+
       - name: Package the macOS app (unsigned)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -249,6 +263,9 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
 
       - name: Package the current version (zip only)
         env:
@@ -288,6 +305,10 @@ jobs:
       - name: Window update install test (update window through Restart to Update)
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacWindowInstall.js
+
+      - name: Cancel-then-quit test (abandoned restart, silent install on plain quit)
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacCancelThenQuit.js
 
       # LAST: this one replaces the packaged bundle with the new version,
       # so every test needing the current version must run before it.

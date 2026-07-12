@@ -289,9 +289,9 @@ export default function App() {
         case 'trail-prev': controller.stackCycle(-1); break;
         case 'trail-next': controller.stackCycle(1); break;
         case 'trail-duplicate': controller.stackDuplicateActive(); break;
-        case 'update-ready':
+        case 'updated':
           controller.showToast(
-            `Update ${payload ?? ''} downloaded \u2014 it installs when you quit Paper Trail`,
+            `Paper Trail was updated to ${payload ?? 'a new version'}`,
             8000,
           );
           break;
