@@ -248,6 +248,9 @@ jobs:
 
       - run: npm run build
 
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
       - name: Package the current version (zip only)
         env:
           CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
@@ -286,6 +289,10 @@ jobs:
       - name: Window update install test (update window through Restart to Update)
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacWindowInstall.js
+
+      - name: Cancel-then-quit test (abandoned restart, silent install on plain quit)
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacCancelThenQuit.js
 
       # LAST: this one replaces the packaged bundle with the new version,
       # so every test needing the current version must run before it.
