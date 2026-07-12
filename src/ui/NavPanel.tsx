@@ -26,7 +26,7 @@ function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
   return (
     <li>
       <div
-        className="outlineItem flex items-center px-1.5 py-0.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
+        className="outlineItem flex items-center h-6 px-1.5 my-px rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
         title={n.title}
         onClick={(e) => void controller.outlineJump(n, e.metaKey || e.ctrlKey)}
       >
@@ -164,7 +164,7 @@ export default function NavPanel({
 
   return (
     <div id="navCol" className="flex flex-col overflow-hidden border-r border-borderapp h-full">
-      <div className="flex items-stretch h-9 border-b border-borderapp px-1.5 flex-none">
+      <div className="flex items-stretch h-9 border-b border-borderapp pl-1.5 pr-2 flex-none">
         {tabBtn('outline', 'Outline')}
         {tabBtn('pages', 'Pages')}
         <span className="flex-1" />
@@ -190,7 +190,7 @@ export default function NavPanel({
         )}
         <button
           id="btnNavClose"
-          className="inline-flex items-center self-center h-7 text-dim hover:text-fgapp cursor-pointer px-1.5"
+          className="inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
           title="Close panel"
           onClick={onClose}
         >
