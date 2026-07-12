@@ -48,6 +48,16 @@ jobs:
         shell: pwsh
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
+      - name: Auto-hide the taskbar (the window must fill true 1080p)
+        shell: pwsh
+        run: |
+          $p = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3'
+          $v = (Get-ItemProperty -Path $p).Settings
+          $v[8] = 3
+          Set-ItemProperty -Path $p -Name Settings -Value $v
+          Stop-Process -Force -ProcessName explorer
+          Start-Sleep -Seconds 5
+
       - name: Ensure ffmpeg
         shell: pwsh
         run: |

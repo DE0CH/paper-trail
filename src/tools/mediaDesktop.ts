@@ -104,10 +104,12 @@ type Rect = { x: number; y: number; w: number; h: number };
 const even = (n: number) => 2 * Math.floor(n / 2);
 
 // Crop to the window, then pad to an exact 1080p canvas in the app's
-// own background color — no distortion, no taskbar, true 1920x1080.
+// own background color. With the taskbar auto-hidden the window fills
+// the display and the pad is a no-op; if anything is ever short, the
+// window anchors to the TOP so no band can appear above it.
 const filter1080 = (r: Rect) =>
   `crop=${r.w}:${r.h}:${r.x}:${r.y},`
-  + 'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x2b2d31';
+  + 'pad=1920:1080:(ow-iw)/2:0:color=0x2b2d31';
 
 function snapStill(rect: Rect, file: string): void {
   execFileSync('ffmpeg', [
