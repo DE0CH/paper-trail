@@ -17,7 +17,27 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
   updateFeedNames test), release-gated Vercel deploy (deploy.yml
   DELETED), ci.yml cancel-in-progress concurrency. v0.5.6 SKIPPED;
   v0.5.5 repaired in place with 6 alias assets.
-- v0.5.9 PUBLISHED and verified (10 assets, urls 200, deploy-web ok):
+- v0.5.11 PUBLISHED and verified (10 assets, urls 200, deploy-web ok):
+  HiDPI-crisp NSIS installer (customHeader ManifestDPIAware), taskbar
+  Jump List New Window works (setAppUserModelId on win32), dark
+  blended scrollbars (color-scheme dark + ::-webkit-scrollbar), ONE
+  panel layout system (22px rows everywhere, hover tools overlay,
+  x on hover/active only, single right-edge axis, lists start on one
+  line — all asserted in trailRowLayout), flash-free document opens
+  (openPath reuses ANY empty window; showWhenLoaded windows reveal on
+  title change, 4s fallback), Tab cycling removed + click blur (no
+  UA focus rings), preview bottom-edge clamp. v0.5.10 SKIPPED (gate
+  flake blocked its release). CI: no concurrency cancellation (owner
+  removed it after rolling gate cancellations).
+- README media: recorded ON WINDOWS CI (media.yml → mediaDesktop.ts):
+  real Electron window via ffmpeg gdigrab, taskbar auto-hidden for
+  true 1080p60, content-page-only demo chain, keycast HUD bottom-left
+  (toast owns bottom-center), stills on math pages with neutral
+  cursor park; self-verifies + REVIEW LOOP (artifact always uploads,
+  capture in mpegts survives crashes; extract frames + vision-check).
+  Video upload: raw fetch in a github new-issue page CACHES drafts —
+  clear textarea first and require a NEW asset id.
+- v0.5.9 shipped earlier (silent updates etc.):
   NSIS graceful-close (build/installer.nsh customCheckAppRunning —
   asks, never taskkill /F, exit 4 on refusal), SILENT background
   updates (no icon progress/toast; install on quit; next start toasts
