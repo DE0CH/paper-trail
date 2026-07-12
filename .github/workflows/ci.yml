@@ -58,11 +58,13 @@ jobs:
             sleep 0.5
           done
           node build-node/tools/geometry.js
-          node build-node/test/e2e.js
-          node build-node/test/e2eEdges.js
-          node build-node/test/darkScrollbars.js
-          node build-node/test/trailRowLayout.js
-          node build-node/test/focusRing.js
+          # Every suite runs even when an earlier one fails, so a
+          # single run reports the full picture; the step still fails.
+          rc=0
+          for t in e2e e2eEdges darkScrollbars trailRowLayout focusRing; do
+            node "build-node/test/$t.js" || rc=1
+          done
+          exit $rc
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         shell: bash
@@ -85,6 +87,9 @@ jobs:
         run: npx electron build-node/test/desktopEdges.js
 
       - name: OS-open shows no empty flash and reuses empty windows
+        # Independent of the browser suites: report it even when they
+        # fail, so one run carries the full picture.
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/osOpenFlash.js
 
@@ -206,11 +211,13 @@ jobs:
             sleep 0.5
           done
           node build-node/tools/geometry.js
-          node build-node/test/e2e.js
-          node build-node/test/e2eEdges.js
-          node build-node/test/darkScrollbars.js
-          node build-node/test/trailRowLayout.js
-          node build-node/test/focusRing.js
+          # Every suite runs even when an earlier one fails, so a
+          # single run reports the full picture; the step still fails.
+          rc=0
+          for t in e2e e2eEdges darkScrollbars trailRowLayout focusRing; do
+            node "build-node/test/$t.js" || rc=1
+          done
+          exit $rc
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         shell: bash
@@ -233,6 +240,9 @@ jobs:
         run: npx electron build-node/test/desktopEdges.js
 
       - name: OS-open shows no empty flash and reuses empty windows
+        # Independent of the browser suites: report it even when they
+        # fail, so one run carries the full picture.
+        if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/osOpenFlash.js
 
