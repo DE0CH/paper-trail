@@ -61,6 +61,7 @@ jobs:
           node build-node/test/e2e.js
           node build-node/test/e2eEdges.js
           node build-node/test/darkScrollbars.js
+          node build-node/test/trailRowLayout.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         shell: bash
@@ -207,6 +208,7 @@ jobs:
           node build-node/test/e2e.js
           node build-node/test/e2eEdges.js
           node build-node/test/darkScrollbars.js
+          node build-node/test/trailRowLayout.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         shell: bash
