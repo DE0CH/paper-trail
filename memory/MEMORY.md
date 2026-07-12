@@ -1,6 +1,24 @@
-# Project: arXiv 2411.01678 (Complete W*-categories paper)
+# Project: Paper Trail (+ parent arXiv 2411.01678 W*-categories paper)
 
-## Subproject: Paper Trail (own git repo in ./paper-trail)
+This memory lives IN the repo at memory/ (git-tracked) and is
+symlinked from BOTH ~/.claude/projects dirs (the arXiv parent folder
+and paper-trail itself), so it follows the session either way.
+The parent folder ../ holds the paper (not a git repo; see
+[[paper-build]] pointer below).
+
+## Current state (2026-07-12, session handoff)
+- v0.5.5 tagged, gated release run in flight (CI gate all green,
+  windows+mac publish jobs running): Finder-crash EPIPE fix, .ptl doc
+  icon, preview toolbar clamp, native Win32 context menus, CI-gated
+  releases. Verify it published: `gh release view v0.5.5`.
+- Latest released before that: 0.5.3. 0.5.4 skipped (see CHANGELOG).
+- Native Win32 menus (src/desktop/winMenu.ts, koffi): validated
+  visually via windows-screenshot.yml artifact; koffi EXCLUDED from
+  mac bundles (universal-merge rejects per-arch prebuilds).
+- .claude/settings.json (committed) bans force pushes via deny rules
+  + PreToolUse hook; active from session start in paper-trail cwd.
+
+## Paper Trail (this repo)
 - Published: github.com/DE0CH/paper-trail (public), Vercel prod
   https://paper-trail-green.vercel.app (team-scoped URLs 302 behind
   Vercel auth — expected), releases via .github/workflows/release.yml
@@ -129,31 +147,10 @@
   textarea[aria-label="Markdown value"] → grab user-attachments URL →
   clear draft → README; verify player headlessly (autoplay flag).
 
-## (older notes, folder since renamed from pdf-stack-reader)
-User-facing name: "Paper Trail"; UI says "trails", never "stacks"
-(technical terms stay internal). PDF reader: parallel history trails
-(browser back/forward, cmd+click branches, snapshot undo/redo capped 50
-oldest-dropped, entry anchors immutable on scroll — explicit ⌖ re-anchor),
-.psr reading-session files (line-oriented plain text v2, ordered trails,
-no ids — user refuses JSON), explicit two-file flow (NO path resolution:
-PDF-first + "Load session…" w/ confirm; session-first + prompt; mismatch
-banner w/ "Use this PDF"; ⇄ Replace PDF keeps history), page-width
-scrollable/resizable hover preview, outline+thumbnails nav panel
-(closable, leftmost), independent panel widths (neighbors shift, never
-resize), device-pixel-exact rendering (uncapped dpr, 64M px area cap,
-backing/css exact ratio), pinch = ctrl+wheel re-render zoom.
-Perf limits (measured, unenforced): localStorage auto-resume hard-fails
-~63k entries; UI soft-slow ~20k entries in active trail.
-- Stack: TS strict + React + Vite + Tailwind v4; pdfjs-dist v6 (npm);
-  Electron shell over custom psr:// protocol (user: NO TCP in desktop app);
-  node server only for browser mode; Python scripts (user: NO shell scripts).
-- Build: `npm run build`; test: `npm start` then `npm test` (headless e2e,
-  playwright-core + local Edge binary, 26 checks). README has details.
-- pdfjs v6 gotchas: text layer sized by CSS rules on --font-height/--scale-x/
-  --total-scale-factor (globals.css); loadingTask.destroy();
-  convertToViewportRectangle removed; getDocument({data}) detaches buffer.
-- Test hooks: window.__psr; keep element ids (#stacksPanel, .pdfLink,
-  .searchHl, #resizeSidebar...) stable for e2e.
+## Product/design facts
+In memory/product-design.md (trails model, session-file philosophy,
+two-file flow, preview/panels/rendering rules, perf limits, pdfjs v6
+gotchas, stable test hook ids).
 
 ## User preferences (confirmed)
 - Tests are IMMUTABLE: in no case edit/modify an existing test — only
