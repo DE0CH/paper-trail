@@ -167,8 +167,12 @@ export default function NavPanel({
   return (
     <div id="navCol" className="flex flex-col overflow-hidden border-r border-borderapp h-full">
       <div className="flex items-stretch h-9 border-b border-borderapp pl-1.5 pr-2 flex-none">
-        {tabBtn('outline', 'Outline')}
-        {tabBtn('pages', 'Pages')}
+        {/* The tabs give way on narrow panels; the buttons hold their
+            size so the close button stays on the shared right axis. */}
+        <div className="flex items-stretch min-w-0 overflow-hidden">
+          {tabBtn('outline', 'Outline')}
+          {tabBtn('pages', 'Pages')}
+        </div>
         <span className="flex-1" />
         {tab === 'outline' && hasSections && (
           <>
