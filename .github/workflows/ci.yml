@@ -46,6 +46,9 @@ jobs:
       - name: Unit tests
         run: node --test build-node/test/unit.js
 
+      - name: Unit edge cases (hostile session files, model invariants)
+        run: node --test build-node/test/unitEdges.js
+
       - name: Browser e2e suite (headless browser + node server)
         shell: bash
         run: |
@@ -56,6 +59,7 @@ jobs:
           done
           node build-node/tools/geometry.js
           node build-node/test/e2e.js
+          node build-node/test/e2eEdges.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         shell: bash
@@ -72,6 +76,10 @@ jobs:
       - name: Desktop auto-save regression (Recents re-arm auto-save)
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
+
+      - name: Desktop edge cases (open routing, external links, bounds)
+        shell: bash
+        run: npx electron build-node/test/desktopEdges.js
 
       - name: Jump List New Window task opens a fresh window
         shell: bash
@@ -163,6 +171,9 @@ jobs:
       - name: Unit tests
         run: node --test build-node/test/unit.js
 
+      - name: Unit edge cases (hostile session files, model invariants)
+        run: node --test build-node/test/unitEdges.js
+
       - name: Browser e2e suite (headless browser + node server)
         shell: bash
         run: |
@@ -173,6 +184,7 @@ jobs:
           done
           node build-node/tools/geometry.js
           node build-node/test/e2e.js
+          node build-node/test/e2eEdges.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         shell: bash
@@ -189,6 +201,10 @@ jobs:
       - name: Desktop auto-save regression (Recents re-arm auto-save)
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
+
+      - name: Desktop edge cases (open routing, external links, bounds)
+        shell: bash
+        run: npx electron build-node/test/desktopEdges.js
 
       - name: Jump List New Window task opens a fresh window
         run: npx electron build-node/test/newWindowTask.js
