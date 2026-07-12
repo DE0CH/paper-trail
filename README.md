@@ -12,7 +12,7 @@ file you can come back to (or keep in git next to the paper).
 Following references, popping back, jumping around the history, and
 continuing in a new trail:
 
-https://github.com/user-attachments/assets/f435e56a-6cd3-4bd0-8787-73699d33db22
+https://github.com/user-attachments/assets/4ca439e5-500b-4005-b7ef-f6311bc508af
 
 <p align="center">
   <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after a cmd+click duplicated the first one">
