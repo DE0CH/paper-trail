@@ -3,11 +3,22 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
-## 0.5.6
+## 0.5.7
 
+- Fixed: checking for updates failed with "Update check failed …
+  status 404" on both macOS and Windows — the updater was sent to
+  download names that didn't exist on the release. (The 0.5.5
+  downloads were also repaired in place, so updating from older
+  versions works again immediately.)
 - The web app at paper-trail-green.vercel.app now updates together
   with each release, after the full test suite passes — instead of on
   every code change.
+
+## 0.5.6 (skipped)
+
+Never released: its release run was cancelled mid-build so the
+update-download fix above could ship with it. Version numbers are not
+reused, so the changes shipped as 0.5.7.
 
 ## 0.5.5
 
