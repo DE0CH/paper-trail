@@ -31,7 +31,8 @@ jobs:
 
       - name: Register the app and adopt the file types
         run: |
-          APP=$(find dist-electron -maxdepth 2 -name '*.app' | head -1)
+          # absolute: NSWorkspace.icon(forFile:) resolves no relative paths
+          APP="$PWD/$(find dist-electron -maxdepth 2 -name '*.app' | head -1)"
           echo "APP=$APP" >> "$GITHUB_ENV"
           /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
           brew install duti
@@ -41,6 +42,15 @@ jobs:
           # claimant for .ptl and is therefore already its default.
           duti -s local.paper-trail com.adobe.pdf all
           duti -s local.paper-trail .ptl all || true
+          # macOS confirms default-handler changes with a dialog
+          # (CoreServicesUIAgent); accept it so the pdf icon actually
+          # flips to the new default's document icon
+          for i in $(seq 1 10); do
+            sleep 2
+            if osascript -e 'tell application "System Events" to tell process "CoreServicesUIAgent" to click button 1 of window 1' 2>/dev/null; then
+              echo "accepted the default-handler dialog"; break
+            fi
+          done
 
       - name: Render the icons macOS composes for the files
         run: |
