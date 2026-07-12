@@ -468,3 +468,38 @@ jobs:
       - name: Auto-update install test (Squirrel, signed builds only)
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacInstall.js
+
+  # Publishes the coverage badge endpoint and the browsable report as a
+  # GitHub Pages deployment on every main push — the README badge reads
+  # the number from there; nothing is ever committed to the repo.
+  coverage-pages:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [windows]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: coverage-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-windows-latest
+          path: coverage
+
+      - name: Assemble the site (badge endpoint + coverage report)
+        run: |
+          mkdir site
+          cp coverage/badge.json site/
+          cp -r coverage/lcov-report site/report
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
