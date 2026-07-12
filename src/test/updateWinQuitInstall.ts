@@ -166,9 +166,19 @@ async function run(): Promise<void> {
     await eApp.close().catch(() => { /* the app quit on its own */ });
   }
 
-  // The install may relaunch the app; ours is the launch that counts.
-  spawnSync('taskkill', ['/F', '/IM', path.basename(exe)], { timeout: 60_000 });
-  await new Promise((r) => setTimeout(r, 2000));
+  // A quit-install must behave like the automatic upgrade it is: the
+  // app stays closed and simply waits to be opened again — it must
+  // not reopen itself after installing.
+  await new Promise((r) => setTimeout(r, 10_000));
+  const running = spawnSync('tasklist',
+    ['/FI', `IMAGENAME eq ${path.basename(exe)}`], { encoding: 'utf8' })
+    .stdout.includes(path.basename(exe));
+  check('the app stays closed after the quit-install (no self-relaunch)',
+    !running);
+  if (running) {
+    spawnSync('taskkill', ['/F', '/IM', path.basename(exe)], { timeout: 60_000 });
+    await new Promise((r) => setTimeout(r, 2000));
+  }
 
   // The next start announces the update, exactly once.
   const eApp2 = await _electron.launch({ executablePath: exe, args: [], env });
