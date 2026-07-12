@@ -8,11 +8,14 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 (not a git repo; see paper-build.md pointer below).
 
 ## Current state (2026-07-12, session 3)
-- v0.5.7 PUBLISHED and verified (all asset names match latest*.yml
-  exactly, download urls 200, deploy-web job deployed Vercel): the
-  update-404 fix (space-free artifactNames + updateFeedNames test),
-  release-gated Vercel deploy (deploy.yml DELETED), ci.yml
-  cancel-in-progress concurrency. v0.5.6 SKIPPED (see CHANGELOG);
+- v0.5.8 PUBLISHED and verified (10 dash-named assets, updater urls
+  200, deploy-web green): Software Update window, restart guards
+  unsaved sessions, save-from-close data-loss fix (picker never
+  settles after a canceled unload — close-prompt saves route to the
+  shell dialog via 'save-from-close'), Windows Jump List New Window.
+- v0.5.7 shipped the update-404 fix (space-free artifactNames +
+  updateFeedNames test), release-gated Vercel deploy (deploy.yml
+  DELETED), ci.yml cancel-in-progress concurrency. v0.5.6 SKIPPED;
   v0.5.5 repaired in place with 6 alias assets.
 - In flight: 0.5.8 = Software Update window (Sparkle-style, replaces
   the dialog chain; update.html + src/update/main.tsx + updatePreload,
