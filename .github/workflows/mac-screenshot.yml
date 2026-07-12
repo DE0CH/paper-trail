@@ -35,8 +35,12 @@ jobs:
           echo "APP=$APP" >> "$GITHUB_ENV"
           /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
           brew install duti
-          duti -s local.paper-trail .pdf all
-          duti -s local.paper-trail .ptl all
+          # pdf by its UTI (the extension form hits the same dynamic-UTI
+          # error as below); ptl resolves to a dynamic UTI that duti
+          # can't set (error -50) — harmless, the app is the only
+          # claimant for .ptl and is therefore already its default.
+          duti -s local.paper-trail com.adobe.pdf all
+          duti -s local.paper-trail .ptl all || true
 
       - name: Render the icons macOS composes for the files
         run: |
