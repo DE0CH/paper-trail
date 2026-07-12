@@ -33,6 +33,17 @@ jobs:
           $setup = Get-ChildItem dist-electron -Filter 'Paper-Trail-Setup-*.exe' | Select-Object -First 1
           Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
           Start-Sleep -Seconds 5
+          # Explorer draws the EFFECTIVE handler's icon, and Edge owns
+          # .pdf via the hash-protected UserChoice key. Deleting the key
+          # (allowed; only writing needs the hash) makes resolution fall
+          # back to the installer's ProgID — the state a user reaches by
+          # choosing "Always open with Paper Trail".
+          $fileExts = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts'
+          foreach ($ext in '.pdf', '.ptl') {
+            Remove-Item -Path "$fileExts\$ext\UserChoice" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 5
           ie4uinit.exe -show
           Start-Sleep -Seconds 3
 
@@ -42,7 +53,7 @@ jobs:
           Copy-Item sample/WStarCats.pdf "$env:USERPROFILE\Desktop\Sample Paper.pdf"
           Copy-Item sample/WStarCats.ptl "$env:USERPROFILE\Desktop\Sample Session.ptl"
           Start-Process explorer.exe "$env:USERPROFILE\Desktop"
-          Start-Sleep -Seconds 8
+          Start-Sleep -Seconds 12
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
           # extra large icons so the 256px document icons are reviewable
           [System.Windows.Forms.SendKeys]::SendWait('^+1')
