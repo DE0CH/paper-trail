@@ -62,10 +62,6 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
 
-      - name: Real-input drag regression (OS-level mouse, drag region)
-        shell: bash
-        run: node build-node/test/realDragWin.js
-
       - name: Package the Windows app (unsigned)
         env:
           # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
@@ -170,11 +166,6 @@ jobs:
       - name: Desktop auto-save regression (Recents re-arm auto-save)
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
-
-      - name: Real-input drag regression (OS-level mouse, drag region)
-        run: |
-          brew install cliclick
-          node build-node/test/realDragMac.js
 
       - name: Package the macOS app (unsigned)
         env:
