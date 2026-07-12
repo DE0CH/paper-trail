@@ -3,6 +3,20 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.3
+
+- Checking for updates is now a real conversation: if a new version
+  exists, the app offers "Update Now", shows the download's progress
+  on the Dock or taskbar icon, and asks to restart when it's ready.
+  Restarting goes through the usual unsaved-session prompt for every
+  window — keeping a window open simply postpones the update to the
+  next time the app quits.
+- The update mechanism itself is now tested on every change, on all
+  four kinds of machines: Windows machines (Intel and ARM) install a
+  build, update it from a test feed, and verify the new version runs;
+  Macs verify the update is found and downloaded, and script the
+  Check for Updates menu flow end to end.
+
 ## 0.5.2
 
 - Fixed: on Windows ARM machines the installer finished but installed
