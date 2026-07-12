@@ -8,7 +8,7 @@
 // The prompt is stubbed, so nothing native appears on screen.
 // Run (CI, Windows): node build-node/test/installerCloseUnsaved.js
 
-import { spawnSync, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -48,6 +48,21 @@ function findShortcut(): string | null {
     path.join(os.homedir(), 'OneDrive', 'Desktop', `${PRODUCT}.lnk`),
   ];
   return candidates.find((p) => fs.existsSync(p)) ?? null;
+}
+
+/**
+ * The installer must run WITHOUT blocking this process: the launched
+ * app is debugger-attached, and its close path waits on playwright's
+ * dialog handling — a spawnSync here would freeze that and stall the
+ * very close the installer is waiting for.
+ */
+function runInstaller(installer: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const child = spawn(installer, ['/S'], { stdio: 'ignore' });
+    const timer = setTimeout(() => { child.kill(); resolve(null); }, 300_000);
+    child.on('exit', (code) => { clearTimeout(timer); resolve(code); });
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+  });
 }
 
 async function waitFor(cond: () => boolean, ms: number): Promise<boolean> {
@@ -124,9 +139,9 @@ async function run(): Promise<void> {
   // Phase 1 — Cancel at the save prompt: the app must survive and the
   // installer must error out.
   const cancelApp = await launchDirty(exe, 2);
-  const inst = spawnSync(installer, ['/S'], { timeout: 300_000 });
+  const inst = await runInstaller(installer);
   check('the installer errors out when the app refuses to close',
-    inst.status !== 0, `exit ${inst.status}`);
+    inst !== 0, `exit ${inst}`);
   let alive = true;
   let prompts: string[] = [];
   try {
@@ -163,9 +178,9 @@ async function run(): Promise<void> {
   // Phase 2 — Don't Save: the graceful close is accepted and the
   // install succeeds.
   await launchDirty(exe, 1);
-  const inst2 = spawnSync(installer, ['/S'], { timeout: 300_000 });
+  const inst2 = await runInstaller(installer);
   check('the installer succeeds when the close is accepted',
-    inst2.status === 0, `exit ${inst2.status}`);
+    inst2 === 0, `exit ${inst2}`);
   const gone = await waitFor(() =>
     !spawnSync('tasklist', ['/FI', `IMAGENAME eq ${path.basename(exe)}`],
       { encoding: 'utf8' }).stdout.includes(path.basename(exe)), 60_000);
