@@ -23,6 +23,7 @@
     "test:update:mac:window-install": "node build-node/test/updateMacWindowInstall.js",
     "test:update:window": "electron build-node/test/updateWindow.js",
     "test:update:unsaved": "electron build-node/test/updateRestartUnsaved.js",
+    "test:new-window-task": "electron build-node/test/newWindowTask.js",
     "test:stdio": "node build-node/test/desktopStdioClosed.js",
     "perf": "node build-node/tools/perf.js",
     "media": "node build-node/tools/media.js",

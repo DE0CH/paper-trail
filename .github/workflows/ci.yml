@@ -73,6 +73,10 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
 
+      - name: Jump List New Window task opens a fresh window
+        shell: bash
+        run: npx electron build-node/test/newWindowTask.js
+
       - name: Package the Windows app (unsigned)
         env:
           # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
@@ -185,6 +189,9 @@ jobs:
       - name: Desktop auto-save regression (Recents re-arm auto-save)
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
+
+      - name: Jump List New Window task opens a fresh window
+        run: npx electron build-node/test/newWindowTask.js
 
       - name: Software Update window flow (states, buttons, Later)
         run: npx electron build-node/test/updateWindow.js

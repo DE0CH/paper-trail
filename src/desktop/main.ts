@@ -312,10 +312,13 @@ app.on('open-file', (event, filePath) => {
   openPath(filePath);
 });
 
-// Windows: the file path arrives in a second process's argv.
+// Windows: the file path arrives in a second process's argv. The
+// taskbar Jump List's "New Window" task arrives the same way, as a
+// second process launched with --new-window.
 app.on('second-instance', (_event, argv) => {
   const files = argv.filter((a) => /\.(pdf|ptl)$/i.test(a) && fs.existsSync(a));
   if (files.length) files.forEach((f) => openPath(f));
+  else if (argv.includes('--new-window')) createWindow();
   else {
     const win = focusedWindow();
     if (win) { win.show(); win.focus(); }
@@ -811,9 +814,26 @@ void app.whenReady().then(() => {
       { label: 'New Window', click: () => void createWindow() },
     ]));
   } else {
-    // Windows taskbar Jump List: recent documents (uses the installer's
-    // file associations).
-    app.setJumpList([{ type: 'recent' }]);
+    // Windows taskbar Jump List: a New Window task (the counterpart of
+    // the macOS Dock menu) plus recent documents (uses the installer's
+    // file associations). The task launches a second process whose
+    // --new-window flag reaches the running instance via
+    // 'second-instance'.
+    app.setJumpList([
+      {
+        type: 'tasks',
+        items: [{
+          type: 'task',
+          title: 'New Window',
+          description: 'Open a new Paper Trail window',
+          program: process.execPath,
+          args: '--new-window',
+          iconPath: process.execPath,
+          iconIndex: 0,
+        }],
+      },
+      { type: 'recent' },
+    ]);
   }
 
   // Files double-clicked before the app finished launching, and (on
