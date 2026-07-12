@@ -20,6 +20,9 @@ matching section into the GitHub Release notes.
   opens the document in a window nudged away from its usual position.
 - Pressing Tab no longer highlights random buttons with a yellow
   focus ring.
+- List rows across the outline, trails and history panels breathe a
+  little more: a comfortable fixed height with the text vertically
+  centered, identical in all three lists.
 
 ## 0.5.9
 
