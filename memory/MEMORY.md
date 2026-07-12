@@ -220,6 +220,9 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 In memory/product-design.md (trails model, session-file philosophy,
 two-file flow, preview/panels/rendering rules, perf limits, pdfjs v6
 gotchas, stable test hook ids).
+- [Existing components over custom](existing-components-over-custom.md)
+  — never hand-draw/hand-roll where a native/stock component exists
+  (owner rule 2026-07-12: scrollbars, mac doc icons, installer icon).
 
 ## User preferences (confirmed)
 - Tests are IMMUTABLE: in no case edit/modify an existing test — only
