@@ -36,9 +36,15 @@ function flatSvg(): string {
   return flat;
 }
 
-// The .ptl document icon: a full-canvas white page (the OS document
-// shape) with the logo's trail and target overlaid on it.
-function docSvg(): string {
+// Document icons follow the OS convention (what macOS auto-generates
+// for types without an icon, drawn ourselves because electron-builder
+// otherwise substitutes the app icon and Windows has no equivalent):
+// the default file icon — a plain white page with a folded corner —
+// with the app logo superimposed and the extension as a gray label.
+function docSvg(label: string): string {
+  // the logo art from docs/icon.svg, plateless, scaled onto the page
+  const art = /<g id="art">([\s\S]*?)<\/g>/.exec(fs.readFileSync(SVG, 'utf8'))?.[1];
+  if (!art) throw new Error('docs/icon.svg no longer matches the art marker');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
@@ -49,19 +55,11 @@ function docSvg(): string {
   <path d="M218 62 h414 l230 230 v620 a50 50 0 0 1 -50 50 h-594 a50 50 0 0 1 -50 -50 v-800 a50 50 0 0 1 50 -50 z"
         fill="url(#page)" stroke="#b9bdc7" stroke-width="8"/>
   <path d="M632 62 l230 230 h-180 a50 50 0 0 1 -50 -50 z" fill="#c5c9d3"/>
-  <g stroke="#ccd0d9" stroke-width="26" stroke-linecap="round">
-    <line x1="268" y1="240" x2="520" y2="240"/>
-    <line x1="268" y1="344" x2="700" y2="344"/>
-    <line x1="268" y1="448" x2="660" y2="448"/>
-    <line x1="268" y1="552" x2="700" y2="552"/>
-    <line x1="268" y1="656" x2="620" y2="656"/>
-  </g>
-  <path d="M300 880 C 520 828, 380 640, 540 570 C 700 500, 680 460, 630 400"
-        fill="none" stroke="#4f8cff" stroke-width="38"
-        stroke-linecap="round" stroke-dasharray="0.5 84"/>
-  <circle cx="300" cy="880" r="44" fill="#4f8cff"/>
-  <circle cx="606" cy="372" r="74" fill="#4f8cff"/>
-  <circle cx="606" cy="372" r="38" fill="none" stroke="#ffffff" stroke-width="17"/>
+  <g transform="translate(235 150) scale(0.55)">${art}</g>
+  <text x="515" y="905" text-anchor="middle"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="130" font-weight="600" fill="#8b909b"
+        letter-spacing="10">${label}</text>
 </svg>
 `;
 }
@@ -78,35 +76,6 @@ function installerSvg(): string {
   </g>
 </svg>`;
   return fs.readFileSync(SVG, 'utf8').replace('</svg>', badge);
-}
-
-// The .pdf document icon: the same page shape, but marked as a PDF
-// with a red badge — documents opened with the app must not wear the
-// app's own icon.
-function pdfSvg(): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#e9eaee"/>
-    </linearGradient>
-  </defs>
-  <path d="M218 62 h414 l230 230 v620 a50 50 0 0 1 -50 50 h-594 a50 50 0 0 1 -50 -50 v-800 a50 50 0 0 1 50 -50 z"
-        fill="url(#page)" stroke="#b9bdc7" stroke-width="8"/>
-  <path d="M632 62 l230 230 h-180 a50 50 0 0 1 -50 -50 z" fill="#c5c9d3"/>
-  <g stroke="#ccd0d9" stroke-width="26" stroke-linecap="round">
-    <line x1="268" y1="240" x2="520" y2="240"/>
-    <line x1="268" y1="344" x2="700" y2="344"/>
-    <line x1="268" y1="448" x2="660" y2="448"/>
-    <line x1="268" y1="552" x2="700" y2="552"/>
-  </g>
-  <rect x="218" y="640" width="430" height="220" rx="44" fill="#d93025"/>
-  <text x="433" y="800" text-anchor="middle"
-        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
-        font-size="150" font-weight="700" fill="#ffffff"
-        letter-spacing="8">PDF</text>
-</svg>
-`;
 }
 
 function makeIcns(master: string, out: string, tmp: string): void {
@@ -139,8 +108,8 @@ async function run(): Promise<void> {
   const instFile = path.join(tmp, 'icon-installer.svg');
   const instPng = path.join(tmp, 'icon-installer-1024.png');
   fs.writeFileSync(flatFile, flatSvg());
-  fs.writeFileSync(docFile, docSvg());
-  fs.writeFileSync(pdfFile, pdfSvg());
+  fs.writeFileSync(docFile, docSvg('PTL'));
+  fs.writeFileSync(pdfFile, docSvg('PDF'));
   fs.writeFileSync(instFile, installerSvg());
 
   const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
