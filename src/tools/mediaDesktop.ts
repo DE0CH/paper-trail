@@ -224,9 +224,21 @@ async function run(): Promise<void> {
       return true;
     });
 
-    // 1. hover the first reference -> destination preview appears
-    const link = (await page.locator(LINK).nth(3).boundingBox())!;
-    await glide(center(link).x, center(link).y, 700);
+    // A 1920-wide window fit-widths the paper to ~210%, which pushes
+    // most page-1 references below the fold; a moderate zoom shows a
+    // fuller page and keeps links in view.
+    await page.evaluate(() => {
+      (window as never as { __pt: { viewer: { setScale(s: number): void } } })
+        .__pt.viewer.setScale(1.35);
+    });
+    await page.waitForTimeout(900);
+
+    // 1. hover the first VISIBLE reference -> destination preview
+    // appears (never a hardcoded index: what is in view depends on
+    // the zoom).
+    const first = await visibleLink();
+    if (!first) throw new Error('no reference link in view to start the demo');
+    await glide(first.x, first.y, 700);
     await page.waitForTimeout(1700);
     // 2. click it, then keep following real references
     await page.mouse.down(); await page.mouse.up();
