@@ -44,6 +44,20 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
+      - name: Unit test coverage (src/core, table on the run summary)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          npm run coverage
+          node build-node/tools/coverageSummary.js >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.runner }}
+          path: coverage/
+
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
       # pass/fail row while sharing one server.
@@ -249,6 +263,20 @@ jobs:
       - name: Unit edge cases (hostile session files, model invariants)
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
+
+      - name: Unit test coverage (src/core, table on the run summary)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          npm run coverage
+          node build-node/tools/coverageSummary.js >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.runner }}
+          path: coverage/
 
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own

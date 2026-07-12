@@ -10,7 +10,9 @@
     "skipLibCheck": true,
     "types": ["node"],
     "rootDir": "src",
-    "outDir": "build-node"
+    "outDir": "build-node",
+    "sourceMap": true,
+    "inlineSources": true
   },
   "include": ["src/node", "src/desktop", "src/test", "src/tools"]
 }

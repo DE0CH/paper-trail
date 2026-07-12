@@ -9,3 +9,4 @@ __pycache__/
 .vercel
 dist-electron/
 dist-update-feed/
+coverage/
