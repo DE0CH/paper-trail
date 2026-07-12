@@ -18,6 +18,13 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const PRODUCT = 'Paper Trail';
 const SAVE_PROMPT = 'Do you want to save your reading session?';
 
+// The shell answers the beforeunload dialog itself (the stubbed native
+// prompt); playwright's automatic dialog dismissal races it and its
+// ProtocolError ("No dialog is showing") must not kill the test.
+process.on('unhandledRejection', (e) => {
+  console.error('(unhandled rejection, continuing)', e);
+});
+
 interface Result { name: string; ok: boolean; detail: string }
 const results: Result[] = [];
 function check(name: string, ok: boolean, detail = ''): void {
@@ -78,6 +85,9 @@ async function launchDirty(exe: string, answer: number): Promise<ElectronApplica
       };
   }, answer);
   const page = await eApp.firstWindow();
+  // With a listener registered, playwright leaves dialogs alone — the
+  // shell's stubbed native prompt is the one doing the answering.
+  page.on('dialog', (d) => { d.dismiss().catch(() => { /* shell got it */ }); });
   await page.waitForFunction(
     () => !!(window as { __pt?: unknown }).__pt, undefined, { timeout: 60_000 });
   await new Promise((r) => setTimeout(r, 5000)); // let the PDF settle

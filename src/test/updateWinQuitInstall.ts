@@ -106,6 +106,21 @@ async function run(): Promise<void> {
   // The same profile is used across both launches: the next-start
   // announcement compares against the version marker written here.
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-updq-'));
+
+  // Other update tests in this job share the updater cache; a stale
+  // pending installer would satisfy the download check instantly and
+  // the quit would happen mid-download with nothing to install.
+  const cfg = fs.readFileSync(
+    path.join(path.dirname(exe), 'resources', 'app-update.yml'), 'utf8');
+  const cacheName = /updaterCacheDirName:\s*(\S+)/.exec(cfg)?.[1]
+    ?? 'paper-trail-updater';
+  const pending = path.join(process.env.LOCALAPPDATA ?? '', cacheName, 'pending');
+  fs.rmSync(path.join(process.env.LOCALAPPDATA ?? '', cacheName),
+    { recursive: true, force: true });
+
+  const feedSetup = fs.readdirSync(FEED).find((f) => /Setup.*\.exe$/i.test(f));
+  const feedSize = feedSetup ? fs.statSync(path.join(FEED, feedSetup)).size : -1;
+
   const server = serveFeed();
   const env = {
     ...process.env as Record<string, string>,
@@ -118,17 +133,17 @@ async function run(): Promise<void> {
     const page = await eApp.firstWindow();
 
     // Background downloads are silent, so completion shows up only in
-    // the updater's cache: the installer lands in <cache>/pending.
-    const cfg = fs.readFileSync(
-      path.join(path.dirname(exe), 'resources', 'app-update.yml'), 'utf8');
-    const cacheName = /updaterCacheDirName:\s*(\S+)/.exec(cfg)?.[1]
-      ?? 'paper-trail-updater';
-    const pending = path.join(process.env.LOCALAPPDATA ?? '', cacheName, 'pending');
+    // the updater's cache: the FULL installer lands in <cache>/pending
+    // (same byte size as the feed's — anything smaller is still
+    // downloading).
     const downloaded = await waitFor(() =>
       fs.existsSync(pending)
-        && fs.readdirSync(pending).some((f) => f.toLowerCase().endsWith('.exe')),
+        && fs.readdirSync(pending).some((f) =>
+          f.toLowerCase().endsWith('.exe')
+            && fs.statSync(path.join(pending, f)).size === feedSize),
     300_000);
-    check('the background download lands in the updater cache', downloaded, pending);
+    check('the background download completes into the updater cache',
+      downloaded, pending);
 
     // ...and stays silent: no toast appeared while downloading.
     const toastNow = await page.evaluate(
