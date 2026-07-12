@@ -156,6 +156,11 @@ body.desktopMac #toolbar :is(button, input),
 body.desktopWin #toolbar :is(button, input) {
   -webkit-app-region: no-drag;
 }
+/* While a preview resize drag is active the cursor may cross the
+   toolbar; the window-drag region must not steal the pointer. */
+body.previewResizing #toolbar {
+  -webkit-app-region: no-drag;
+}
 
 /* Windows desktop shell: the native min/max/close buttons overlay the
    right end of the toolbar row (titleBarOverlay at the platform's

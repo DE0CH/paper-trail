@@ -155,7 +155,16 @@ Perf limits (measured, unenforced): localStorage auto-resume hard-fails
   normal commit must never MODIFY tests. ADDING tests is always fine,
   needs no permission, and may be mixed into normal commits. Renaming
   a test or editing test comments is also fine — only the test CODE
-  is guarded.
+  is guarded. STRICT: red (-) lines / deletions over a test file are
+  allowed for exactly ONE reason — a test is failing that should not
+  be failing (the test itself is wrong) — and that ALWAYS requires the
+  owner's explicit permission first. This covers uncommitted
+  just-added test code too. Needing different logic in a test = write
+  a NEW test containing the new logic (even for a minor change), never
+  patch. Any commit whose diff has red (-) lines in a test file MUST
+  start its commit message with "Test Deletion". Why so strict: tests
+  are the behavior contract; edits to them are the one channel where
+  an agent can convert a real failure signal into silence.
 - Non-test tooling (media/icons/perf/fixture generators) lives in
   src/tools/, not src/test/.
 - Commit per feature/iteration; draft→commit, post-debug→commit. Signed
