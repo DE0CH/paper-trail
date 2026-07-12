@@ -3,6 +3,12 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.6
+
+- The web app at paper-trail-green.vercel.app now updates together
+  with each release, after the full test suite passes — instead of on
+  every code change.
+
 ## 0.5.5
 
 - Fixed: on macOS, opening a session or PDF by double-clicking it in
