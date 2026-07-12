@@ -103,11 +103,17 @@ const cursorOverlay = () => {
 type Rect = { x: number; y: number; w: number; h: number };
 const even = (n: number) => 2 * Math.floor(n / 2);
 
+// Crop to the window, then pad to an exact 1080p canvas in the app's
+// own background color — no distortion, no taskbar, true 1920x1080.
+const filter1080 = (r: Rect) =>
+  `crop=${r.w}:${r.h}:${r.x}:${r.y},`
+  + 'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x2b2d31';
+
 function snapStill(rect: Rect, file: string): void {
   execFileSync('ffmpeg', [
     '-y', '-f', 'gdigrab', '-draw_mouse', '0', '-i', 'desktop',
     '-frames:v', '1',
-    '-vf', `crop=${rect.w}:${rect.h}:${rect.x}:${rect.y}`,
+    '-vf', filter1080(rect),
     file,
   ], { stdio: 'ignore' });
 }
@@ -120,8 +126,10 @@ async function run(): Promise<void> {
   console.log('recording the desktop app against', path.relative(ROOT, pdfAbs));
 
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-media-'));
+  // Fill the display: the OS clamps the height to the work area, and
+  // the capture pads the remainder to an exact 1080p canvas.
   fs.writeFileSync(path.join(userData, 'window-state.json'),
-    JSON.stringify({ x: 40, y: 20, width: 1600, height: 1000 }));
+    JSON.stringify({ x: 0, y: 0, width: 1920, height: 1080 }));
 
   const eApp = await _electron.launch({
     args: [path.join(ROOT, 'build-node', 'desktop', 'main.js'), pdfAbs],
@@ -138,16 +146,18 @@ async function run(): Promise<void> {
       BrowserWindow.getAllWindows()[0].getBounds());
     const rect: Rect = { x: even(b.x), y: even(b.y), w: even(b.width), h: even(b.height) };
 
-    // The whole desktop is grabbed and cropped to the window — chrome,
-    // toolbar and all. 'q' on stdin finalizes the mp4 cleanly.
-    const mp4 = path.join(OUT, 'demo.mp4');
+    // The whole desktop is grabbed at 60fps and cropped to the window —
+    // chrome, toolbar and all — on a true 1080p canvas. The realtime
+    // pass encodes ultrafast; a second, unhurried pass below produces
+    // the compact final file. 'q' on stdin finalizes cleanly.
+    const cap = path.join(OUT, '.capture.mp4');
     ffmpeg = spawn('ffmpeg', [
-      '-y', '-f', 'gdigrab', '-framerate', '15', '-draw_mouse', '0',
+      '-y', '-f', 'gdigrab', '-framerate', '60', '-draw_mouse', '0',
       '-i', 'desktop',
-      '-vf', `crop=${rect.w}:${rect.h}:${rect.x}:${rect.y}`,
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-      '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an',
-      mp4,
+      '-vf', filter1080(rect),
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18',
+      '-pix_fmt', 'yuv420p', '-an',
+      cap,
     ], { stdio: ['pipe', 'ignore', 'ignore'] });
     await page.waitForTimeout(1200);
 
@@ -292,10 +302,19 @@ async function run(): Promise<void> {
     }
     console.log('recording verified:', JSON.stringify(outcome));
 
-    // Stop the video, then stage the two stills with the chrome on.
+    // Stop the capture, then encode the final file without time
+    // pressure: 1080p60, compact and streamable.
     ffmpeg.stdin!.write('q');
     await new Promise((r) => ffmpeg!.on('exit', r));
     ffmpeg = null;
+    const mp4 = path.join(OUT, 'demo.mp4');
+    execFileSync('ffmpeg', [
+      '-y', '-i', cap,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+      '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an',
+      mp4,
+    ], { stdio: 'ignore' });
+    fs.rmSync(cap, { force: true });
 
     // The stills show NORMAL mathematical content, not the references
     // the demo chain ends in: main.png rests on an early theorem page,
