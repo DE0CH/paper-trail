@@ -101,7 +101,7 @@ function send(action: string): void {
   if (win && !win.isDestroyed()) win.webContents.send('pt-menu', action);
 }
 
-function createWindow(): BrowserWindow {
+function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
   const bounds = loadBounds();
   // Additional windows cascade instead of stacking exactly.
   const offset = BrowserWindow.getAllWindows().length * 26;
@@ -111,7 +111,7 @@ function createWindow(): BrowserWindow {
     height: bounds.height,
     x: bounds.x !== undefined ? bounds.x + offset : undefined,
     y: bounds.y !== undefined ? bounds.y + offset : undefined,
-    show: !SMOKE && !process.env.PT_SHOT,
+    show: !SMOKE && !process.env.PT_SHOT && !showWhenLoaded,
     backgroundColor: '#2b2d31',
     // The window chrome integrates with the app's own toolbar row on
     // both platforms. macOS: the traffic lights are at an OS-fixed
@@ -245,6 +245,20 @@ function createWindow(): BrowserWindow {
   // steal, may stay buried); it is then captured by window id.
   if (process.env.PT_SHOT) win.showInactive();
 
+  // A window created to receive a document stays hidden until that
+  // document is showing (the title leaves the bare app name): no flash
+  // of an empty window. The timer is the safety net — a window must
+  // never stay invisible because a file failed to load.
+  if (showWhenLoaded && !SMOKE && !process.env.PT_SHOT) {
+    const reveal = () => {
+      if (!win.isDestroyed() && !win.isVisible()) win.show();
+    };
+    win.webContents.on('page-title-updated', (_event, title) => {
+      if (title !== 'Paper Trail') reveal();
+    });
+    setTimeout(reveal, 2500);
+  }
+
   win.on('close', () => saveBounds(win));
   win.on('closed', () => editedWindows.delete(win.id));
 
@@ -302,15 +316,22 @@ function openPath(filePath: string, target?: BrowserWindow): void {
     pendingPaths.push(filePath);
     return;
   }
+  const empty = (w: BrowserWindow | null): boolean => {
+    if (!w || w.isDestroyed() || w === updateWin) return false;
+    const t = w.getTitle();
+    return w.webContents.isLoading() || t === 'Paper Trail' || t === '';
+  };
   let win = target && !target.isDestroyed() ? target : null;
+  // ANY empty window takes the file — focused first, but an idle empty
+  // window elsewhere beats spawning an offset new one.
   if (!win) {
     const focused = focusedWindow();
-    if (focused && !focused.isDestroyed()
-      && (focused.webContents.isLoading() || focused.getTitle() === 'Paper Trail')) {
-      win = focused;
-    }
+    if (empty(focused)) win = focused;
+    else win = BrowserWindow.getAllWindows().find(empty) ?? null;
   }
-  sendFileTo(win ?? createWindow(), filePath);
+  // A brand-new window stays hidden until the document is showing: no
+  // flash of an empty window on OS opens.
+  sendFileTo(win ?? createWindow({ showWhenLoaded: true }), filePath);
 }
 
 // macOS: Open With…, drag onto the Dock icon, recent documents.
@@ -855,7 +876,12 @@ void app.whenReady().then(() => {
   if (isMac) buildMenu();
   else Menu.setApplicationMenu(null);
 
-  const win = createWindow();
+  // A double-clicked document launches the app with the file already
+  // known: the first window then waits for the document before it
+  // shows, instead of flashing empty.
+  const startsWithFile = pendingPaths.length > 0
+    || process.argv.slice(1).some((a) => /\.(pdf|ptl)$/i.test(a) && fs.existsSync(a));
+  const win = createWindow({ showWhenLoaded: startsWithFile });
 
   // Standard app-level niceties.
   app.setAboutPanelOptions({
