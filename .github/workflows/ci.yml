@@ -7,7 +7,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # every branch — feature branches get the same verdicts as main;
+    # tags are excluded (the release workflow runs this via workflow_call)
+    branches: ['**']
   pull_request: {}
   workflow_dispatch: {}
   # the release workflow runs this full pyramid first and publishes
