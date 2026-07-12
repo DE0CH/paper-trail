@@ -1,3 +1,10 @@
+!macro customHeader
+  ; Declare DPI awareness: without it Windows renders the installer at
+  ; 96 dpi and bitmap-stretches the result, so the whole Setup UI is
+  ; pixelated on HiDPI screens.
+  ManifestDPIAware true
+!macroend
+
 ; Paper Trail is never force-closed by the installer. The stock
 ; electron-builder check ends in `taskkill /F` after a grace period,
 ; which silently destroys unsaved reading sessions. This replacement
