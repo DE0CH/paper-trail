@@ -258,3 +258,80 @@ test('the header carries the format version for future evolution', () => {
     + 'pdf.name X.pdf\nactive 0\n\nstack Main\ncursor 0\nentry 1 0 Start\n';
   assert.equal(parseProgress(future), null);
 });
+
+test('jumpTo moves the cursor from a panel click; a later visit truncates there', () => {
+  const h = new NavStacks();
+  h.visit({ label: 'a', pos: pos(2) });
+  h.visit({ label: 'b', pos: pos(3) });
+  assert.equal(h.jumpTo(1)?.label, 'a');
+  assert.equal(h.active.index, 1);
+  // moving the cursor never modifies the entries themselves
+  assert.deepEqual(h.active.entries.map((e) => e.label), ['Start', 'a', 'b']);
+  // out-of-range clicks are refused and leave the cursor alone
+  assert.equal(h.jumpTo(-1), null);
+  assert.equal(h.jumpTo(3), null);
+  assert.equal(h.active.index, 1);
+  // visiting from the jumped-to cursor overwrites the tail above it
+  h.visit({ label: 'c', pos: pos(4) });
+  assert.deepEqual(h.active.entries.map((e) => e.label), ['Start', 'a', 'c']);
+});
+
+test('canBack/canForward report the cursor position for the toolbar', () => {
+  const h = new NavStacks();
+  assert.equal(h.canBack(), false);
+  assert.equal(h.canForward(), false);
+  h.visit({ label: 'a', pos: pos(2) });
+  assert.equal(h.canBack(), true);
+  assert.equal(h.canForward(), false);
+  h.back();
+  assert.equal(h.canBack(), false);
+  assert.equal(h.canForward(), true);
+});
+
+test('updateCurrentPos tracks the live position without recording history', () => {
+  const h = new NavStacks();
+  h.visit({ label: 'a', pos: pos(2) });
+  h.updateCurrentPos(pos(2, 0.7));
+  assert.deepEqual(h.current.pos, pos(2, 0.7));
+  // no-position updates (blank viewer states) are ignored
+  h.updateCurrentPos(null);
+  h.updateCurrentPos(undefined);
+  assert.deepEqual(h.current.pos, pos(2, 0.7));
+});
+
+test('switchStack activates the clicked trail; unknown ids are refused', () => {
+  const h = new NavStacks();
+  h.fork({ label: 'b', pos: pos(2) });
+  const firstId = h.stacks[0].id;
+  assert.equal(h.switchStack(firstId)?.label, 'Start');
+  assert.equal(h.activeId, firstId);
+  assert.equal(h.switchStack(999), null);
+  assert.equal(h.activeId, firstId);
+});
+
+test('renameStack trims, refuses empties and no-ops, and is undoable', () => {
+  const h = new NavStacks();
+  const id = h.activeId;
+  const original = h.active.name;
+  h.renameStack(id, '   '); // blank after trimming: refused, no undo step
+  assert.equal(h.active.name, original);
+  assert.equal(h.canUndo(), false);
+  h.renameStack(id, original); // unchanged: not an edit, no undo step
+  assert.equal(h.canUndo(), false);
+  h.renameStack(id, '  RoundTrip  ');
+  assert.equal(h.active.name, 'RoundTrip');
+  h.undo();
+  assert.equal(h.active.name, original);
+});
+
+test('clearAll resets to a single Start trail; undo brings everything back', () => {
+  const h = new NavStacks();
+  h.visit({ label: 'a', pos: pos(2) });
+  h.fork({ label: 'b', pos: pos(3) });
+  h.clearAll();
+  assert.equal(h.stacks.length, 1);
+  assert.deepEqual(h.active.entries.map((e) => e.label), ['Start']);
+  h.undo();
+  assert.equal(h.stacks.length, 2);
+  assert.deepEqual(h.active.entries.map((e) => e.label), ['Start', 'a', 'b']);
+});

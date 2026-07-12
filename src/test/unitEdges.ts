@@ -234,3 +234,25 @@ test('the active stack index survives a round-trip with several stacks', () => {
   assert.equal(g.load(parsed!.state.hist), true);
   assert.equal(g.stacks.findIndex((s) => s.id === g.activeId), 1);
 });
+
+test('a load that throws mid-parse is refused and leaves the state intact', () => {
+  const h = new NavStacks();
+  h.visit({ label: 'a', pos: pos(2) });
+  // shape is right until entries, which explodes inside the mapping
+  const ok = h.load({
+    v: 3, activeId: 1, nameCounter: 1,
+    stacks: [{ id: 1, name: 'x', index: 0, entries: null }],
+  });
+  assert.equal(ok, false);
+  assert.deepEqual(h.active.entries.map((e) => e.label), ['Start', 'a']);
+  h.visit({ label: 'b', pos: pos(3) });
+  assert.equal(h.current.label, 'b');
+});
+
+test('parseProgress returns null for non-string input instead of crashing', () => {
+  // File readers hand over strings, but nothing enforces it at this
+  // boundary: garbage of any shape must come back as null, not a throw.
+  assert.equal(parseProgress(null as unknown as string), null);
+  assert.equal(parseProgress(undefined as unknown as string), null);
+  assert.equal(parseProgress(42 as unknown as string), null);
+});
