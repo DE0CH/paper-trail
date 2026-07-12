@@ -2,12 +2,12 @@
 //   build/icon.icns  (macOS, via sips + iconutil — run on a Mac)
 //   build/icon.ico   (Windows, via ffmpeg)
 //   public/icon.svg  (favicon, copied into dist-web by Vite)
-//   build/ptl.icns / build/ptl.ico  (.ptl document icon: a white page
-//     with the trail-and-target logo overlaid, used by the OS file
-//     associations on both platforms)
-// macOS keeps the squircle plate (apps draw their own on that
-// platform); Windows and the web get only the trail artwork, scaled
-// up to fill the canvas, since icons there aren't plated.
+//   build/ptl.* / build/pdf.*  (document icons: the default page with
+//     the logo superimposed and an extension label; Windows only —
+//     macOS composes its own, see afterPackMac)
+//   build/installer.ico  (the plated icon with a download badge)
+// Every surface shares the same plated icon: the trail on the dark
+// squircle, identical on macOS, Windows, and the web.
 // The generated binaries are committed so CI never needs macOS tooling.
 // Usage: npm run icons
 
@@ -21,20 +21,6 @@ import * as os from 'node:os';
 const ROOT = path.resolve(__dirname, '..', '..');
 const SVG = path.join(ROOT, 'docs', 'icon.svg');
 const BUILD = path.join(ROOT, 'build');
-
-// The flat variant: no squircle plate, artwork scaled up to fill the
-// 1024 canvas (the art's bounding box is ~622x682 spanning 198..820,
-// 192..874).
-function flatSvg(): string {
-  const src = fs.readFileSync(SVG, 'utf8');
-  const flat = src
-    .replace(/^\s*<rect id="plate"[^\n]*\n/m, '')
-    .replace('<g id="art">', '<g id="art" transform="translate(-211 -245) scale(1.42)">');
-  if (flat === src || flat.includes('id="plate"')) {
-    throw new Error('docs/icon.svg no longer matches the flat-variant markers');
-  }
-  return flat;
-}
 
 // Document icons follow the OS convention (what macOS auto-generates
 // for types without an icon, drawn ourselves because electron-builder
@@ -99,22 +85,19 @@ async function run(): Promise<void> {
   fs.mkdirSync(BUILD, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-icons-'));
   const master = path.join(tmp, 'icon-1024.png');
-  const flatFile = path.join(tmp, 'icon-flat.svg');
-  const flatPng = path.join(tmp, 'icon-flat-1024.png');
   const docFile = path.join(tmp, 'icon-doc.svg');
   const docPng = path.join(tmp, 'icon-doc-1024.png');
   const pdfFile = path.join(tmp, 'icon-pdf.svg');
   const pdfPng = path.join(tmp, 'icon-pdf-1024.png');
   const instFile = path.join(tmp, 'icon-installer.svg');
   const instPng = path.join(tmp, 'icon-installer-1024.png');
-  fs.writeFileSync(flatFile, flatSvg());
   fs.writeFileSync(docFile, docSvg('PTL'));
   fs.writeFileSync(pdfFile, docSvg('PDF'));
   fs.writeFileSync(instFile, installerSvg());
 
   const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
   const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
-  for (const [svg, png] of [[SVG, master], [flatFile, flatPng], [docFile, docPng], [pdfFile, pdfPng], [instFile, instPng]] as const) {
+  for (const [svg, png] of [[SVG, master], [docFile, docPng], [pdfFile, pdfPng], [instFile, instPng]] as const) {
     await page.goto('file://' + svg);
     await page.evaluate(() => {
       document.documentElement.style.background = 'transparent';
@@ -128,8 +111,8 @@ async function run(): Promise<void> {
   makeIcns(docPng, path.join(BUILD, 'ptl.icns'), tmp);
   makeIcns(pdfPng, path.join(BUILD, 'pdf.icns'), tmp);
 
-  // Windows .ico (256px): flat artwork for the app, pages for documents
-  execFileSync('ffmpeg', ['-y', '-i', flatPng, '-vf', 'scale=256:256',
+  // Windows .ico (256px): the same plated icon as macOS and the web
+  execFileSync('ffmpeg', ['-y', '-i', master, '-vf', 'scale=256:256',
     path.join(BUILD, 'icon.ico')], { stdio: 'ignore' });
   execFileSync('ffmpeg', ['-y', '-i', docPng, '-vf', 'scale=256:256',
     path.join(BUILD, 'ptl.ico')], { stdio: 'ignore' });
@@ -138,9 +121,9 @@ async function run(): Promise<void> {
   execFileSync('ffmpeg', ['-y', '-i', instPng, '-vf', 'scale=256:256',
     path.join(BUILD, 'installer.ico')], { stdio: 'ignore' });
 
-  // favicon (flat artwork)
+  // favicon: the plated icon, verbatim
   fs.mkdirSync(path.join(ROOT, 'public'), { recursive: true });
-  fs.writeFileSync(path.join(ROOT, 'public', 'icon.svg'), flatSvg());
+  fs.copyFileSync(SVG, path.join(ROOT, 'public', 'icon.svg'));
 
   fs.rmSync(tmp, { recursive: true, force: true });
   for (const f of ['build/icon.icns', 'build/icon.ico', 'build/ptl.icns',
