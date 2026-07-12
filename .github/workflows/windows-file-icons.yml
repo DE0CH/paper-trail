@@ -101,22 +101,30 @@ jobs:
           }
           Get-ChildItem win-icon-*.png
 
-      - name: Explorer screenshot of the Desktop files (extra large icons)
+      - name: Explorer screenshots of the Desktop files (standard views)
         shell: pwsh
         run: |
-          Copy-Item sample/WStarCats.pdf "$env:USERPROFILE\Desktop\Sample Paper.pdf"
-          Copy-Item sample/WStarCats.ptl "$env:USERPROFILE\Desktop\Sample Session.ptl"
+          Copy-Item sample/WStarCats.pdf "$env:USERPROFILE\Desktop\Sample Paper.pdf" -Force
+          Copy-Item sample/WStarCats.ptl "$env:USERPROFILE\Desktop\Sample Session.ptl" -Force
           Start-Process explorer.exe "$env:USERPROFILE\Desktop"
           Start-Sleep -Seconds 12
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-          # extra large icons so the 256px document icons are reviewable
-          [System.Windows.Forms.SendKeys]::SendWait('^+1')
+          # a details list first: every file on one row with its
+          # standard-size icon, nothing lazily rendered off-screen
+          [System.Windows.Forms.SendKeys]::SendWait('^+6')
           Start-Sleep -Seconds 4
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save("win-explorer.png")
+          function Snap($path) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save($path)
+          }
+          Snap "win-explorer-details.png"
+          # and the default medium icon size
+          [System.Windows.Forms.SendKeys]::SendWait('^+3')
+          Start-Sleep -Seconds 4
+          Snap "win-explorer-medium.png"
           Get-ChildItem win-*.png
 
       - uses: actions/upload-artifact@v4
