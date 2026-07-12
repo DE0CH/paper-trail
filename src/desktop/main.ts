@@ -242,6 +242,7 @@ function createWindow(): BrowserWindow {
   if (process.env.PT_SHOT) win.showInactive();
 
   win.on('close', () => saveBounds(win));
+  win.on('closed', () => editedWindows.delete(win.id));
 
   void win.loadURL(`${SCHEME}://app/index.html`);
   return win;
@@ -517,9 +518,21 @@ function setupAutoUpdates(): void {
  * abandoned and the update window returns to its ready state — the
  * update still installs on the next normal quit.
  */
+const editedWindows = new Set<number>();
+
 async function restartToUpdate(): Promise<void> {
-  for (const w of [...BrowserWindow.getAllWindows()]) {
-    if (w.isDestroyed() || w === updateWin) continue;
+  const all = [...BrowserWindow.getAllWindows()]
+    .filter((w) => !w.isDestroyed() && w !== updateWin);
+  // Windows with unsaved sessions hold the veto, so they are asked
+  // FIRST; clean windows only close once every unsaved session has
+  // agreed. (getAllWindows has no useful order — without this, a
+  // Cancel could leave a half-closed workspace.)
+  const ordered = [
+    ...all.filter((w) => editedWindows.has(w.id)),
+    ...all.filter((w) => !editedWindows.has(w.id)),
+  ];
+  for (const w of ordered) {
+    if (w.isDestroyed()) continue;
     const closed = new Promise<boolean>((resolve) => {
       w.once('closed', () => resolve(true));
       // Counts only unblocked time: the close prompt is a synchronous
@@ -785,7 +798,12 @@ ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedNa
 
 // The dot in the macOS close button mirrors unsaved session changes.
 ipcMain.on('pt-document-edited', (event, edited: boolean) => {
-  BrowserWindow.fromWebContents(event.sender)?.setDocumentEdited(!!edited);
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  win.setDocumentEdited(!!edited);
+  // restartToUpdate asks windows with unsaved sessions first.
+  if (edited) editedWindows.add(win.id);
+  else editedWindows.delete(win.id);
 });
 
 // A PDF picked in an occupied window opens in a window of its own.
