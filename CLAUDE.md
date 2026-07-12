@@ -11,6 +11,12 @@ re-litigate without asking.
   CONTRIBUTING.md.
 
 ## Design rules
+- **The desktop apps must feel like native apps**, and part of that is
+  using native/stock components: scrollbars, icons, dialogs, menus and
+  similar OS-adjacent surfaces come from the platform (color-scheme,
+  LaunchServices icon composition, NSIS stock icons, native menus…),
+  never hand-drawn or hand-styled substitutes — draw only where the
+  platform truly offers nothing.
 - The desktop app must not bind TCP ports; it serves the UI over the
   custom `paper-trail://` protocol. The node server exists only for browser use.
 - Never guess filesystem paths between a session file and its PDF: the

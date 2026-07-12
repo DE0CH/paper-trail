@@ -7,9 +7,11 @@ metadata:
   originSessionId: 3a704d83-496d-4972-9d70-7cd1f813a0f9
 ---
 
-Don't draw or hand-code things yourself when an existing component
-exists — the existing one is more polished and more expected by users
-(owner, 2026-07-12).
+THE THEME: the desktop apps should feel like native apps, and part of
+that is using native components. Don't draw or hand-code things
+yourself when an existing component exists — the existing one is more
+polished and more expected by users (owner, 2026-07-12; also recorded
+in CLAUDE.md Design rules).
 
 **Why:** Hand-drawn substitutes lose platform affordances silently:
 custom ::-webkit-scrollbar CSS dropped the rail and arrow buttons;
