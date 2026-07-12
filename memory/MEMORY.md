@@ -7,12 +7,21 @@ symlinks for the new path AND both old project dirs all point here.
 The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 (not a git repo; see paper-build.md pointer below).
 
-## Current state (2026-07-12, session handoff)
-- v0.5.5 tagged, gated release run in flight (CI gate all green,
-  windows+mac publish jobs running): Finder-crash EPIPE fix, .ptl doc
-  icon, preview toolbar clamp, native Win32 context menus, CI-gated
-  releases. Verify it published: `gh release view v0.5.5`.
-- Latest released before that: 0.5.3. 0.5.4 skipped (see CHANGELOG).
+## Current state (2026-07-12, session 3)
+- v0.5.5 published; its release was REPAIRED in place (6 alias assets
+  uploaded under the feed's dash names) after the update-404 bug hit
+  the owner's machine — update checks from ≤0.5.5 work again.
+- v0.5.7 tagged, gated release run in flight (verify: `gh release
+  view v0.5.7`): update-404 fix (space-free artifactNames + new
+  updateFeedNames regression test wired after every packaging step in
+  ci+release), Vercel deploy moved INTO release.yml (deploy-web job,
+  gated on check-version+ci like the desktop jobs; deploy.yml DELETED
+  — web deploys only on releases; vercel step act-guarded). ci.yml
+  has concurrency group "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress (verified live: bump push auto-cancelled the
+  prior main run). v0.5.6 SKIPPED: run cancelled mid-build to include
+  the update fix (never reuse versions).
+- Latest released before that: 0.5.3. 0.5.4 also skipped (CHANGELOG).
 - Native Win32 menus (src/desktop/winMenu.ts, koffi): validated
   visually via windows-screenshot.yml artifact; koffi EXCLUDED from
   mac bundles (universal-merge rejects per-arch prebuilds).
@@ -22,7 +31,8 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 ## Paper Trail (this repo)
 - Published: github.com/DE0CH/paper-trail (public), Vercel prod
   https://paper-trail-green.vercel.app (team-scoped URLs 302 behind
-  Vercel auth — expected), releases via .github/workflows/release.yml
+  Vercel auth — expected; deploys ONLY from release.yml's deploy-web
+  job since 0.5.6, never on push), releases via .github/workflows/release.yml
   (v* tags -> signed+notarized universal mac zip+dmg, unsigned win;
   job FAILS if signing secrets missing — owner: never ship unsigned mac.
   Tested locally with `act workflow_dispatch -P macos-latest=-self-hosted`).
@@ -73,6 +83,15 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
   dashes) but on-disk artifacts keep spaces — feed server must map;
   never spawnSync while the harness hosts the feed (blocks accepts);
   electron-updater's "Cannot download" message omits the port.
+- ARTIFACT NAMES MUST NEVER CONTAIN SPACES (the 0.5.x update-404 bug):
+  GitHub renames uploaded release assets spaces→DOTS while the ymls
+  say spaces→DASHES → every published update check 404ed on BOTH
+  platforms; the harness feed-server name mapping masked it in CI.
+  Fixed via explicit artifactName patterns (package.json build:
+  mac/dmg/nsis/win) + src/test/updateFeedNames.ts (yml urls must
+  exist on disk verbatim + no spaces), run after every packaging
+  step. Suffixes are load-bearing: installerMac globs "-mac.zip",
+  win tests glob /Setup.*\.exe$/i, release.yml globs "*-win.zip".
 - NEVER force push (owner rule, absolute): no `git push -f`/--force,
   on any ref, branch or tag, for any reason. Everything is
   append-only: fix forward with new commits and new tags.
