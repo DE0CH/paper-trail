@@ -115,6 +115,7 @@
     "nsis": {
       "artifactName": "Paper-Trail-Setup-${version}.${ext}",
       "include": "build/installer.nsh",
+      "installerIcon": "build/installer.ico",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
