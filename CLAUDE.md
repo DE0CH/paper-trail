@@ -56,8 +56,9 @@ re-litigate without asking.
 - e2e tests drive a **separate headless** Edge/Chrome — never the
   owner's browser. Keep element ids/classes and `window.__pt` hooks
   stable; tests depend on them.
-- Locally run only the web e2e suite; desktop tests (smoke variants,
-  `npm run test:desktop`) run in CI only.
+- Never run tests locally — ALL tests run on GitHub runners only
+  (rule tightened 2026-07-12; previously the web e2e suite was allowed
+  locally). Compiling (`npm run build`) locally is fine.
 - Installing dependencies is pre-approved.
 - Edit files ONLY with the Edit/Write tools — never via python or shell
   scripts. If a Write/Edit fails with "file has been modified", the

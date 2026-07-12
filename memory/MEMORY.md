@@ -207,6 +207,9 @@ gotchas, stable test hook ids).
 - Commit per feature/iteration; draft→commit, post-debug→commit. Signed
   commits via Bitwarden SSH key: on "No private key found" the user must
   approve in Bitwarden GUI — tell them, then retry.
+- NEVER run tests locally (rule tightened 2026-07-12, supersedes the
+  old "web e2e OK locally"): ALL tests run on GitHub runners only.
+  Local `npm run build` (compile) is fine.
 - Tests/automation: headless playwright-core with installed Edge/Chrome,
   never their browser. Exception: when the user explicitly asks to watch
   (claude-in-chrome on their tab; small step first, confirm they see it).
