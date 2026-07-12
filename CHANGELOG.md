@@ -3,6 +3,24 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.10
+
+- The Windows installer is no longer pixelated on HiDPI screens.
+- Right-clicking the Paper Trail taskbar icon on Windows now really
+  shows the "New Window" entry.
+- Scrollbars blend into the dark theme instead of standing out as
+  light rails.
+- The side panels share one tidy layout: trail and history names use
+  the full row width, the edit and duplicate buttons appear over the
+  text on hover without anything shifting, close buttons show only on
+  hover or on the active trail, all panel buttons line up on one
+  vertical axis, and the outline list uses the same font and spacing
+  as the other lists.
+- Double-clicking a PDF no longer flashes an empty window first or
+  opens the document in a window nudged away from its usual position.
+- Pressing Tab no longer highlights random buttons with a yellow
+  focus ring.
+
 ## 0.5.9
 
 - The Windows installer never force-closes a running Paper Trail
