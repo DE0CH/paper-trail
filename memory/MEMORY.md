@@ -228,6 +228,11 @@ gotchas, stable test hook ids).
 - MERGE branches, never cherry-pick ("there aren't many good reasons
   to cherry pick" — owner, 2026-07-12), and always merge with
   --no-ff: a branch integration always gets a merge commit.
+- Watchers ALWAYS get a timeout (owner rule): cap the watcher process
+  (~45 min for CI runs) so a stuck watcher wakes Claude to re-check
+  instead of blocking progress — the timeout kills only the WATCHER,
+  never the watched run. Pattern: background `gh run watch` + guard
+  loop that kills it after N minutes and prints a timeout marker.
 - CI must report ALL failures in a run, never fail fast, AND keep
   per-suite verdicts visible in the step list (owner rejected an
   aggregating shell loop for hiding which suite failed): one step per
