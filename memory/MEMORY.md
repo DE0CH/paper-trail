@@ -132,6 +132,11 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 - npm run media regenerates README media (mp4 + screenshots, cursor+key
   HUD overlay); it SELF-VERIFIES content (distinct labels, depth,
   branches) — user rule after eyeball review missed repeated labels.
+  Recordings run ON GITHUB ACTIONS (owner rule 2026-07-12):
+  .github/workflows/media.yml (workflow_dispatch, macos runner,
+  fetches the arXiv pdf into sample/real/, commits docs/media with
+  [skip ci]). Requires a dist-web BUILT FROM CURRENT SOURCE — a stale
+  local build once recorded the old UI.
 - User rules: capture transcripts to docs/transcripts/ pre-compaction;
   parallelize with agents/background tasks where possible; final answers
   at the END of my reply; 3-letter file extensions, high-entropy names.

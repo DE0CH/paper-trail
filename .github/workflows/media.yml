@@ -1,0 +1,67 @@
+# Records the README media (demo.mp4 + screenshots) on a runner and
+# commits the result. The generator drives a scripted reading session
+# in a headless browser with a cursor/key HUD and VERIFIES the
+# recording programmatically (distinct labels, trail depth, branch
+# count) before anything is written. macOS runner: the recording's
+# typography must match the app's real look.
+
+name: Record README media
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-media
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Fetch the demo paper (arXiv 2411.01678)
+        run: |
+          mkdir -p sample/real
+          curl -fsSL --retry 3 -o sample/real/WStarCats.pdf \
+            "https://arxiv.org/pdf/2411.01678v1"
+          test -s sample/real/WStarCats.pdf
+
+      - name: Ensure ffmpeg
+        run: command -v ffmpeg || brew install ffmpeg
+
+      - name: Record and verify the media
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          npm run media
+
+      - name: Commit the media
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/media
+          if git diff --cached --quiet; then
+            echo "media unchanged"
+            exit 0
+          fi
+          git commit -m "Record README media on CI [skip ci]"
+          git pull --rebase origin main
+          git push
