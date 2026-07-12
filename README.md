@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.svg" width="128" alt="Paper Trail icon: a dotted reading trail branching on its way to the current-position ring">
+</p>
+
 # Paper Trail
 
 **A PDF reader that remembers how you got where you are.**

@@ -6,8 +6,8 @@
 //     with the trail-and-target logo overlaid, used by the OS file
 //     associations on both platforms)
 // macOS keeps the squircle plate (apps draw their own on that
-// platform); Windows and the web get only the paper-and-trail artwork,
-// scaled up to fill the canvas, since icons there aren't plated.
+// platform); Windows and the web get only the trail artwork, scaled
+// up to fill the canvas, since icons there aren't plated.
 // The generated binaries are committed so CI never needs macOS tooling.
 // Usage: npm run icons
 
@@ -23,12 +23,13 @@ const SVG = path.join(ROOT, 'docs', 'icon.svg');
 const BUILD = path.join(ROOT, 'build');
 
 // The flat variant: no squircle plate, artwork scaled up to fill the
-// 1024 canvas (the art's bounding box is ~524x698 centered at 520,541).
+// 1024 canvas (the art's bounding box is ~622x682 spanning 198..820,
+// 192..874).
 function flatSvg(): string {
   const src = fs.readFileSync(SVG, 'utf8');
   const flat = src
     .replace(/^\s*<rect id="plate"[^\n]*\n/m, '')
-    .replace('<g id="art">', '<g id="art" transform="translate(-174 -202) scale(1.32)">');
+    .replace('<g id="art">', '<g id="art" transform="translate(-211 -245) scale(1.42)">');
   if (flat === src || flat.includes('id="plate"')) {
     throw new Error('docs/icon.svg no longer matches the flat-variant markers');
   }
