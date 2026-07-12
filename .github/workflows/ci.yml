@@ -7,7 +7,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # every branch — feature branches get the same verdicts as main;
+    # tags are excluded (the release workflow runs this via workflow_call)
+    branches: ['**']
   pull_request: {}
   workflow_dispatch: {}
   # the release workflow runs this full pyramid first and publishes
@@ -118,6 +120,11 @@ jobs:
         shell: bash
         run: npx electron build-node/test/osOpenFlash.js
 
+      - name: A derived (URL) title never reveals an empty window
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/osOpenDerivedTitle.js
+
       - name: Jump List New Window task opens a fresh window
         if: ${{ !cancelled() }}
         shell: bash
@@ -152,6 +159,11 @@ jobs:
       - name: Installer test (install, shortcuts, smoke, uninstall)
         shell: bash
         run: node build-node/test/installerWin.js
+
+      - name: Documents get their own icons, never the app's
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/winDocIcons.js
 
       - name: Installer never force-closes a running app (unsaved work wins)
         shell: bash
@@ -314,6 +326,10 @@ jobs:
         shell: bash
         run: npx electron build-node/test/osOpenFlash.js
 
+      - name: A derived (URL) title never reveals an empty window
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/osOpenDerivedTitle.js
+
       - name: Jump List New Window task opens a fresh window
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/newWindowTask.js
@@ -344,6 +360,10 @@ jobs:
 
       - name: Installer test (dmg, zip, universal binary, smoke)
         run: node build-node/test/installerMac.js
+
+      - name: Documents get their own icons, never the app's
+        if: ${{ !cancelled() }}
+        run: node build-node/test/macDocIcons.js
 
   # Same parallel split as windows-update: the update tests build twice
   # (current app + next-version feed), so they get their own job.

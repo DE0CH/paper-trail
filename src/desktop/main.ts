@@ -253,8 +253,11 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
     const reveal = () => {
       if (!win.isDestroyed() && !win.isVisible()) win.show();
     };
-    win.webContents.on('page-title-updated', (_event, title) => {
-      if (title !== 'Paper Trail') reveal();
+    // Only explicitly-set titles count: during navigation Electron also
+    // reports titles DERIVED from the URL (explicitSet false), which
+    // arrive before the document and would reveal an empty window.
+    win.webContents.on('page-title-updated', (_event, title, explicitSet) => {
+      if (explicitSet && title !== 'Paper Trail') reveal();
     });
     // Patient enough that a slow cold start (pdf.js on a weak machine)
     // does not fall through to an empty reveal.
