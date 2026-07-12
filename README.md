@@ -4,6 +4,8 @@
 
 # Paper Trail
 
+[![CI](https://github.com/DE0CH/paper-trail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DE0CH/paper-trail/actions/workflows/ci.yml)
+
 **A PDF reader that remembers how you got where you are.**
 
 Reading a paper means chasing references: Lemma 3.16 sends you to
