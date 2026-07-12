@@ -175,12 +175,17 @@ jobs:
 
   # Same parallel split as windows-update: the update tests build twice
   # (current app + next-version feed), so they get their own job.
+  # Builds are code-signed when the secret is available (not on fork
+  # PRs), which lets Squirrel.Mac's real install run too; unsigned
+  # builds still cover find-download and the manual menu flow.
   mac-update:
     strategy:
       fail-fast: false
       matrix:
         runner: [macos-latest, macos-15-intel]
     runs-on: ${{ matrix.runner }}
+    env:
+      HAS_CERT: ${{ secrets.MAC_CERT_P12 != '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -192,16 +197,28 @@ jobs:
 
       - run: npm run build
 
-      - name: Package the current version (zip only, unsigned)
+      - name: Package the current version (zip only)
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder --mac zip --publish never -c.mac.notarize=false
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          if [ "$HAS_CERT" != "true" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false
 
       - name: Build the next version into the update feed
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         shell: bash
         run: |
+          if [ "$HAS_CERT" != "true" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
           npm version patch --no-git-tag-version
           npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.directories.output=dist-update-feed
           git checkout -- package.json package-lock.json
@@ -211,3 +228,7 @@ jobs:
 
       - name: Manual update test (Check for Updates menu flow)
         run: node build-node/test/updateMacManual.js
+
+      - name: Auto-update install test (Squirrel, signed builds only)
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacInstall.js

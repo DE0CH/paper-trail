@@ -20,6 +20,7 @@
     "test:update:win": "node build-node/test/updateWin.js",
     "test:update:mac": "node build-node/test/updateMac.js",
     "test:update:mac:manual": "node build-node/test/updateMacManual.js",
+    "test:update:mac:install": "node build-node/test/updateMacInstall.js",
     "perf": "node build-node/tools/perf.js",
     "media": "node build-node/tools/media.js",
     "dist:mac": "electron-builder --mac --publish never",
