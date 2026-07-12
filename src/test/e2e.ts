@@ -1431,6 +1431,33 @@ async function run(): Promise<void> {
     sh = await sharpness();
     check('canvas is sharp after pinch zoom', sh.ratio >= 1.9 && sh.exact, JSON.stringify(sh));
     await retina.close();
+
+    // --- the preview popup can never extend into the toolbar: however
+    // far the top edge is dragged up, it clamps just below the toolbar
+    // and the popup survives the attempt ---
+    await page.evaluate(() => {
+      (window as never as { __pt: PtHooks }).__pt.session.dirty = false;
+    });
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForSelector(LINK_SEL, { timeout: 20000 });
+    await page.locator(LINK_SEL).nth(3).hover();
+    await page.waitForSelector('#preview:not(.hidden)', { timeout: 8000 });
+    await page.waitForTimeout(600);
+    const pvClamp = (await page.locator('#preview').boundingBox())!;
+    await page.mouse.move(pvClamp.x + pvClamp.width / 2, pvClamp.y + 1);
+    await page.mouse.down();
+    await page.mouse.move(pvClamp.x + pvClamp.width / 2, pvClamp.y - 200, { steps: 10 });
+    await page.mouse.up();
+    const pvClamped = await page.locator('#preview').boundingBox();
+    const clampFloor = await page.evaluate(() =>
+      document.getElementById('toolbar')!.getBoundingClientRect().bottom + 8);
+    const clampOpen = await page.evaluate(() =>
+      !document.getElementById('preview')!.classList.contains('hidden'));
+    check('the preview top edge clamps below the toolbar',
+      clampOpen && pvClamped !== null
+        && Math.abs(pvClamped.y - clampFloor) < 3
+        && pvClamped.y + pvClamped.height - (pvClamp.y + pvClamp.height) < 3,
+      JSON.stringify({ from: pvClamp.y, to: pvClamped?.y, clampFloor, clampOpen }));
   } finally {
     await browser.close();
   }

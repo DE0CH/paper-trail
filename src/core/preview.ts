@@ -53,7 +53,7 @@ export class Preview {
         const move = (ev: PointerEvent) => {
           const dy = ev.clientY - startY;
           if (top) {
-            const newTop = Math.min(Math.max(rect.top + dy, 8), rect.bottom - MIN_H);
+            const newTop = Math.min(Math.max(rect.top + dy, this.minTop()), rect.bottom - MIN_H);
             this.height = rect.bottom - newTop;
             this.el.style.top = `${newTop}px`;
           } else {
@@ -75,6 +75,12 @@ export class Preview {
     };
     wireResize('.previewResize', false);
     wireResize('.previewResizeTop', true);
+  }
+
+  /** The popup never extends into the toolbar: this is its ceiling. */
+  private minTop(): number {
+    const toolbar = document.getElementById('toolbar');
+    return (toolbar ? toolbar.getBoundingClientRect().bottom : 0) + 8;
   }
 
   scheduleShow(dest: string | unknown[], linkEl: HTMLElement): void {
@@ -215,7 +221,7 @@ export class Preview {
     // larger free side instead of overlaying.
     const lr = linkEl.getBoundingClientRect();
     const spaceBelow = window.innerHeight - 8 - (lr.bottom + 10);
-    const spaceAbove = lr.top - 10 - 8;
+    const spaceAbove = lr.top - 10 - this.minTop();
     let h = Math.min(this.height, window.innerHeight - 40);
     let top;
     if (h <= spaceBelow) {
