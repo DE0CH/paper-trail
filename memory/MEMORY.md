@@ -1,305 +1,93 @@
 # Project: Paper Trail (+ parent arXiv 2411.01678 W*-categories paper)
 
-This memory lives IN the repo at memory/ (git-tracked). The repo is at
-~/Documents/cs/paper-trail (moved 2026-07-12 from
-~/Downloads/arXiv-2411.01678v1/paper-trail); ~/.claude/projects memory
-symlinks for the new path AND both old project dirs all point here.
-The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
-(not a git repo; see paper-build.md pointer below).
+Memory lives IN the repo at memory/ (git-tracked); every ~/.claude
+project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
+~/paper-trail-main (this 4GB orchestrator box). The PAPER stayed at
+~/Downloads/arXiv-2411.01678v1 (not a git repo; see paper-build.md).
 
-## Current state (2026-07-12, session 3 END — see docs/handoff.md)
-- Session 3 ended mid-flight; docs/handoff.md is the authoritative
-  to-do: merge preview-rebuild when green; REBUILD the update UI as
-  native macOS prompts (owner order — custom CSS window rejected) +
-  full-display cursor recording of the whole flow; update-flash-close
-  witness did NOT reproduce (holding commit 6925b16, do not merge —
-  investigate); verify queue green; then release v0.5.12.
-- Since 0.5.11 on main: derived-title no-flash fix, native doc icons
-  (mac: afterPackMac strips CFBundleTypeIconFile → LaunchServices
-  composes; win: page+logo+label), plated app icon everywhere (win/web
-  too), NSIS stock installer icons, native scrollbars (custom CSS
-  deleted), core-gap tests + parseProgress hardening, c8+Codecov
-  (OIDC, 96.18%, informational statuses), CI on every branch push,
-  review workflows: mac-screenshot, windows-file-icons, mac-scrollbar,
-  mac-update-ui. tauri-experiment branch = separate Linux-box session.
+## Current state (2026-07-12, session 4 in flight)
+- docs/handoff.md = authoritative to-do: native update UI rebuild,
+  update-flash-close investigation, queue green, release v0.5.12.
+- preview-rebuild MERGED into main (ec848e2) after green 29210950829.
+- update-flash-close: witness rebuilt (freeze installer via
+  NtSuspendProcess, reopen mid-install); fix 6925b16 reverted on
+  branch awaiting red run 29211903833, then re-apply + fix the
+  Start-Process arg-quoting bug (PS 5.1 joins unquoted).
+- Owner spotted an undiagnosed problem in update-ui.mov (run
+  29209950363 artifact) — review frames via CI artifact, fold into the
+  new native-flow recording.
+- tauri-experiment branch = separate Linux-box session; hands off
+  (src-tauri/, src/test/tauriE2ePage.ts sit untracked here — leftovers,
+  they break local tsc; not mine).
+- v0.5.11 = latest release. History: [shipped-versions](shipped-versions.md).
 
-- v0.5.8 PUBLISHED and verified (10 dash-named assets, updater urls
-  200, deploy-web green): Software Update window, restart guards
-  unsaved sessions, save-from-close data-loss fix (picker never
-  settles after a canceled unload — close-prompt saves route to the
-  shell dialog via 'save-from-close'), Windows Jump List New Window.
-- v0.5.7 shipped the update-404 fix (space-free artifactNames +
-  updateFeedNames test), release-gated Vercel deploy (deploy.yml
-  DELETED), ci.yml cancel-in-progress concurrency. v0.5.6 SKIPPED;
-  v0.5.5 repaired in place with 6 alias assets.
-- v0.5.11 PUBLISHED and verified (10 assets, urls 200, deploy-web ok):
-  HiDPI-crisp NSIS installer (customHeader ManifestDPIAware), taskbar
-  Jump List New Window works (setAppUserModelId on win32), dark
-  blended scrollbars (color-scheme dark + ::-webkit-scrollbar), ONE
-  panel layout system (22px rows everywhere, hover tools overlay,
-  x on hover/active only, single right-edge axis, lists start on one
-  line — all asserted in trailRowLayout), flash-free document opens
-  (openPath reuses ANY empty window; showWhenLoaded windows reveal on
-  title change, 4s fallback), Tab cycling removed + click blur (no
-  UA focus rings), preview bottom-edge clamp. v0.5.10 SKIPPED (gate
-  flake blocked its release). CI: no concurrency cancellation (owner
-  removed it after rolling gate cancellations).
-- README media: recorded ON WINDOWS CI (media.yml → mediaDesktop.ts):
-  real Electron window via ffmpeg gdigrab, taskbar auto-hidden for
-  true 1080p60, content-page-only demo chain, keycast HUD bottom-left
-  (toast owns bottom-center), stills on math pages with neutral
-  cursor park; self-verifies + REVIEW LOOP (artifact always uploads,
-  capture in mpegts survives crashes; extract frames + vision-check).
-  Video upload: raw fetch in a github new-issue page CACHES drafts —
-  clear textarea first and require a NEW asset id.
-- v0.5.9 shipped earlier (silent updates etc.):
-  NSIS graceful-close (build/installer.nsh customCheckAppRunning —
-  asks, never taskkill /F, exit 4 on refusal), SILENT background
-  updates (no icon progress/toast; install on quit; next start toasts
-  "was updated to X" via userData last-version.txt marker + 'updated'
-  pt-menu action), restart asks edited windows first (editedWindows
-  set via pt-document-edited), mid-download re-check resumes progress
-  view. Update window (0.5.8): update.html + src/update/main.tsx,
-  ids pt-update-root[data-state]/-title/-detail/-progress/-primary/
-  -secondary; menu-driven, mac-only entry point.
-- Test battery added this session: updateWindow(+Edges),
-  updateRestartUnsaved(+Edges), updateMacWindowInstall,
-  updateMacCancelThenQuit (no self-relaunch after abandoned restart),
-  updateWinQuitInstall (silent download→quit-install→stays
-  closed→announcement), installerCloseUnsaved, newWindowTask,
-  unitEdges, e2eEdges, desktopEdges. updateMacManualInstall retired
-  (Test Deletion, owner-authorized). Harness gotchas learned: dev
-  runs need dev-app-update.yml next to the entry module; playwright
-  dialog listeners must answer beforeunload dialogs to MATCH intent
-  (accept=leave) and never spawnSync while a debugger-attached app
-  must close (frozen node stalls the close); shared updater cache
-  between tests must be wiped; runner displays are 1024x768 (OS
-  clamps window sizes).
-- Native Win32 menus (src/desktop/winMenu.ts, koffi): validated
-  visually via windows-screenshot.yml artifact; koffi EXCLUDED from
-  mac bundles (universal-merge rejects per-arch prebuilds).
-- .claude/settings.json (committed) bans force pushes via deny rules
-  + PreToolUse hook; active from session start in paper-trail cwd.
-
-## Paper Trail (this repo)
-- Published: github.com/DE0CH/paper-trail (public), Vercel prod
-  https://paper-trail-green.vercel.app (team-scoped URLs 302 behind
-  Vercel auth — expected; deploys ONLY from release.yml's deploy-web
-  job since 0.5.6, never on push), releases via .github/workflows/release.yml
-  (v* tags -> signed+notarized universal mac zip+dmg, unsigned win;
-  job FAILS if signing secrets missing — owner: never ship unsigned mac.
-  Tested locally with `act workflow_dispatch -P macos-latest=-self-hosted`).
-- ALL deployment steps in CI, never on the dev machine (CLAUDE.md rule).
-- Signing (2026-07-10): local secrets in ~/paper-trail-signing/ (outside
-  repo): devid.key/.csr/.p12 + p12-password.txt + AuthKey_3KNVH5BAC5.p8
-  (ASC API key, ONE-TIME download, role Developer, Key ID 3KNVH5BAC5,
-  Issuer 11025254-570b-463b-af34-00bf6b0e151e). Cert: "Developer ID
-  Application: Deyao Chen (S64YL394S3)" expires 2031-07-11. GH secrets:
-  MAC_CERT_P12 (base64), MAC_CERT_PASSWORD, APPLE_API_KEY_P8,
-  APPLE_API_KEY_ID, APPLE_API_ISSUER, VERCEL_*. Notarization via
-  electron-builder mac.notarize:true + APPLE_API_* env. Windows binaries
-  still unsigned; owner leans Azure Trusted Signing but undecided.
-- CLAUDE.md in repo root records the owner's rules — read it first.
-- Session files: .ptl ("paper-trail-session v1" header). All legacy psr
-  identifiers purged: protocol paper-trail://, hooks window.__pt,
-  ptDesktop bridge, pt: storage prefixes.
-- CI: windows-latest runs full e2e vs a GENERATED fixture pdf
-  (src/test/fixture.ts; sample/ pdfs gitignored, .ptl fixtures
-  committed) + packaged-exe smoke + desktopSave + desktopOffline
-  regressions. Releases: universal mac + win, e2e first.
-  act -P macos-latest=-self-hosted tests workflows locally.
-- pdf.js cMaps + standard_fonts bundled to dist-web/pdfjs (CJK/offline;
-  viewer passes cMapUrl/standardFontDataUrl via document.baseURI).
-  vite-plugin-static-copy v4 preserves source paths by default: flatten
-  with rename: { stripBase: true } per target. CJK regression fixture:
-  sample/cjk.pdf (UniGB-UCS2-H, no embedded font) from tools/fixture.ts.
-- Auto-update live since 0.5.0 (electron-updater, GitHub provider;
-  release assets must include latest*.yml + *.blockmap). Interactive
-  flow since 0.5.3: Update Now → icon progressbar → Restart Now prompt
-  (restart closes windows via the unsaved prompt; menu item id
-  'check-updates'). Test seams: PT_UPDATE_URL (generic feed +
-  forceDevUpdateConfig), PT_UPDATE_TEST=download|install.
-- CI shape (owner-mandated): TWO jobs (windows, mac — steps genuinely
-  differ) × runner matrix for arch: [windows-latest, windows-11-arm],
-  [macos-latest, macos-15-intel]. Each: unit, browser e2e, desktopE2e
-  (FULL e2e suite duplicated for Electron, offline via harness-side
-  webRequest block), 3 desktop harnesses, package, installer test,
-  update test (win: real install→update→verify version+smoke; mac:
-  download-only — Squirrel refuses unsigned installs — plus scripted
-  manual menu flow).
-- Windows-ARM installer bug (fixed): 7-Zip ≥22 packs arm64 binaries
-  with the ARM64 branch filter; NSIS's Nsis7z can't decode → exes/dlls
-  silently dropped. Fix: ELECTRON_BUILDER_7Z_FILTER=BCJ2 env on every
-  electron-builder --win invocation (ci+release). NSIS = assisted
-  wizard (oneClick:false) with Desktop+Start Menu shortcuts.
-- Update-test harness gotchas: latest*.yml urls are URL-safe (spaces→
-  dashes) but on-disk artifacts keep spaces — feed server must map;
-  never spawnSync while the harness hosts the feed (blocks accepts);
-  electron-updater's "Cannot download" message omits the port.
-- ARTIFACT NAMES MUST NEVER CONTAIN SPACES (the 0.5.x update-404 bug):
-  GitHub renames uploaded release assets spaces→DOTS while the ymls
-  say spaces→DASHES → every published update check 404ed on BOTH
-  platforms; the harness feed-server name mapping masked it in CI.
-  Fixed via explicit artifactName patterns (package.json build:
-  mac/dmg/nsis/win) + src/test/updateFeedNames.ts (yml urls must
-  exist on disk verbatim + no spaces), run after every packaging
-  step. Suffixes are load-bearing: installerMac globs "-mac.zip",
-  win tests glob /Setup.*\.exe$/i, release.yml globs "*-win.zip".
-- NEVER force push (owner rule, absolute): no `git push -f`/--force,
-  on any ref, branch or tag, for any reason. Everything is
-  append-only: fix forward with new commits and new tags.
-- Release process (owner rule, 2026-07-12, refined): DEVELOPMENT
-  pushes must have their CI pass BEFORE the version bump; then bump
-  and tag together — the release workflow's built-in CI gate
-  validates the release. For all non-release work, continue
-  OPTIMISTICALLY: push, dispatch, iterate; if CI or a task fails,
-  retry/fix forward.
-- NEVER reuse a version number (owner rule): if a version failed to
-  build or its release was blocked by failing CI, skip that version
-  and bump to the next one — no `git tag -f`, no tag moving, ever.
-  Rename the unshipped CHANGELOG section to the new version AND add a
-  "## <ver> (skipped)" section recording why it was skipped.
-- Owner pushes concurrently: if a push is rejected AFTER a tag went
-  up, cancel the stale release run and ship the next version number
-  (see above — never move tags).
-- Releases gate on the full CI pyramid via a reusable workflow_call of
-  ci.yml INSIDE release.yml — yes this duplicates the branch-push CI
-  run; owner explicitly prefers the clearer self-contained logic over
-  saving runners (rejected a wait-for-branch-CI dedup; reverted).
-- npm run media regenerates README media (mp4 + screenshots, cursor+key
-  HUD overlay); it SELF-VERIFIES content (distinct labels, depth,
-  branches) — user rule after eyeball review missed repeated labels.
-  Recordings run ON GITHUB ACTIONS (owner rule 2026-07-12):
-  .github/workflows/media.yml (workflow_dispatch, macos runner,
-  fetches the arXiv pdf into sample/real/, commits docs/media with
-  [skip ci]). Requires a dist-web BUILT FROM CURRENT SOURCE — a stale
-  local build once recorded the old UI.
-- User rules: capture transcripts to docs/transcripts/ pre-compaction;
-  parallelize with agents/background tasks where possible; final answers
-  at the END of my reply; 3-letter file extensions, high-entropy names.
-- gh CLI authed (DE0CH), vercel CLI authed (de0ch); installing deps
-  pre-approved; user keeps a notes file and may ask to be reminded.
-- v0.3.4 shipped signed+notarized (verified: spctl "Notarized Developer
-  ID"). Desktop shell (src/desktop/main.ts): multi-window, OS file
-  opens via pt-open-file IPC (+ per-window ready queues), hiddenInset
-  traffic lights (body.desktopMac drag region), Save/Don't Save/Cancel
-  close prompt, file associations; smoke accepts a file arg to test the
-  OS-open path; PT_DEBUG=1 traces. Icons: ALWAYS inline SVG
-  (src/ui/icons.tsx), never unicode glyphs (user rule). Root font 13px
-  → 1rem=13px, all Tailwind spacing scales by 0.8125. e2e now 76
-  checks. Menu shows real single-key accelerators (M/Shift+M/T);
-  renderer re-inserts the char when a text field has focus.
-- Rows: fixed-height, rename input reproduces the span box exactly (no
-  layout shift) — user is very sensitive to UI jank/misalignment.
-  NEVER claim alignment from eyeballing screenshots: measure pixel
-  centroids numerically (ffmpeg png→raw + python analysis) and compare
-  centers with tolerance.
-- macOS Tahoe (26): Electron trafficLightPosition is IGNORED (measured:
-  identical for y:9 vs y:26); window-ID captures (screencapture -l)
-  EXCLUDE the traffic lights (separate OS layer) — only full-screen
-  captures show them, and they're gray when unfocused. PT_SHOT=1 env
-  shows a dev window WITHOUT stealing focus; PT_USERDATA isolates
-  profile+single-instance lock from the installed app.
-- NEVER launch always-on-top/focus-stealing windows on the user's
-  machine (explicit complaint). NEVER edit files via python/shell —
-  Edit/Write tools only; on "file modified" conflicts re-read & retry
-  (user edits concurrently). Owner instructions ≠ contributor docs;
-  docs in full sentences, no dev war stories. No Linux builds exist.
-- Acknowledge every mid-work user message in the very next reply
-  (briefly), don't batch acknowledgments to the end. On push rejection:
-  git pull (rebases) then push. All shortcuts modifier-based (not vim);
-  no "branch" noun in user copy — only multiple trails / duplicating.
-- Shortcut gotchas: mod+E and mod+Shift+E are browser-owned (never
-  reach the page); re-anchor = mod+G. mod+F toggles the find bar.
-  Electron menu clicks have NO user activation → renderer file pickers
-  throw SecurityError; menu Load/Save go through main-process dialogs
-  (test: npm run test:desktop, dialog stubbed).
-- Open-routing rules: PDF picked/OS-opened while a doc is open → NEW
-  window (desktop, pt-open-new-window IPC) / NEW tab (web, window.open
-  + postMessage File handoff, initTabHandoff); empty windows reused;
-  pdf drag-drop no-op when doc open (session drops OK). Recents =
-  pdf+session pair, all-or-nothing with file-specific error.
-- Error dialogs/toasts must name the exact failing thing, not either/or.
-- Windows: no universal binary; NSIS packs x64+arm64 in one installer
-  (win.target arch list). Fluent title bars with content = 48px.
-- Parallel agents: OK to edit via isolation:"worktree" branches, the
-  orchestrator merges; shared build outputs forbid same-tree parallel
-  builds. Desktop e2e-ish harnesses: patch electron dialog before
-  require(main.js) (src/test/desktopSave.ts pattern).
-- Demo video re-upload flow: commit mp4 → raw.githubusercontent fetch
-  in a GitHub new-issue page → synthetic ClipboardEvent paste into
-  textarea[aria-label="Markdown value"] → grab user-attachments URL →
-  clear draft → README; verify player headlessly (autoplay flag).
-
-## Product/design facts
-In memory/product-design.md (trails model, session-file philosophy,
-two-file flow, preview/panels/rendering rules, perf limits, pdfjs v6
-gotchas, stable test hook ids).
-- [Flakes are bug reports](flakes-are-bug-reports.md) — root-cause
-  intermittent failures and pin them with a deterministic test
-  (owner rule 2026-07-12; e.g. osOpenDerivedTitle).
+## Hard rules (owner)
+- NEVER force push — any ref, any reason; append-only, fix forward
+  (.claude/settings.json deny rules + hook enforce it).
+- [Tests are IMMUTABLE contracts](test-immutability.md) — never edit
+  test code without permission; "Test Deletion" commit protocol.
+- NEVER run tests locally — ALL tests on GitHub runners only.
+- [Orchestrator-only machine](orchestrator-only-machine.md) — this 4GB
+  box: git/gh/edits only; no builds, no app runs, no media processing
+  (OOM-crashed); ALL computation via GitHub Actions.
+- MERGE with --no-ff, never cherry-pick.
+- [Flakes are bug reports](flakes-are-bug-reports.md) — root-cause and
+  pin with a deterministic test.
 - [Existing components over custom](existing-components-over-custom.md)
-  — never hand-draw/hand-roll where a native/stock component exists
-  (owner rule 2026-07-12: scrollbars, mac doc icons, installer icon).
+  — native/stock over hand-drawn (scrollbars, doc icons, installer).
+- NEVER reuse a version number; skip and document. Details:
+  [release-engineering](release-engineering.md).
+- Deployment/signing/releases happen in CI only; dev machines push
+  commits and tags. Release = dev CI green → bump+tag together.
+- Owner pushes concurrently: on push rejection, git pull (rebases per
+  .gitconfig) and push again.
 
-## User preferences (confirmed)
-- Tests are IMMUTABLE: in no case edit/modify an existing test — only
-  ADD tests. Removal only in limited cases (a feature change that
-  justifies it). "DRY does not apply to tests": duplicate suites
-  rather than share/parametrize test code. (Owner halted a suite
-  parametrization refactor mid-flight over this; reverted.)
-  If a change requires a test to change: finish ALL requested work
-  with the test failing, STOP, ask permission. Test modifications/
-  deletions go in special commits containing ONLY test changes; a
-  normal commit must never MODIFY tests. ADDING tests is always fine,
-  needs no permission, and may be mixed into normal commits. Renaming
-  a test or editing test comments is also fine — only the test CODE
-  is guarded. STRICT: red (-) lines / deletions over a test file are
-  allowed for exactly ONE reason — a test is failing that should not
-  be failing (the test itself is wrong) — and that ALWAYS requires the
-  owner's explicit permission first. This covers uncommitted
-  just-added test code too. Needing different logic in a test = write
-  a NEW test containing the new logic (even for a minor change), never
-  patch. Any commit whose diff has red (-) lines in a test file MUST
-  start its commit message with "Test Deletion". THE reason (owner's
-  words): tests are contracts the owner enforces onto the project;
-  the agent is not allowed to change the contract unilaterally — only
-  the owner has that right.
-- Non-test tooling (media/icons/perf/fixture generators) lives in
-  src/tools/, not src/test/.
-- Commit per feature/iteration; draft→commit, post-debug→commit. Signed
-  commits via Bitwarden SSH key: on "No private key found" the user must
-  approve in Bitwarden GUI — tell them, then retry.
-- NEVER run tests locally (rule tightened 2026-07-12, supersedes the
-  old "web e2e OK locally"): ALL tests run on GitHub runners only.
-  Local `npm run build` (compile) is fine.
-- MERGE branches, never cherry-pick ("there aren't many good reasons
-  to cherry pick" — owner, 2026-07-12), and always merge with
-  --no-ff: a branch integration always gets a merge commit.
-- Background-work heartbeat (owner rule): whenever a background
-  command is expected to wake Claude on completion, ALSO set a
-  periodic alarm (ScheduleWakeup, 5 minutes) that does NOTHING but
-  wake — regardless of the task's status. What to do upon waking
-  (re-check, re-arm, intervene, nothing) is entirely the woken
-  agent's decision.
-- CI must report ALL failures in a run, never fail fast, AND keep
-  per-suite verdicts visible in the step list (owner rejected an
-  aggregating shell loop for hiding which suite failed): one step per
-  suite, each `if: ${{ !cancelled() }}`; the web server starts in its
-  own step (background processes outlive steps on runners); only
-  artifact-dependent chains (package→smoke→installer) stay gated.
-- Tests/automation: headless playwright-core with installed Edge/Chrome,
-  never their browser. Exception: when the user explicitly asks to watch
-  (claude-in-chrome on their tab; small step first, confirm they see it).
-- Taste: frameworks + CSS tooling over hand-rolled; TypeScript; Python over
-  shell; plain-text git-friendly formats; standard "fragile" undo semantics;
-  no gratuitous TCP; don't over-emphasize obvious design points in docs.
+## Topic files
+- [release-engineering](release-engineering.md) — release rules,
+  signing secrets, artifact naming (NO SPACES — the update-404 bug),
+  Vercel, act.
+- [ci-testing](ci-testing.md) — CI job shape, fail-fast ban, harness
+  gotchas (feeds, spawnSync, dialogs, runner quirks), coverage.
+- [shipped-versions](shipped-versions.md) — v0.3.4→v0.5.11 history +
+  what's on main unreleased.
+- [desktop-shell](desktop-shell.md) — Electron shell, IPC, menus,
+  platform quirks (Tahoe traffic lights, koffi, NSIS), update seams.
+- [ui-conventions](ui-conventions.md) — inline-SVG icons, no-jank rows,
+  shortcuts, open-routing, error-message precision.
+- [media-pipeline](media-pipeline.md) — media.yml recording,
+  self-verification, demo-video upload flow.
+- product-design.md — trails model, session-file philosophy, panels,
+  perf limits, pdfjs v6 gotchas, stable test hook ids.
+- paper-build.md — make4ht+fix-mathml pipeline (native MathML, no
+  MathJax), WStarCats.tex fixes; `./build-html.sh`; PDF: pdflatex x2.
 
-## Paper HTML/PDF build
-Details in memory/paper-build.md (make4ht+fix-mathml pipeline, native
-MathML only — no MathJax; applied WStarCats.tex fixes; headless-Chrome
-verification techniques). Entry: `./build-html.sh`; PDF: pdflatex x2.
+## Workflow preferences
+- Capture the session transcript (~/.claude/projects/<project>/
+  <session>.jsonl, gzipped) into docs/transcripts/ BEFORE compaction;
+  commit it. Naming: session-N.
+- Commit per feature/iteration; draft commit before debugging. Signed
+  commits via Bitwarden SSH key: on "No private key found" the owner
+  must approve in the Bitwarden GUI — say so, then retry.
+- Parallelize with agents/background tasks; final answers at the END of
+  the reply; acknowledge every mid-work user message in the very next
+  reply. 3-letter file extensions, high-entropy temp names.
+- Background-work heartbeat (owner rule): whenever a background command
+  is expected to wake Claude on completion, ALSO set a 5-minute
+  ScheduleWakeup alarm that does nothing but wake; the woken agent
+  decides what to do.
+- Parallel agents: edit via isolation:"worktree" branches, orchestrator
+  merges; shared build outputs forbid same-tree parallel builds.
+- gh CLI authed (DE0CH), vercel CLI authed (de0ch); installing deps
+  pre-approved; owner keeps a notes file and may ask to be reminded.
+- Taste: frameworks + CSS tooling over hand-rolled; TypeScript; Python
+  over shell; plain-text git-friendly formats; standard "fragile" undo;
+  no gratuitous TCP; don't over-emphasize obvious points in docs.
+- Owner instructions ≠ contributor docs; docs in full sentences, no dev
+  war stories. Edit files ONLY with Edit/Write tools; on "file
+  modified" conflicts re-read & retry. No Linux builds exist.
 
 ## Environment notes
-- PIL is broken (missing libtiff dylib); use `sips` for image ops
-- User's viewers: Edge (likes cmd+click refs → new tab), macOS Preview, Sioyek+Skim installed
+- Mac box: PIL broken (missing libtiff dylib); use `sips` there. This
+  box: NO local media tools at all (orchestrator-only rule).
+- Owner's viewers: Edge (cmd+click refs → new tab), macOS Preview,
+  Sioyek+Skim installed.
