@@ -1,10 +1,11 @@
 # Project: Paper Trail (+ parent arXiv 2411.01678 W*-categories paper)
 
-This memory lives IN the repo at memory/ (git-tracked) and is
-symlinked from BOTH ~/.claude/projects dirs (the arXiv parent folder
-and paper-trail itself), so it follows the session either way.
-The parent folder ../ holds the paper (not a git repo; see
-[[paper-build]] pointer below).
+This memory lives IN the repo at memory/ (git-tracked). The repo is at
+~/Documents/cs/paper-trail (moved 2026-07-12 from
+~/Downloads/arXiv-2411.01678v1/paper-trail); ~/.claude/projects memory
+symlinks for the new path AND both old project dirs all point here.
+The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
+(not a git repo; see paper-build.md pointer below).
 
 ## Current state (2026-07-12, session handoff)
 - v0.5.5 tagged, gated release run in flight (CI gate all green,
