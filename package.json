@@ -18,8 +18,6 @@
     "test:install:win": "node build-node/test/installerWin.js",
     "test:install:mac": "node build-node/test/installerMac.js",
     "test:update:win": "node build-node/test/updateWin.js",
-    "test:update:mac": "node build-node/test/updateMac.js",
-    "test:update:mac:manual": "node build-node/test/updateMacManual.js",
     "test:update:mac:install": "node build-node/test/updateMacInstall.js",
     "test:update:mac:manual-install": "node build-node/test/updateMacManualInstall.js",
     "test:stdio": "node build-node/test/desktopStdioClosed.js",

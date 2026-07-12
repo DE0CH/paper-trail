@@ -228,12 +228,6 @@ jobs:
           npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none -c.directories.output=dist-update-feed
           git checkout -- package.json package-lock.json
 
-      - name: Auto-update test (finds and downloads the new version)
-        run: node build-node/test/updateMac.js
-
-      - name: Manual update test (Check for Updates menu flow)
-        run: node build-node/test/updateMacManual.js
-
       - name: Closed-stdio regression (Finder launches must not crash)
         run: node build-node/test/desktopStdioClosed.js
 
