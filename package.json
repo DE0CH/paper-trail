@@ -82,6 +82,7 @@
     "directories": {
       "output": "dist-electron"
     },
+    "afterPack": "./build-node/tools/afterPackMac.js",
     "files": [
       "build-node/**/*.js",
       "dist-web/**"
