@@ -158,6 +158,11 @@ jobs:
         shell: bash
         run: node build-node/test/installerWin.js
 
+      - name: Documents get their own icons, never the app's
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/winDocIcons.js
+
       - name: Installer never force-closes a running app (unsaved work wins)
         shell: bash
         run: node build-node/test/installerCloseUnsaved.js
@@ -353,6 +358,10 @@ jobs:
 
       - name: Installer test (dmg, zip, universal binary, smoke)
         run: node build-node/test/installerMac.js
+
+      - name: Documents get their own icons, never the app's
+        if: ${{ !cancelled() }}
+        run: node build-node/test/macDocIcons.js
 
   # Same parallel split as windows-update: the update tests build twice
   # (current app + next-version feed), so they get their own job.
