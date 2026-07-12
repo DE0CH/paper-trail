@@ -113,11 +113,13 @@ The PAPER (arXiv 2411.01678) stayed at ~/Downloads/arXiv-2411.01678v1
 - NEVER force push (owner rule, absolute): no `git push -f`/--force,
   on any ref, branch or tag, for any reason. Everything is
   append-only: fix forward with new commits and new tags.
-- Release process (owner rule, 2026-07-12, revised same day): ONLY
-  releases wait for CI — a tag must point at a commit whose main CI
-  run succeeded (the release workflow's gate is only a guard). For
-  everything else, continue OPTIMISTICALLY: push, dispatch, iterate
-  without waiting; if CI or a task fails, just retry/fix forward.
+- Release process (owner rule, 2026-07-12, refined): DEVELOPMENT
+  pushes must have their CI pass BEFORE the version bump. The bump
+  itself needs no manual CI wait — bump and tag together, push both;
+  the release workflow's built-in CI gate validates the release. Do
+  NOT manually wait for CI on the bump commit before tagging. For all
+  non-release work, continue OPTIMISTICALLY: push, dispatch, iterate;
+  if CI or a task fails, retry/fix forward.
 - NEVER reuse a version number (owner rule): if a version failed to
   build or its release was blocked by failing CI, skip that version
   and bump to the next one — no `git tag -f`, no tag moving, ever.
