@@ -160,7 +160,9 @@ export default function NavPanel({
     </button>
   );
 
-  const headerBtn = 'inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer';
+  // flex-none: header buttons never shrink, or the close button would
+  // compress off the shared right-edge axis on narrow panels.
+  const headerBtn = 'flex-none inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer';
 
   return (
     <div id="navCol" className="flex flex-col overflow-hidden border-r border-borderapp h-full">
@@ -190,7 +192,7 @@ export default function NavPanel({
         )}
         <button
           id="btnNavClose"
-          className="inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
+          className="flex-none inline-flex items-center justify-center self-center w-7 h-7 rounded text-dim hover:text-fgapp hover:bg-hoverrow cursor-pointer"
           title="Close panel"
           onClick={onClose}
         >
