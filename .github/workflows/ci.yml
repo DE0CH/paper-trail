@@ -207,7 +207,10 @@ jobs:
             unset CSC_LINK CSC_KEY_PASSWORD
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
-          npx electron-builder --mac zip --publish never -c.mac.notarize=false
+          # timestamp=none: skip Apple's timestamp authority — its flakes
+          # fail builds, and a secure timestamp only matters for keeping
+          # signatures valid after cert expiry (irrelevant to test builds)
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none
 
       - name: Build the next version into the update feed
         env:
@@ -220,7 +223,7 @@ jobs:
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
           npm version patch --no-git-tag-version
-          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.directories.output=dist-update-feed
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none -c.directories.output=dist-update-feed
           git checkout -- package.json package-lock.json
 
       - name: Auto-update test (finds and downloads the new version)
@@ -232,3 +235,6 @@ jobs:
       - name: Auto-update install test (Squirrel, signed builds only)
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacInstall.js
+
+      - name: Closed-stdio regression (Finder launches must not crash)
+        run: node build-node/test/desktopStdioClosed.js

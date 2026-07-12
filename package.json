@@ -1,6 +1,6 @@
 {
   "name": "paper-trail",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "description": "A PDF reader with a list of navigation history stacks: browser-style back/forward plus cmd+click forking.",
   "type": "commonjs",
@@ -21,6 +21,7 @@
     "test:update:mac": "node build-node/test/updateMac.js",
     "test:update:mac:manual": "node build-node/test/updateMacManual.js",
     "test:update:mac:install": "node build-node/test/updateMacInstall.js",
+    "test:stdio": "node build-node/test/desktopStdioClosed.js",
     "perf": "node build-node/tools/perf.js",
     "media": "node build-node/tools/media.js",
     "dist:mac": "electron-builder --mac --publish never",

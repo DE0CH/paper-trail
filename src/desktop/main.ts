@@ -22,6 +22,13 @@ import contextMenu from 'electron-context-menu';
 import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
 
+// Apps launched by Finder/LaunchServices can get stdio pipes whose
+// other end is already closed; a console write (electron-updater logs
+// during its startup check) then raises EPIPE, which Electron's default
+// handler turns into a crash dialog. Logging must never crash the app.
+process.stdout.on('error', () => { /* swallow EPIPE */ });
+process.stderr.on('error', () => { /* swallow EPIPE */ });
+
 const SMOKE = process.argv.includes('--smoke');
 // build-node/desktop -> project root
 const WEB_ROOT = path.resolve(__dirname, '..', '..', 'dist-web');
