@@ -176,17 +176,24 @@ async function run(): Promise<void> {
     const avoidPages: number[] = [];
     const findLinkInView = () => page.evaluate((avoid) => {
       const pt = (window as never as {
-        __pt: { hist: { active: { entries: Array<{ pos: { page: number } }> } } };
+        __pt: {
+          hist: { active: { entries: Array<{ pos: { page: number } }> } };
+          viewer: { numPages: number };
+        };
       }).__pt;
       const visited = new Set([
         ...pt.hist.active.entries.map((e) => e.pos.page),
         ...avoid,
       ]);
+      // Only hop to CONTENT: a citation into the bibliography is a
+      // dead end (no onward references there) and a dull demo.
+      const lastContent = pt.viewer.numPages - 6;
       const cont = document.getElementById('viewerContainer')!.getBoundingClientRect();
       const links = [...document.querySelectorAll<HTMLElement>('.pdfLink:not(.external)')];
       for (const el of links) {
         const dest = Number(el.dataset.destPage ?? NaN);
         if (!Number.isFinite(dest) || visited.has(dest)) continue;
+        if (dest < 2 || dest > lastContent) continue;
         const r = el.getBoundingClientRect();
         if (r.width < 14 || r.height < 8) continue;
         if (r.top > cont.top + 90 && r.bottom < cont.bottom - 140
