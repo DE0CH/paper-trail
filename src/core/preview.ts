@@ -90,8 +90,13 @@ export class Preview {
   scheduleShow(dest: string | unknown[], linkEl: HTMLElement): void {
     clearTimeout(this.showTimer);
     clearTimeout(this.hideTimer);
+    // The anchor rect is captured NOW: an annotation-layer rebuild can
+    // replace the hovered element before the timer fires, and a
+    // disconnected node has no geometry left to place the popup by.
+    const armedRect = linkEl.getBoundingClientRect();
     this.showTimer = setTimeout(() => {
-      this.show(dest, linkEl).catch((e) => console.warn('preview failed', e));
+      this.show(dest, linkEl, armedRect)
+        .catch((e) => console.warn('preview failed', e));
     }, HOVER_DELAY_MS);
   }
 
@@ -206,10 +211,24 @@ export class Preview {
     }
   }
 
-  private async show(dest: string | unknown[], linkEl: HTMLElement): Promise<void> {
+  private async show(dest: string | unknown[], linkEl: HTMLElement,
+    armedRect: DOMRect): Promise<void> {
     const token = ++this.token;
     const info = await this.viewer.resolveDest(dest);
-    if (!info || token !== this.token || !linkEl.isConnected) return;
+    if (!info || token !== this.token) return;
+
+    // A page re-render replaces the link elements; the pointer is
+    // still on the (visually identical) replacement, so the preview
+    // must still open. Anchor to the replacement under the armed
+    // rect's center when there is one, else to the armed rect itself
+    // — never bail just because the node was swapped.
+    let anchorEl: HTMLElement | null = linkEl.isConnected ? linkEl : null;
+    if (!anchorEl) {
+      const at = document.elementFromPoint(
+        armedRect.left + armedRect.width / 2,
+        armedRect.top + armedRect.height / 2);
+      anchorEl = (at?.closest('.pdfLink') as HTMLElement | null) ?? null;
+    }
 
     this.ensureBuilt();
 
@@ -223,7 +242,7 @@ export class Preview {
     // hover and block the click), so when the remembered height fits on
     // neither side — e.g. after the window shrank — it is capped to the
     // larger free side instead of overlaying.
-    const lr = linkEl.getBoundingClientRect();
+    const lr = anchorEl ? anchorEl.getBoundingClientRect() : armedRect;
     const spaceBelow = window.innerHeight - 8 - (lr.bottom + 10);
     const spaceAbove = lr.top - 10 - this.minTop();
     let h = Math.min(this.height, window.innerHeight - 40);

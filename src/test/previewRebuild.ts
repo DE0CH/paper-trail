@@ -31,14 +31,14 @@ async function run(): Promise<void> {
     await page.goto(BASE + '/?file=sample/WStarCats.pdf');
     await page.waitForSelector(LINK_SEL, { timeout: 20_000 });
 
-    // Hover arms the 350ms show timer on this element…
-    const link = page.locator(LINK_SEL).nth(3);
-    await link.hover();
-    // …then the "annotation layer rebuild": the hovered element is
-    // replaced by an identical clone, disconnecting the original
-    // before the timer fires.
+    // Arm the hover and rebuild the layer in ONE evaluate: the enter
+    // event starts the 350ms show timer and the element is replaced by
+    // an identical clone in the same tick — the disconnect is
+    // GUARANTEED to precede the timer (a separate hover() call can
+    // lose that race on a slow machine, seen on macos-15-intel).
     await page.evaluate((sel) => {
       const el = document.querySelectorAll(sel)[3] as HTMLElement;
+      el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
       el.replaceWith(el.cloneNode(true));
     }, LINK_SEL);
 
