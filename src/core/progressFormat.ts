@@ -77,14 +77,17 @@ export function serializeProgress(p: ProgressFile): string {
 }
 
 export function parseProgress(text: string): ProgressFile | null {
-  const lines = text.split(/\r?\n/);
-  if (progressVersion(text) !== PROGRESS_VERSION) return null;
-
   const kv: Record<string, string> = {};
   const stacks: HistStack[] = [];
   let cur: HistStack | null = null;
 
+  // Everything from the first character on is inside the try: this
+  // boundary receives file contents, and garbage of ANY shape (even a
+  // non-string) must come back as null, never as a throw.
   try {
+    const lines = text.split(/\r?\n/);
+    if (progressVersion(text) !== PROGRESS_VERSION) return null;
+
     for (const raw of lines.slice(1)) {
       if (!raw.trim()) continue;
       const sp = raw.indexOf(' ');
