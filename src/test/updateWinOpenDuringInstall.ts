@@ -27,10 +27,17 @@ function check(name: string, ok: boolean, detail = ''): void {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 }
 
+// Every PowerShell call is bounded: while the installer is frozen
+// mid-file-replacement the app exe is locked, so a version/title probe
+// against it can block forever. A timeout turns that into a thrown
+// error the callers already tolerate (empty string), so the test always
+// reaches its own waitFor deadlines instead of hanging the whole run.
+const PS_TIMEOUT = 15_000;
+
 function ps(cmd: string): string {
   return execFileSync('powershell.exe',
     ['-NoProfile', '-NonInteractive', '-Command', cmd],
-    { encoding: 'utf8' }).trim();
+    { encoding: 'utf8', timeout: PS_TIMEOUT }).trim();
 }
 
 function shortcutTarget(lnk: string): string {
@@ -58,8 +65,8 @@ function norm(v: string): string {
 }
 
 function running(imageName: string): boolean {
-  return spawnSync('tasklist', ['/FI', `IMAGENAME eq ${imageName}`],
-    { encoding: 'utf8' }).stdout.toLowerCase()
+  return (spawnSync('tasklist', ['/FI', `IMAGENAME eq ${imageName}`],
+    { encoding: 'utf8', timeout: PS_TIMEOUT }).stdout ?? '').toLowerCase()
     .includes(imageName.toLowerCase());
 }
 
@@ -158,9 +165,14 @@ exit 1
 }
 
 function thaw(pid: number): void {
-  ps(`${NATIVE}
+  // Best-effort: a locked-file stall must not wedge the test. If the
+  // resume call times out or errors, the installer stays frozen and the
+  // end-state waits time out to a verdict anyway.
+  try {
+    ps(`${NATIVE}
 $p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue
 if ($p) { [PT.Native]::NtResumeProcess($p.Handle) | Out-Null }`);
+  } catch { /* leave it frozen; the waits below still settle */ }
 }
 
 async function run(): Promise<void> {
