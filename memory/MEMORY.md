@@ -13,11 +13,16 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   per-version detail: [shipped-versions](shipped-versions.md).
 - v0.5.12 SKIPPED (release startup_failure: caller release.yml lacked
   id-token:write that reusable ci.yml requests for Codecov OIDC).
-- REMAINING: deliver two mac update videos (finished + canceled) from
-  the "macOS update UI recording" workflow — recorder drip widened to
-  ~24s (2f3c56a) so Cancel lands mid-download; watch frames back before
-  delivering. update-flash-close DEFERRED (cut from release; held fix
-  skips the update — docs/flash-close-finding.md; needs owner decision).
+- Two mac update videos (finished + canceled) DELIVERED to the owner
+  (run 29230642699, watched frames back: canceled ends back at the offer,
+  not "Ready to update"). Getting the canceled take right needed three
+  recorder fixes on main: clearUpdaterCache() before each launch (the
+  finished run's cached 0.6.0 download — in ~/Library/Caches, NOT under
+  PT_USERDATA — made canceled hit 'downloaded' before Cancel), a feed
+  that stalls ~65% and never completes so the download stays 'downloading'
+  for Cancel, and a retry of the Check-for-Updates menu gesture.
+- update-flash-close DEFERRED (cut from v0.5.13; held fix skips the
+  update — docs/flash-close-finding.md; needs owner decision).
 - tauri-experiment branch = separate Linux-box session; hands off
   (src-tauri/, src/test/tauriE2ePage.ts sit untracked here — leftovers,
   they break local tsc; not mine).
