@@ -9,8 +9,11 @@ import { IconAnchor, IconClose, IconCopy, IconEdit, IconPlus, IconTrash } from '
 // and rows touch instead of leaving phantom gaps.
 const rowBase = 'flex items-center gap-1.5 h-[22px] px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
 // The rename input occupies the exact box of the name span (same font,
-// fixed height, padding compensated by negative margin) so nothing shifts.
-const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[13px] border border-accent rounded outline-none';
+// fixed height, padding compensated by negative margin) so nothing
+// shifts. The accent outline is an INSET RING (box-shadow — no layout),
+// not a border: a 1px border would push the text 1px right (the negative
+// margin cancels the padding, not the border) and eat 1px of height.
+const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[13px] ring-1 ring-inset ring-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
 // One shape for every small row button; the close button additionally
 // keeps a permanent flex slot so all rows align on it.
