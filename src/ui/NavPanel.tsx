@@ -160,7 +160,7 @@ export default function NavPanel({
   // identical to the other headers — and can't shift on active/inactive.
   const tabBtn = (t: NavTab, label: string) => (
     <button
-      className={`inline-flex items-center h-full px-2 text-[12px] cursor-pointer ${tab === t ? 'text-fgapp shadow-[inset_0_-2px_0_0_var(--color-accent)]' : 'text-dim'}`}
+      className={`inline-flex items-center h-full px-2 text-[12px] min-w-0 shrink cursor-pointer ${tab === t ? 'text-fgapp shadow-[inset_0_-2px_0_0_var(--color-accent)]' : 'text-dim'}`}
       onClick={() => onTab(t)}
     >
       {label}

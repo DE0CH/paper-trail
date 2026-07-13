@@ -22,7 +22,7 @@ type Widths = { nav: number; stacks: number; side: number };
 function initialWidths(): Widths {
   const ui = loadUI();
   return {
-    nav: clampW(ui.navW ?? 150, MIN_W.nav, 500),
+    nav: clampW(ui.navW ?? 200, MIN_W.nav, 500),
     stacks: clampW(ui.stacksW ?? 150, MIN_W.stacks, 500),
     side: clampW(ui.sideW ?? 290, MIN_W.side, 800),
   };

@@ -99,6 +99,37 @@ async function run(): Promise<void> {
       }
     }
 
+    // ---- zoom glyph INK sits on the % text line (not just box-centre) --
+    // box-centre can match while the − / + math glyphs float above the %
+    // digits' optical line; measure the actual ink centre via measureText.
+    const zoomInk = await page.evaluate(() => {
+      const inkCentre = (id: string): number | null => {
+        const el = document.getElementById(id);
+        if (!el) return null;
+        const walk = (n: Node): Text | null => {
+          if (n.nodeType === 3 && (n.textContent ?? '').trim()) return n as Text;
+          for (const c of [...n.childNodes]) { const r = walk(c); if (r) return r; }
+          return null;
+        };
+        const tn = walk(el);
+        if (!tn) return null;
+        const rg = document.createRange(); rg.selectNodeContents(tn);
+        const box = rg.getBoundingClientRect();
+        const cs = getComputedStyle(tn.parentElement!);
+        const ctx = document.createElement('canvas').getContext('2d')!;
+        ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        const m = ctx.measureText((tn.textContent ?? '').trim());
+        const baseline = box.top + (box.height - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2 + m.fontBoundingBoxAscent;
+        return baseline + (m.actualBoundingBoxDescent - m.actualBoundingBoxAscent) / 2;
+      };
+      return { minus: inkCentre('btnZoomOut'), pct: inkCentre('zoomPct'), plus: inkCentre('btnZoomIn') };
+    });
+    if (zoomInk.minus != null && zoomInk.pct != null && zoomInk.plus != null) {
+      console.log(`zoom INK centres: −=${zoomInk.minus.toFixed(2)} %=${zoomInk.pct.toFixed(2)} +=${zoomInk.plus.toFixed(2)}`);
+      const off = Math.max(Math.abs(zoomInk.minus - zoomInk.pct), Math.abs(zoomInk.plus - zoomInk.pct));
+      check(`zoom −/+ glyph ink sits on the % text line (worst offset ${off.toFixed(2)}px)`, off <= 1.0);
+    }
+
     // ---- panels: one row metric across trails / history / outline -------
     const rows = await page.evaluate(() => {
       const grab = (sel: string) => ([...document.querySelectorAll(sel)] as HTMLElement[])
