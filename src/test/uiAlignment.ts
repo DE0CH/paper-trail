@@ -74,8 +74,8 @@ async function run(): Promise<void> {
     console.log(`\nrows: trails=${rows.trail.length} history=${rows.hist.length} outline=${rows.outline.length}`);
     const rowHs = allRows.map((r) => r.h);
     const rowSpread = Math.max(...rowHs) - Math.min(...rowHs);
-    check(`trail/history/outline rows share one height (~22px; spread ${rowSpread.toFixed(2)}px)`,
-      rowSpread <= EPS && Math.abs(rowHs[0] - 22) <= EPS,
+    check(`trail/history/outline rows share one height (~24px; spread ${rowSpread.toFixed(2)}px)`,
+      rowSpread <= EPS && Math.abs(rowHs[0] - 24) <= EPS,
       `heights ${[...new Set(rowHs.map((h) => h.toFixed(1)))].join(', ')}`);
 
     // left edge is consistent within each panel (rows don't stagger)

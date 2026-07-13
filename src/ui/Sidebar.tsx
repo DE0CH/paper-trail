@@ -7,13 +7,13 @@ import { IconAnchor, IconClose, IconCopy, IconEdit, IconPlus, IconTrash } from '
 // 22px rows on the 13px font (≈1.7em — the classic dark-IDE list
 // metric): the 18.2px text line gets real air inside the highlight,
 // and rows touch instead of leaving phantom gaps.
-const rowBase = 'flex items-center gap-1.5 h-[22px] px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
+const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
 // The rename input occupies the exact box of the name span (same font,
 // fixed height, padding compensated by negative margin) so nothing
 // shifts. The accent outline is an INSET RING (box-shadow — no layout),
 // not a border: a 1px border would push the text 1px right (the negative
 // margin cancels the padding, not the border) and eat 1px of height.
-const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[13px] ring-1 ring-inset ring-accent rounded outline-none';
+const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[12px] ring-1 ring-inset ring-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
 // One shape for every small row button; the close button additionally
 // keeps a permanent flex slot so all rows align on it.
@@ -105,7 +105,7 @@ function StackRow({ snap, id, name }: {
           controller.stackClose(id);
         }}
       >
-        <IconClose size={14} />
+        <IconClose />
       </button>
     </div>
   );
@@ -194,7 +194,7 @@ function HistRow({ label, page, current, index, removable }: {
             controller.entryRemove(index);
           }}
         >
-          <IconClose size={14} />
+          <IconClose />
         </button>
       )}
     </div>
@@ -248,8 +248,8 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
-        <div className="flex items-center h-9 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12.5px] px-1">Trails</span>
+        <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
+          <span className="text-dim text-[12px] px-1">Trails</span>
           <span className="flex-1" />
           <button
             id="btnNewTrail"
@@ -279,8 +279,8 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden"
         style={{ width: widths.side, minWidth: widths.side }}
       >
-        <div className="flex items-center h-9 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12.5px] px-1">History</span>
+        <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
+          <span className="text-dim text-[12px] px-1">History</span>
           <span className="flex-1" />
           <button
             id="btnMark"

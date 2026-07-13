@@ -440,7 +440,7 @@ export default function App() {
           {snap.mismatch && (
             <div
               id="mismatchBanner"
-              className="flex items-center gap-2 px-3 py-1.5 bg-[#4a3a12] text-[#f0d48a] border-b border-[#6b5518] text-[12.5px]"
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#4a3a12] text-[#f0d48a] border-b border-[#6b5518] text-[12px]"
             >
               <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                 This session was saved with <b>{snap.mismatch.savedName}</b>, but{' '}
@@ -500,7 +500,7 @@ export default function App() {
         <div className="fixed inset-0 z-105 flex items-center justify-center bg-black/50">
           <div id="sessionConfirm" className="bg-panel border border-borderapp rounded-xl p-5 max-w-100 shadow-2xl">
             <div className="text-fgapp font-semibold mb-2">Load this reading session?</div>
-            <div className="text-dim text-[12.5px] leading-relaxed mb-4">
+            <div className="text-dim text-[12px] leading-relaxed mb-4">
               It replaces your current reading history and position for this
               document. (Unsaved history is lost.)
             </div>
