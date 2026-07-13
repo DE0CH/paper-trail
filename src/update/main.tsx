@@ -82,11 +82,14 @@ function buttons(s: UpdateUiState): { primary: ButtonSpec; secondary: ButtonSpec
         secondary: later,
       };
     case 'downloading':
-      // A real Cancel: it stops the download (main process) and drops
-      // back to the offer, not a "Later" that only hides the window.
+      // Cancel here is a DISMISS, not a real cancel: autoDownload is on, so
+      // stopping the transfer is pointless — the button just closes the
+      // window while the download keeps going in the background. Reopening
+      // the window later shows the live progress, or "Ready to update" once
+      // it has finished.
       return {
         primary: { label: 'Restart to Update', action: 'restart', enabled: false, shown: true },
-        secondary: { label: 'Cancel', action: 'cancel', enabled: true, shown: true },
+        secondary: { label: 'Cancel', action: 'later', enabled: true, shown: true },
       };
     case 'downloaded':
       return {

@@ -1,15 +1,16 @@
-// The Software Update window's download is INTERRUPTABLE: while it is
-// downloading, the secondary button is a real "Cancel" that STOPS the
-// transfer — it does not keep downloading in the background — and drops
-// back to the "available" offer, from which Update Now downloads again.
+// The Software Update window's "Cancel" during a download is a DISMISS,
+// not a real cancel. autoDownload is on, so stopping the transfer is
+// pointless — clicking Cancel just CLOSES the window while the download
+// keeps running in the background. Once it finishes there, a later
+// "Check for Updates…" goes straight to "Ready to update" (Restart),
+// never a fresh offer.
 //
-// The proof that it truly stopped (rather than the window merely hiding
-// a still-running download): after Cancel, wait PAST the point the
-// download would have finished, then confirm the update never became
-// "downloaded" — a fresh Update Now offers a new download instead of
-// jumping straight to Restart to Update. The feed drips slowly so the
-// cancel lands mid-transfer, and the feed is dark until the test drives
-// the check so no silent background download muddies the timing.
+// Owner-authorized contract change (2026-07-13): this replaces the
+// previous "real Cancel that stops the transfer" contract. The proof it
+// kept downloading (rather than stopping): after Cancel closes the
+// window, wait past when the transfer finishes, reopen the check, and
+// see it land on "downloaded" — with only ONE zip request the whole
+// time (a single continuous transfer, never re-fetched).
 //
 // Run (CI, macOS): npx electron build-node/test/updateWindowCancel.js
 
@@ -35,9 +36,9 @@ const FEED_VERSION = '99.0.0';
 const zipBytes = crypto.randomBytes(512 * 1024);
 const sha512 = crypto.createHash('sha512').update(zipBytes).digest('base64');
 
-// The zip drips over ~15s: the download is caught mid-flight to cancel,
-// and a full transfer would finish ~15s after it starts.
-const DRIP_MS = 15_000;
+// The zip drips over ~12s: the download is caught mid-flight to click
+// Cancel, then finishes in the background a few seconds later.
+const DRIP_MS = 12_000;
 let feedLive = false;
 let zipRequests = 0;
 
@@ -115,9 +116,13 @@ async function waitFor<T>(get: () => Promise<T> | T, want: (v: T) => boolean,
   return v;
 }
 
+function checkForUpdates(): void {
+  Menu.getApplicationMenu()?.getMenuItemById('check-updates')?.click();
+}
+
 async function run(): Promise<void> {
   feedLive = true;
-  Menu.getApplicationMenu()?.getMenuItemById('check-updates')?.click();
+  checkForUpdates();
   const uw = await waitFor(updateWindow, (w) => !!w, 15_000);
   if (!uw) { console.error('FAIL  the Software Update window never opened'); app.exit(1); return; }
   const available = await waitFor(() => readState(uw), (s) => s === 'available', 30_000);
@@ -136,28 +141,28 @@ async function run(): Promise<void> {
     `document.getElementById('pt-update-progress')?.dataset.percent ?? '0'`));
   check('the download is under way (progress advances)', p2 > p1, `${p1} -> ${p2}`);
 
-  // Cancel → back to the offer, window still open.
+  // Cancel → the window DISMISSES (closes). It does not drop back to an
+  // offer, and it does not stop the transfer.
   await js(uw, `document.getElementById('pt-update-secondary').click()`); // Cancel
-  const afterCancel = await waitFor(() => readState(uw), (s) => s === 'available', 10_000);
-  check('Cancel drops back to the offer (Update Now / Later)',
-    afterCancel === 'available', afterCancel);
-  check('the window stays open after Cancel', updateWindow() !== undefined);
+  const closed = await waitFor(() => updateWindow() === undefined, (v) => v, 10_000);
+  check('Cancel dismisses the window (it closes)', closed);
 
-  // The download really stopped: wait well past when a full transfer
-  // would have finished, then confirm the update never became ready —
-  // a fresh Update Now must offer a new download, not jump to Restart.
+  // The download keeps running in the background while the window is
+  // closed: wait past when the transfer finishes.
   await new Promise((r) => setTimeout(r, DRIP_MS + 6000));
-  check('the offer never flipped to downloaded on its own',
-    (await readState(uw)) === 'available', await readState(uw));
 
-  const requestsBefore = zipRequests;
-  await js(uw, `document.getElementById('pt-update-primary').click()`);
-  const dl2 = await waitFor(() => readState(uw), (s) => s === 'downloading' || s === 'downloaded', 20_000);
-  check('Update Now after Cancel starts a fresh download, not Restart',
-    dl2 === 'downloading', `state=${dl2}`);
-  const freshRequest = await waitFor(() => zipRequests, (n) => n > requestsBefore, 15_000);
-  check('...and it is a new transfer (the cancelled one did not linger)',
-    freshRequest > requestsBefore, `${requestsBefore} -> ${freshRequest}`);
+  // Reopen the check → it lands straight on "Ready to update" (the
+  // background download completed), NOT a fresh offer.
+  checkForUpdates();
+  const uw2 = await waitFor(updateWindow, (w) => !!w, 15_000);
+  if (!uw2) { console.error('FAIL  the reopened Software Update window never opened'); app.exit(1); return; }
+  const ready = await waitFor(() => readState(uw2), (s) => s === 'downloaded', 20_000);
+  check('reopening after Cancel shows Ready to update (the download kept going)',
+    ready === 'downloaded', ready);
+  check('the primary button is Restart to Update',
+    (await js<string>(uw2, `document.getElementById('pt-update-primary')?.textContent ?? ''`)) === 'Restart to Update');
+  check('it was ONE continuous transfer — never cancelled and re-fetched',
+    zipRequests === 1, `zipRequests=${zipRequests}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
@@ -168,7 +173,7 @@ async function run(): Promise<void> {
 void app.whenReady().then(() => {
   setTimeout(() => {
     run().catch((e) => {
-      console.error('FAIL  update window cancel flow errored', e);
+      console.error('FAIL  update window dismiss flow errored', e);
       app.exit(1);
     });
   }, 14_000);

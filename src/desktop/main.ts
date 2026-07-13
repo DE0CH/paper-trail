@@ -470,9 +470,12 @@ ipcMain.on('pt-update-ready', (event) => {
 ipcMain.on('pt-update-action', (event, action: string) => {
   if (!updateWin || updateWin.isDestroyed()
     || event.sender !== updateWin.webContents) return;
-  if (action === 'later') updateWin.close();
+  // 'later' and 'cancel' are both a plain DISMISS: close the window and
+  // leave the background download running (autoDownload). Closing the
+  // window never stops the transfer — the download completes in the
+  // background and the next check shows "Ready to update".
+  if (action === 'later' || action === 'cancel') updateWin.close();
   else if (action === 'download') startInteractiveDownload();
-  else if (action === 'cancel') cancelDownload();
   else if (action === 'restart') void restartToUpdate();
 });
 
@@ -505,23 +508,6 @@ function startInteractiveDownload(): void {
 // one until the download finishes or is cancelled.
 function rememberDownloadToken(r: { cancellationToken?: CancellationToken } | null): void {
   if (r?.cancellationToken && !currentDownload) currentDownload = r.cancellationToken;
-}
-
-/**
- * Cancel a download in progress and drop back to the offer so the user
- * can start it again. Actually stops the transfer (the download does not
- * keep running in the background) and leaves the updater ready for the
- * next check — no wedged half-state.
- */
-function cancelDownload(): void {
-  if (currentDownload) {
-    currentDownload.cancel();
-    currentDownload = null;
-  }
-  for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(-1);
-  }
-  if (availableVersion) setUpdateUi({ state: 'available', version: availableVersion });
 }
 
 /**
@@ -575,9 +561,9 @@ function setupAutoUpdates(): void {
     }
   });
   autoUpdater.on('error', (e) => {
-    // Cancelling a download rejects with a cancellation error — that is
-    // the user's own doing, not a failure to surface (cancelDownload has
-    // already dropped back to the offer).
+    // A cancellation error (rare now the UI never cancels — the window's
+    // Cancel is a dismiss and the transfer keeps running) is not a failure
+    // to surface: just clear the token and stay quiet.
     if (/cancell?ed/i.test(String(e))) { currentDownload = null; dbg('download cancelled'); return; }
     dbg('auto-update error', e);
     // Only states the window is actively waiting on turn into an error
