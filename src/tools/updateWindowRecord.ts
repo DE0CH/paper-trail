@@ -1,10 +1,13 @@
 // Full-display screen recording of the Sparkle-style Software Update
 // WINDOW for owner review, driving the REAL signed packaged app through
-// a REAL update. Two modes (argv[2]):
-//   finished — Check for Updates… → "A new version… available" →
+// a REAL update. Three modes (argv[2]):
+//   finished       — Check for Updates… → "A new version… available" →
 //     Update Now → progress bar → "Ready to update" → Restart to Update.
-//   canceled — … Update Now → progress starts → Cancel actually stops
-//     the download → the window returns to the offer.
+//   dismiss-cancel — … Update Now → progress starts → click Cancel → the
+//     window DISAPPEARS (a dismiss; the download keeps running in the
+//     background — autoDownload is on, so Cancel does not stop it).
+//   dismiss-x      — … Update Now → progress starts → click the window's
+//     red traffic-light close button → the window DISAPPEARS likewise.
 // Capture is ffmpeg avfoundation (screencapture -v yields empty clips on
 // the runner). The window is a BrowserWindow (update.html) driven via
 // Playwright locators (#pt-update-primary / -secondary), with the real
@@ -12,7 +15,7 @@
 // video shows a natural pointer. The feed serves a REAL next-version
 // SIGNED zip (a fake one errors Squirrel) and stays dark until the app
 // is on camera, so the OFFER really appears rather than pre-downloading.
-// Run (CI, macos-14): node build-node/tools/updateWindowRecord.js <finished|canceled>
+// Run (CI, macos-14): node build-node/tools/updateWindowRecord.js <finished|dismiss-cancel|dismiss-x>
 
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import * as http from 'node:http';
@@ -25,7 +28,9 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const FEED = path.join(ROOT, 'dist-update-feed');
 const PRODUCT = 'Paper Trail';
 const PORT = 8779;
-const MODE: 'finished' | 'canceled' = process.argv[2] === 'canceled' ? 'canceled' : 'finished';
+type RecMode = 'finished' | 'dismiss-cancel' | 'dismiss-x';
+const MODE: RecMode = process.argv[2] === 'dismiss-cancel' ? 'dismiss-cancel'
+  : process.argv[2] === 'dismiss-x' ? 'dismiss-x' : 'finished';
 const OUT = path.join(ROOT, `update-window-${MODE}.mov`);
 
 function osa(script: string): string {
@@ -105,7 +110,7 @@ function serveFeed(): { server: http.Server; newVersion: string } {
       // 'downloading' until the Cancel click aborts the connection.
       // FINISHED completes normally to reach Ready → Restart.
       const chunk = Math.ceil(zip.length / 30);
-      const stallAt = MODE === 'canceled' ? Math.floor(zip.length * 0.65) : zip.length;
+      const stallAt = MODE === 'finished' ? zip.length : Math.floor(zip.length * 0.65);
       let sent = 0;
       const timer = setInterval(() => {
         if (res.destroyed) { clearInterval(timer); return; }
@@ -252,16 +257,42 @@ async function run(): Promise<void> {
       await sleep(3500); // the app quits into the updater, on camera
       console.log('PASS  finished: checking → offer → download → Ready → Restart');
     } else {
+      // dismiss-cancel / dismiss-x: the window VANISHES and the download
+      // keeps running in the background (autoDownload). The take must show
+      // the window present during the download, then GONE after the click.
       const dl = await waitState(page, (s) => s === 'downloading', 30_000);
       if (dl !== 'downloading') throw new Error(`SELF-VERIFY: download never started, state='${dl}'`);
-      await sleep(3200); // let the progress bar visibly advance
-      const cancel = await buttonCenter(eApp, page, '#pt-update-secondary');
-      if (cancel) { glideTo(cancel); await sleep(300); }
-      await page.locator('#pt-update-secondary').click(); // Cancel
-      const back = await waitState(page, (s) => s === 'available', 30_000);
-      if (back !== 'available') throw new Error(`SELF-VERIFY: Cancel did not return to the offer, state='${back}'`);
-      await sleep(2500); // dwell on the returned offer
-      console.log('PASS  canceled: offer → Update Now → download → Cancel → back to offer');
+      await sleep(3200); // let the progress bar visibly advance on camera
+      if (MODE === 'dismiss-cancel') {
+        const cancel = await buttonCenter(eApp, page, '#pt-update-secondary');
+        if (cancel) { glideTo(cancel); await sleep(300); }
+        await page.locator('#pt-update-secondary').click(); // Cancel = dismiss
+      } else {
+        // dismiss-x: click the window's red traffic-light close button
+        // (top-left of the window frame), so the cursor is seen closing it.
+        const frame = await eApp.evaluate(({ BrowserWindow }) => {
+          const w = BrowserWindow.getAllWindows()
+            .find((b) => !b.isDestroyed() && b.webContents.getURL().includes('update.html'));
+          const b = w?.getBounds();
+          return b ? { x: b.x, y: b.y } : null;
+        });
+        if (!frame) throw new Error('SELF-VERIFY: no update window to close');
+        const red = { x: frame.x + 13, y: frame.y + 13 };
+        glideTo(red); await sleep(300);
+        cliclick(`c:${red.x},${red.y}`);
+      }
+      // The whole point: the window must GO AWAY (not fall back to an
+      // offer). Confirm the update.html window is destroyed.
+      let gone = false;
+      const deadline = Date.now() + 15_000;
+      while (!gone && Date.now() < deadline) {
+        gone = await eApp.evaluate(({ BrowserWindow }) => !BrowserWindow.getAllWindows()
+          .some((b) => !b.isDestroyed() && b.webContents.getURL().includes('update.html')));
+        if (!gone) await sleep(300);
+      }
+      if (!gone) throw new Error('SELF-VERIFY: the update window did not close on dismiss');
+      await sleep(2500); // dwell on the desktop with the window gone
+      console.log(`PASS  ${MODE}: offer → Update Now → download → dismiss → window gone`);
     }
   } finally {
     if (recorder) {

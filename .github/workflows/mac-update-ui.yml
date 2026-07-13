@@ -49,14 +49,18 @@ jobs:
       - name: Record — FINISHED update
         run: node build-node/tools/updateWindowRecord.js finished
 
-      - name: Record — CANCELED update
+      - name: Record — DISMISS via Cancel (window disappears, download continues)
         if: ${{ !cancelled() }}
-        run: node build-node/tools/updateWindowRecord.js canceled
+        run: node build-node/tools/updateWindowRecord.js dismiss-cancel
+
+      - name: Record — DISMISS via the window's X (window disappears)
+        if: ${{ !cancelled() }}
+        run: node build-node/tools/updateWindowRecord.js dismiss-x
 
       - name: Extract review frames
         if: always()
         run: |
-          for m in finished canceled; do
+          for m in finished dismiss-cancel dismiss-x; do
             if [ -f "update-window-$m.mov" ]; then
               mkdir -p "frames-$m"
               ffmpeg -i "update-window-$m.mov" -vf fps=2 "frames-$m/frame%04d.png"
@@ -69,8 +73,11 @@ jobs:
           name: sparkle-update-window
           path: |
             update-window-finished.mov
-            update-window-canceled.mov
+            update-window-dismiss-cancel.mov
+            update-window-dismiss-x.mov
             frames-finished/
-            frames-canceled/
+            frames-dismiss-cancel/
+            frames-dismiss-x/
             ff-finished.log
-            ff-canceled.log
+            ff-dismiss-cancel.log
+            ff-dismiss-x.log
