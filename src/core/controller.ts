@@ -173,11 +173,19 @@ export class Controller {
     }, { passive: false });
 
     window.addEventListener('beforeunload', (e) => {
-      // Warn about unsaved reading progress. When bound to a progress file
-      // this only triggers if an auto-save hasn't landed yet.
-      if (this.docOpen && this.session.dirty) {
-        e.preventDefault();
+      if (!this.docOpen || !this.session.dirty) return;
+      // Autosave target on disk (a bound .ptl path): don't nag — let the
+      // window close AT ONCE and flush the write in the background. The
+      // main process owns the write, so it lands after the window is gone.
+      // (beforeunload can't await, but a path binding is silent-writable
+      // synchronously — canWriteSilently short-circuits on session.path.)
+      if (this.session.path && window.ptDesktop?.saveSessionOnClose) {
+        window.ptDesktop.saveSessionOnClose(
+          this.session.path, serializeProgress(this.progressFileObject()));
+        return; // no preventDefault → the window closes immediately
       }
+      // No silent target: warn so unsaved reading progress isn't lost.
+      e.preventDefault();
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {

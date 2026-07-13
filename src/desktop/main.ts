@@ -903,6 +903,21 @@ ipcMain.handle('pt-save-session-to-path', async (
   }
 });
 
+// Fire-and-forget flush when a window with an autosaved (path-bound)
+// session is closing: the renderer hands us the bytes during beforeunload
+// and closes at once; we write the file here, in the main process, so the
+// change lands even though the window is already gone (no save prompt).
+ipcMain.on('pt-save-session-on-close', (_event, req: { path: string; text: string }) => {
+  // Synchronous on purpose: the window is already gone (the user saw an
+  // instant close), and closing the LAST window quits the app — a sync
+  // write guarantees the flush lands before the process exits.
+  try {
+    fs.writeFileSync(req.path, req.text, 'utf8');
+  } catch (e) {
+    console.warn('could not flush session on close to', req.path, e);
+  }
+});
+
 // The dot in the macOS close button mirrors unsaved session changes.
 ipcMain.on('pt-document-edited', (event, edited: boolean) => {
   const win = BrowserWindow.fromWebContents(event.sender);
