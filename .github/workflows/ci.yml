@@ -22,7 +22,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [windows-latest, windows-11-arm]
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot x64 leg for fast runs.
+        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-windows-2025"]') || fromJSON('["windows-latest","windows-11-arm"]') }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -203,7 +205,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [windows-latest, windows-11-arm]
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot x64 leg for fast runs.
+        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-windows-2025"]') || fromJSON('["windows-latest","windows-11-arm"]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
@@ -254,7 +258,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-latest, macos-15-intel]
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot Apple-silicon leg for fast runs.
+        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-macos-latest"]') || fromJSON('["macos-latest","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
@@ -411,7 +417,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-latest, macos-15-intel]
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot Apple-silicon leg for fast runs.
+        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-macos-latest"]') || fromJSON('["macos-latest","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
     env:
       HAS_CERT: ${{ secrets.MAC_CERT_P12 != '' }}
