@@ -34,25 +34,23 @@ on demand — `gh workflow run ci.yml --ref <branch>` or a push to the
 mirror. PREFER the Depot mirror for any manual CI trigger (private, no
 paid GitHub minutes, starts immediately vs the public queue): push the
 branch to `mirror` and `gh workflow run --repo de0ch-org/paper-trail-
-mirror`. RECORDING RUNNERS (corrected 2026-07-13 by a side-by-side probe, run
-29219980572 — the earlier "both headless" claim was WRONG for Windows):
+mirror`. RECORDING RUNNERS (ground truth, side-by-side probe 2026-07-13, run
+29219980572):
+- **Windows recordings CAN run on Depot** (`depot-windows-2025`). It
+  has a full interactive desktop (console Administrator Active,
+  dwm+explorer running); `CopyFromScreen` and `ffmpeg gdigrab` both
+  capture the real desktop (gdigrab: exit 0, 45 frames @ 15 fps). Its
+  display is 800×600 on a software Microsoft Basic Display Adapter
+  (windows-latest is 1024×768 / Hyper-V video) — that 800×600 is also
+  what clamped the desktopEdges window-bounds test. Prefer Depot for
+  Windows recordings (saves GitHub minutes); the goal is to record on
+  Depot. Open item under active investigation: prove/settle smooth
+  capture of on-screen MOTION on the Basic Display Adapter and whether
+  the resolution can be raised. The NSIS install works on Depot too.
 - **macOS recordings → github-hosted `macos-14`, NEVER Depot.** Depot
-  macOS (AWS EC2) is CONFIRMED headless, denies osascript assistive
-  access (-25211), and macOS 15 pops a ScreenCaptureKit consent that
-  derails screencapture. macos-14 has a real display + no consent.
-- **Windows recordings → Depot IS viable** (`depot-windows-2025`).
-  Probe ground truth: NOT headless — full interactive desktop (console
-  Administrator Active, dwm+explorer running), `CopyFromScreen` and
-  `ffmpeg gdigrab` both capture the real desktop (gdigrab: exit 0, 45
-  frames @ 15 fps). Caveats vs windows-latest: **800×600** default res +
-  a software **Microsoft Basic Display Adapter** (windows-latest is
-  1024×768 / Hyper-V video). The Depot-Windows window-bounds test
-  failure was this 800×600 clamping, NOT headlessness. UNSETTLED: the
-  probe captured a STATIC desktop, so smooth capture of on-screen MOTION
-  on the Basic Display Adapter isn't fully proven (stale-buffer risk).
-  So: Depot windows-recording works and saves minutes; use windows-
-  latest when higher res / guaranteed motion fidelity matters. The NSIS
-  install itself is fine on Depot either way. Depot-macOS viability (probed
+  macOS (AWS EC2) IS headless, denies osascript assistive access
+  (-25211), and macOS 15 pops a ScreenCaptureKit consent that derails
+  screencapture. macos-14 has a real display + no consent. Depot-macOS viability (probed
 2026-07-13, runner macOS 15.7.3): NOT usable as-is — `screencapture -v`
 (video) exits immediately with no .mov, System Events times out
 (-1712/-25211), cliclick lacks accessibility. BUT Depot has SIP
