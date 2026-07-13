@@ -80,9 +80,14 @@ async function run(): Promise<void> {
       const closePrevented = ev.defaultPrevented;
 
       // (3) A dropped .ptl binds the same way (independent of the picker).
-      c.session.path = null; c.session.handle = null;
+      c.session.path = null; c.session.handle = null; c.confirmSession = null;
       const fakeDt = { items: [], files: [makePtl()] } as unknown as DataTransfer;
       await c.openDropped(fakeDt);
+      // openDropped fires openFile without awaiting (the drop handler is
+      // sync); wait for that async open to settle before asserting.
+      for (let i = 0; i < 60 && !c.session.path && !c.confirmSession; i += 1) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
       applyIfPending();
       const dropBound: string | null = c.session.path;
 
