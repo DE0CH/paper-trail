@@ -27,7 +27,11 @@ jobs:
     # (de0ch-org): x64 on Depot, arm stays github-hosted. STATIC matrix +
     # owner-keyed runs-on ON PURPOSE — a fromJSON matrix expression
     # startup-fails the release's workflow_call (push worked, tag didn't).
-    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'windows-latest' && 'depot-windows-2025' || matrix.runner) || matrix.runner }}
+    # Windows always runs on GitHub-hosted runners, never Depot: Depot's
+    # ephemeral Windows has no interactive desktop session, so the electron
+    # desktop-GUI e2e tests can't launch there. Depot handles Mac/Linux;
+    # Windows stays on GitHub (owner policy). main runs everything here anyway.
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       # the Codecov upload authenticates via GitHub OIDC (no token secret)
@@ -236,7 +240,11 @@ jobs:
     # (de0ch-org): x64 on Depot, arm stays github-hosted. STATIC matrix +
     # owner-keyed runs-on ON PURPOSE — a fromJSON matrix expression
     # startup-fails the release's workflow_call (push worked, tag didn't).
-    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'windows-latest' && 'depot-windows-2025' || matrix.runner) || matrix.runner }}
+    # Windows always runs on GitHub-hosted runners, never Depot: Depot's
+    # ephemeral Windows has no interactive desktop session, so the electron
+    # desktop-GUI e2e tests can't launch there. Depot handles Mac/Linux;
+    # Windows stays on GitHub (owner policy). main runs everything here anyway.
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
 
