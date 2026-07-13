@@ -44,6 +44,7 @@
     "test:update:mac:kill-install": "node build-node/test/updateMacKillDuringInstall.js",
     "test:update:window": "electron build-node/test/updateWindow.js",
     "test:update:window-edges": "electron build-node/test/updateWindowEdges.js",
+    "test:update:window-cancel": "electron build-node/test/updateWindowCancel.js",
     "test:update:unsaved": "electron build-node/test/updateRestartUnsaved.js",
     "test:update:restart-edges": "electron build-node/test/updateRestartEdges.js",
     "test:new-window-task": "electron build-node/test/newWindowTask.js",

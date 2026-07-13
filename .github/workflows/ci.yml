@@ -22,6 +22,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot x64 leg for fast runs.
         runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-windows-2025"]') || fromJSON('["windows-latest","windows-11-arm"]') }}
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -208,6 +210,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot x64 leg for fast runs.
         runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-windows-2025"]') || fromJSON('["windows-latest","windows-11-arm"]') }}
     runs-on: ${{ matrix.runner }}
     steps:
@@ -274,6 +278,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot Apple-silicon leg for fast runs.
         runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-macos-latest"]') || fromJSON('["macos-latest","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
     steps:
@@ -403,6 +409,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateWindowEdges.js
 
+      - name: Update download is cancellable (Cancel stops the transfer)
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/updateWindowCancel.js
+
       - name: Restart edge cases (re-check after Cancel, second window, Don't Save)
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateRestartEdges.js
@@ -432,6 +442,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
+        # mirror (de0ch-org): one Depot Apple-silicon leg for fast runs.
         runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-macos-latest"]') || fromJSON('["macos-latest","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
     env:

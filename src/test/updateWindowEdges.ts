@@ -171,17 +171,10 @@ async function run(): Promise<void> {
     `document.getElementById('pt-update-progress')?.dataset.percent ?? '0'`));
   check('the progress bar advances', p2 > p1 && p2 > 0 && p2 <= 100, `${p1} -> ${p2}`);
 
-  // 4 — close mid-download, check again: the progress view resumes.
-  await js(uw, `document.getElementById('pt-update-secondary').click()`); // Later
-  await waitFor(() => updateWindow() === undefined, (v) => v, 10_000);
-  uw = await openAndWait((s) => s === 'downloading' || s === 'downloaded');
-  const resumed = await readState(uw);
-  check('checking again mid-download resumes the progress view',
-    resumed === 'downloading' || resumed === 'downloaded', resumed);
-  check('...and does not fall back to re-offering the update',
-    resumed !== 'available', resumed);
+  // (The mid-download secondary button is now a real Cancel, covered by
+  // updateWindowCancel; the download from phase 3 runs on to completion.)
 
-  // 5 — completion; a further check must not download again.
+  // 4 — completion; a further check must not download again.
   await waitFor(() => readState(uw), (s) => s === 'downloaded', 60_000);
   const zipsBefore = zipRequests;
   await js(uw, `document.getElementById('pt-update-secondary').click()`); // Later
