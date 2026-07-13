@@ -181,7 +181,7 @@ export class Controller {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {
-        if (this.session.handle && this.session.dirty) {
+        if ((this.session.handle || this.session.path) && this.session.dirty) {
           this.writeProgressAuto().catch(() => { /* dirty flag stays honest */ });
         }
       }
@@ -290,8 +290,9 @@ export class Controller {
       this.session.dirty = true;
       this.notify();
     }
-    if (this.session.handle) {
-      // Bound to a progress file: auto-save continuously (debounced).
+    if (this.session.handle || this.session.path) {
+      // Bound to a progress file (handle in the browser, path in the
+      // desktop shell): auto-save continuously (debounced).
       clearTimeout(this.fileSaveTimer);
       this.fileSaveTimer = setTimeout(() => {
         this.writeProgressAuto().catch((e) => console.warn('auto-save failed', e));
@@ -308,6 +309,9 @@ export class Controller {
    * always come back in the 'prompt' state).
    */
   private async canWriteSilently(): Promise<boolean> {
+    // A desktop path binding writes straight to disk (no permission UI),
+    // so it is always silent.
+    if (this.session.path) return true;
     const h = this.session.handle;
     if (!h) return false;
     if (!h.queryPermission) return true; // API absent (tests fake)
