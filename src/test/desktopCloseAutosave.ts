@@ -97,14 +97,14 @@ async function run(): Promise<void> {
   //         normal save prompt; the window stays and the change is NOT lost.
   await win.webContents.executeJavaScript(`(() => {
     const pt = window.__pt;
+    clearTimeout(pt.controller.fileSaveTimer); // cancel any pending auto-save so nothing clears dirty under us
     pt.session.path = ${JSON.stringify(unwritablePath)}; // parent dir missing -> write fails
-    pt.session.dirty = false;
-    pt.jumpVia({ page: 1, yRatio: 0.6 }, 'failwrite-change'); // -> dirty
+    pt.session.dirty = true; // an unsaved change is pending
     return pt.session.dirty;
   })()`);
   const promptsBeforeFail = prompts.length;
   win.close(); // sync write fails -> beforeunload preventDefault -> prompt (Cancel keeps it)
-  await sleep(1500);
+  await sleep(1000);
   check('a FAILED background write brings back the normal save prompt',
     prompts.length > promptsBeforeFail && prompts.includes(SAVE_PROMPT),
     `prompts=${prompts.length}`);
