@@ -86,6 +86,39 @@ async function run(): Promise<void> {
       check(`${name} rows share one left edge (spread ${leftSpread.toFixed(2)}px)`, leftSpread <= EPS);
     }
 
+    // ---- panel headers share one vertical text position ---------------
+    const headTop = () => page.evaluate(() => {
+      const textTop = (el?: Element | null): number | null => {
+        if (!el) return null;
+        const rg = document.createRange(); rg.selectNodeContents(el);
+        return rg.getBoundingClientRect().top; // the glyph box, not the container
+      };
+      const label = (root: string, txt: string) =>
+        [...document.querySelectorAll(`${root} button, ${root} span`)]
+          .find((e) => e.textContent?.trim() === txt);
+      return {
+        outline: textTop(label('#navCol', 'Outline')),
+        trails: textTop(label('#stacksCol', 'Trails')),
+        history: textTop(label('#sideCol', 'History')),
+      };
+    });
+    const h1 = await headTop();
+    console.log(`\nheader label text-top: Outline=${h1.outline?.toFixed(2)} `
+      + `Trails=${h1.trails?.toFixed(2)} History=${h1.history?.toFixed(2)}`);
+    const tops = [h1.outline, h1.trails, h1.history].filter((v): v is number => v != null);
+    if (tops.length === 3) {
+      const spread = Math.max(...tops) - Math.min(...tops);
+      check(`the three panel header labels share one vertical text position (spread ${spread.toFixed(2)}px)`,
+        spread <= EPS, `Outline ${h1.outline!.toFixed(1)} / Trails ${h1.trails!.toFixed(1)} / History ${h1.history!.toFixed(1)}`);
+    }
+    // the active-tab underline must not move the label when it goes inactive
+    await page.locator('#navCol button', { hasText: 'Pages' }).first().click().catch(() => { /* fine */ });
+    const h2 = await headTop();
+    if (h1.outline != null && h2.outline != null) {
+      check(`the Outline label doesn't move when its tab goes inactive (${Math.abs(h2.outline - h1.outline).toFixed(2)}px)`,
+        Math.abs(h2.outline - h1.outline) <= EPS);
+    }
+
     await page.evaluate(() => {
       (window as never as { __pt: { session: { dirty: boolean } } }).__pt.session.dirty = false;
     });
