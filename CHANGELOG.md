@@ -3,7 +3,7 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
-## 0.5.17
+## 0.5.18
 
 - Opening a reading session now behaves the same however you open it.
   Before, dragging a session file onto the window or using "Load
