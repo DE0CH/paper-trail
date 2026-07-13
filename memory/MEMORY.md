@@ -39,6 +39,9 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   box: git/gh/edits only; no builds, no app runs, no media processing
   (OOM-crashed); ALL computation via GitHub Actions.
 - MERGE with --no-ff, never cherry-pick.
+- [Parallel CI-bound TDD](tdd-parallel-ci.md) — run fix-reverted (red)
+  and fix-applied (green) variants concurrently; use a focused
+  single-test workflow, not the full pyramid, for fast iteration.
 - [Flakes are bug reports](flakes-are-bug-reports.md) — root-cause and
   pin with a deterministic test.
 - [Existing components over custom](existing-components-over-custom.md)
