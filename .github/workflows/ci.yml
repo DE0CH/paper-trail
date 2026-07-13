@@ -288,6 +288,11 @@ jobs:
         shell: bash
         run: node build-node/test/updateWinCorruptDownload.js
 
+      - name: Reopening DURING the quit-install never flash-closes
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinOpenDuringInstall.js
+
   mac:
     strategy:
       fail-fast: false
@@ -545,4 +550,8 @@ jobs:
       - name: Auto-update install test (Squirrel, signed builds only)
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacInstall.js
+
+      - name: Reopening DURING the mac quit-install is safe and silent
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacOpenDuringInstall.js
 
