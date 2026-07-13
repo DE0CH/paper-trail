@@ -1,6 +1,7 @@
-# Dev-iteration only: runs the measured alignment guard on the bottom-hug
-# branch so the fix can be watched red->green fast. Never fires on main.
-# Delete at merge.
+# Dev-iteration only: runs the browser suite on the UI-overhaul branch so
+# the rem/alignment fix can be watched red->green fast, and to prove the
+# global size change didn't regress any size-sensitive layout test.
+# Never fires on main. Delete at merge.
 name: Focus align
 on:
   push:
@@ -25,5 +26,32 @@ jobs:
             sleep 0.5
           done
           node build-node/tools/geometry.js
-      - name: Measured alignment guard (row-label centring)
+      - name: Measured alignment guard (row labels + zoom control)
         run: node build-node/test/uiAlignment.js
+      - name: Panel rows and headers share one layout system
+        if: ${{ !cancelled() }}
+        run: node build-node/test/trailRowLayout.js
+      - name: No stray focus rings
+        if: ${{ !cancelled() }}
+        run: node build-node/test/focusRing.js
+      - name: Preview popup stays inside the window
+        if: ${{ !cancelled() }}
+        run: node build-node/test/previewClamp.js
+      - name: Preview survives an annotation-layer rebuild
+        if: ${{ !cancelled() }}
+        run: node build-node/test/previewRebuild.js
+      - name: Native dark scrollbars
+        if: ${{ !cancelled() }}
+        run: node build-node/test/darkScrollbars.js
+      - name: Browser e2e suite
+        if: ${{ !cancelled() }}
+        run: node build-node/test/e2e.js
+      - name: Browser edge cases
+        if: ${{ !cancelled() }}
+        run: node build-node/test/e2eEdges.js
+      - name: Search entries commit on the right actions
+        if: ${{ !cancelled() }}
+        run: node build-node/test/searchCommitState.js
+      - name: The rename input never shifts the text
+        if: ${{ !cancelled() }}
+        run: node build-node/test/renameNoShift.js

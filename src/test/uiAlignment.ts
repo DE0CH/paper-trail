@@ -40,6 +40,7 @@ async function run(): Promise<void> {
       const controls = [...el.querySelectorAll('button, input, a')] as HTMLElement[];
       return {
         barTop: r.top, barBottom: r.bottom, barH: r.height,
+        borderBottom: parseFloat(getComputedStyle(el).borderBottomWidth) || 0,
         items: controls.map((c) => {
           const cr = c.getBoundingClientRect();
           return {
@@ -59,8 +60,12 @@ async function run(): Promise<void> {
     const hSpread = Math.max(...hs) - Math.min(...hs);
     check(`toolbar controls all share one height (spread ${hSpread.toFixed(2)}px)`,
       hSpread <= EPS, `heights ${hs.map((h) => h.toFixed(1)).join(', ')}`);
+    // the toolbar's 1px bottom border is a divider, not part of the row:
+    // controls are centred in the CONTENT box above it, so measure against
+    // that (barBottom minus the border) or every control reads 1px "low".
+    const barContentBottom = bar.barBottom - bar.borderBottom;
     const worstCenter = Math.max(...bar.items.map((i: Box) =>
-      Math.abs((i.top - bar.barTop) - (bar.barBottom - i.bottom))));
+      Math.abs((i.top - bar.barTop) - (barContentBottom - i.bottom))));
     check(`toolbar controls are vertically centred (worst top/bottom gap diff ${worstCenter.toFixed(2)}px)`,
       worstCenter <= EPS);
 
