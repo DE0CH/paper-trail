@@ -250,6 +250,21 @@ jobs:
         shell: bash
         run: node build-node/test/updateWinOpenAfterUpdate.js
 
+      - name: Resilience — hard kill during the download
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinKillDuringDownload.js
+
+      - name: Resilience — hard kill during the install
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinKillDuringInstall.js
+
+      - name: Resilience — a corrupt download is refused
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinCorruptDownload.js
+
   mac:
     strategy:
       fail-fast: false
