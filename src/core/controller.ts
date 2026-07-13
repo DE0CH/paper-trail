@@ -759,9 +759,14 @@ export class Controller {
     const yr = await this.search.matchYRatio(m);
     const pos: Pos = { page: m.page, yRatio: Math.max(0, yr - 0.05) };
     const label = `\u201c${this.search.query}\u201d`;
-    // Uncommitted (searchEntry set) \u21d2 move it to this match; committed
-    // (null, after a committing action) \u21d2 push a fresh entry.
-    if (this.searchEntry) {
+    // Uncommitted \u21d2 move the existing entry to this match; committed
+    // (searchEntry null, after a committing action) \u21d2 push a fresh one.
+    // The identity check is belt-and-suspenders: should some future
+    // cursor-moving action ever forget its commitSearch() hook, this
+    // falls to the else branch (a clean fresh entry) instead of writing
+    // the label onto searchEntry while the position lands on a different
+    // current entry.
+    if (this.searchEntry && this.hist.current === this.searchEntry) {
       // Iterating matches: move the existing search entry along instead of
       // pushing one entry per match.
       this.searchEntry.label = label;
