@@ -101,12 +101,17 @@ function serveFeed(): http.Server {
   return server;
 }
 
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-resil-'));
-
+// A FRESH profile per launch: the single-instance lock lives in
+// PT_USERDATA, so reusing it across a force-killed instance would make
+// the next launch see the (briefly lingering) lock and quit instead of
+// downloading. The updater's pending cache is keyed by
+// updaterCacheDirName (~/Library/Caches), NOT PT_USERDATA, so it stays
+// shared across launches — which is exactly what the partial-recovery
+// case needs.
 function baseEnv(): Record<string, string> {
   return {
     ...process.env as Record<string, string>,
-    PT_USERDATA: userData,
+    PT_USERDATA: fs.mkdtempSync(path.join(os.tmpdir(), 'pt-resil-ud-')),
     PT_SHOT: '1', // never steal focus on the runner
     PT_UPDATE_URL: `http://127.0.0.1:${PORT}`,
   };
@@ -155,7 +160,8 @@ async function run(): Promise<void> {
     { recursive: true, force: true });
 
   // A reading session the interruptions must never touch.
-  const session = path.join(userData, 'resilience.ptl');
+  const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-resil-sess-'));
+  const session = path.join(sessionDir, 'resilience.ptl');
   const sessionBody = 'paper-trail-session v1\npdf WStarCats.pdf\nh 1 0 start\n';
   fs.writeFileSync(session, sessionBody);
 
