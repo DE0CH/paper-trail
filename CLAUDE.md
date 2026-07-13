@@ -3,6 +3,20 @@
 Decisions made by the owner during development. Follow them; don't
 re-litigate without asking.
 
+## Owner working memory (auto-loaded)
+
+The owner's project memory is imported below so it loads into context even
+in cloud sessions that lack the local `~/.claude` memory symlink. The
+files live in `memory/` (git-tracked); `MEMORY.md` is the index and points
+to the topic files, which you can `Read` on demand.
+
+@memory/MEMORY.md
+
+Some rules in this file and in memory are **local-machine-specific** (the
+old 4 GB "orchestrator-only" box: no local builds/tests/media; ssh-agent
+signing; the `~/.claude` memory symlink). Those don't all apply in the
+cloud — see `docs/handoff.md` §6 for what carries over and what doesn't.
+
 ## Product & naming
 - User-facing name is **Paper Trail**. UI copy says *trail*, *branch*,
   *reading session* — never data-structure jargon like "stack" or "state"

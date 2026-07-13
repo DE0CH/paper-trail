@@ -87,10 +87,13 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   <session>.jsonl, gzipped) into docs/transcripts/ BEFORE compaction;
   commit it. Naming: session-N.
 - Commit per feature/iteration; draft commit before debugging. Commits
-  are UNSIGNED (2026-07-13): owner had me remove user.signingkey +
-  commit.gpgsign/tag.gpgsign from ~/.gitconfig after the Goldwarden SSH
-  vault stayed locked. No GUI approval step anymore — just commit. (Repo
-  CLAUDE.md still says "signed commits via Bitwarden" — stale.)
+  are SIGNED via the Bitwarden/Goldwarden ssh-agent: gitconfig has
+  commit.gpgsign+tag.gpgsign=true, gpg.format=ssh, signingkey
+  ~/.ssh/id_ed25519_signing.pub, and the PRIVATE key is served by the
+  ssh-agent (SSH_AUTH_SOCK). Signs when the vault is unlocked; on "agent
+  refused operation"/"Couldn't find key in agent" the vault is LOCKED —
+  owner unlocks in the Bitwarden GUI, then retry. In CLOUD sessions
+  signing is automatic (GitHub container key) — just commit.
 - Parallelize with agents/background tasks; final answers at the END of
   the reply; acknowledge every mid-work user message in the very next
   reply. 3-letter file extensions, high-entropy temp names.
