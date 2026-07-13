@@ -22,6 +22,9 @@ matching section into the GitHub Release notes.
 - Windows opened for a document never flash empty first.
 - The reference hover preview opens reliably even while the page is
   still re-rendering.
+- Opening a reading session (.ptl) and then its PDF now keeps the
+  session bound to that file, so auto-save works and Save no longer
+  asks where to put it.
 - The README gained the new logo plus build and coverage badges.
 
 ## 0.5.11
