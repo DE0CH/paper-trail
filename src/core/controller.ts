@@ -174,17 +174,22 @@ export class Controller {
 
     window.addEventListener('beforeunload', (e) => {
       if (!this.docOpen || !this.session.dirty) return;
-      // Autosave target on disk (a bound .ptl path): don't nag — let the
-      // window close AT ONCE and flush the write in the background. The
-      // main process owns the write, so it lands after the window is gone.
-      // (beforeunload can't await, but a path binding is silent-writable
-      // synchronously — canWriteSilently short-circuits on session.path.)
+      // Autosave target on disk (a bound .ptl path): don't nag — flush the
+      // change and close AT ONCE. The write is a synchronous round-trip to
+      // the main process (a tiny .ptl writes in well under a millisecond,
+      // so the close still feels instant); on success the window closes, on
+      // a failed write we fall through to the normal save prompt below.
+      // beforeunload can't await, but a path binding is silent-writable
+      // synchronously (canWriteSilently short-circuits on session.path).
       if (this.session.path && window.ptDesktop?.saveSessionOnClose) {
-        window.ptDesktop.saveSessionOnClose(
+        const ok = window.ptDesktop.saveSessionOnClose(
           this.session.path, serializeProgress(this.progressFileObject()));
-        return; // no preventDefault → the window closes immediately
+        if (ok) { this.session.dirty = false; return; } // saved silently — close now
+        // The background write FAILED (unexpected — probably a bug). Never
+        // lose the change: fall through to the normal save prompt so the
+        // user resolves it with Save / Don't Save as usual.
       }
-      // No silent target: warn so unsaved reading progress isn't lost.
+      // No silent target (or a failed silent write): warn before closing.
       e.preventDefault();
     });
     document.addEventListener('visibilitychange', () => {

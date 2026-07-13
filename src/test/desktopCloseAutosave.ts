@@ -26,6 +26,9 @@ require(path.resolve(__dirname, '..', 'desktop', 'main.js'));
 const SAVE_PROMPT = 'Do you want to save your reading session?';
 const ptlPath = path.join(
   fs.mkdtempSync(path.join(os.tmpdir(), 'pt-closefile-')), 'reading.ptl');
+// A path whose parent directory does not exist: writeFileSync fails, so the
+// close-flush fails and must fall back to the normal save prompt.
+const unwritablePath = path.join(os.tmpdir(), 'pt-close-NO-SUCH-DIR', 'nested', 'reading.ptl');
 
 // Record every native prompt; answer Cancel (2) so a prompt that DOES fire
 // leaves the window open — we keep driving instead of losing it.
@@ -90,7 +93,30 @@ async function run(): Promise<void> {
     !win.isDestroyed());
   if (win.isDestroyed()) return;
 
-  // ---- 2) feature: a PATH-BOUND session closes with NO prompt + bg save ----
+  // ---- 2) FAILURE: a path-bound close whose write FAILS falls back to the
+  //         normal save prompt; the window stays and the change is NOT lost.
+  await win.webContents.executeJavaScript(`(() => {
+    const pt = window.__pt;
+    pt.session.path = ${JSON.stringify(unwritablePath)}; // parent dir missing -> write fails
+    pt.session.dirty = false;
+    pt.jumpVia({ page: 1, yRatio: 0.6 }, 'failwrite-change'); // -> dirty
+    return pt.session.dirty;
+  })()`);
+  const promptsBeforeFail = prompts.length;
+  win.close(); // sync write fails -> beforeunload preventDefault -> prompt (Cancel keeps it)
+  await sleep(1500);
+  check('a FAILED background write brings back the normal save prompt',
+    prompts.length > promptsBeforeFail && prompts.includes(SAVE_PROMPT),
+    `prompts=${prompts.length}`);
+  check('after a failed write the window stayed open (change not lost)',
+    !win.isDestroyed());
+  const stillDirty = await win.webContents
+    .executeJavaScript('window.__pt.session.dirty').catch(() => false);
+  check('after a failed write the unsaved change is preserved (still dirty)',
+    stillDirty === true, `dirty=${stillDirty}`);
+  if (win.isDestroyed()) return;
+
+  // ---- 3) SUCCESS: a PATH-BOUND session closes with NO prompt + bg save ----
   fs.rmSync(ptlPath, { force: true });
   await win.webContents.executeJavaScript(`(() => {
     const pt = window.__pt;

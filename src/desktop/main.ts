@@ -907,14 +907,16 @@ ipcMain.handle('pt-save-session-to-path', async (
 // session is closing: the renderer hands us the bytes during beforeunload
 // and closes at once; we write the file here, in the main process, so the
 // change lands even though the window is already gone (no save prompt).
-ipcMain.on('pt-save-session-on-close', (_event, req: { path: string; text: string }) => {
-  // Synchronous on purpose: the window is already gone (the user saw an
-  // instant close), and closing the LAST window quits the app — a sync
-  // write guarantees the flush lands before the process exits.
+ipcMain.on('pt-save-session-on-close', (event, req: { path: string; text: string }) => {
+  // Synchronous round-trip: the renderer waits for the result during
+  // beforeunload so it can close on success or keep the window (normal
+  // save prompt) on failure. A small .ptl writes in well under a ms.
   try {
     fs.writeFileSync(req.path, req.text, 'utf8');
+    event.returnValue = true;
   } catch (e) {
     console.warn('could not flush session on close to', req.path, e);
+    event.returnValue = false;
   }
 });
 
