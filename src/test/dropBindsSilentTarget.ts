@@ -55,19 +55,21 @@ async function run(): Promise<void> {
         platform: 'darwin',
         getPathForFile: (f: File) => (/\.ptl$/i.test(f.name) ? ptlPath : ''),
         saveSessionOnClose: (p: string) => { closeSaves.push(p); return true; },
+        // The native "Load session…" dialog hands back the real path.
+        openSessionDialog: async () => ({ name: 'reading.ptl', text: ptlText, path: ptlPath }),
+      };
+      // The desktop path must NOT fall back to the Chromium picker; make it
+      // abort if reached, so pre-fix code (which lacks openSessionDialog)
+      // ends up unbound rather than binding some other way.
+      (window as any).showOpenFilePicker = async () => {
+        const e: any = new Error('abort'); e.name = 'AbortError'; throw e;
       };
       const makePtl = () => new File([ptlText], 'reading.ptl', { type: 'text/plain' });
       const applyIfPending = () => {
         if (!c.session.path && c.confirmSession) c.applyConfirmedSession();
       };
 
-      // (1) Load session… — a picker handle, no path of its own.
-      (window as any).showOpenFilePicker = async () => [{
-        name: 'reading.ptl',
-        getFile: async () => makePtl(),
-        queryPermission: async () => 'granted',
-        requestPermission: async () => 'granted',
-      }];
+      // (1) Load session… — the NATIVE desktop open dialog binds the path.
       await c.requestLoadSession();
       applyIfPending();
       const pickerBound: string | null = c.session.path;

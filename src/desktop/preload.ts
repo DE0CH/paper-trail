@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   getPathForFile: (file: File): string => {
     try { return webUtils.getPathForFile(file); } catch { return ''; }
   },
+  // "Load session…" via a native open dialog: returns the picked .ptl's
+  // text AND its real on-disk path, so the renderer binds a silent-write
+  // target directly (no File System Access handle needed). Null on cancel.
+  openSessionDialog: (): Promise<{ name: string; text: string; path: string } | null> =>
+    ipcRenderer.invoke('pt-open-session-dialog') as Promise<{ name: string; text: string; path: string } | null>,
   onMenu: (cb: (action: string, payload?: string) => void) => {
     ipcRenderer.on('pt-menu', (_event, action: string, payload?: string) => cb(action, payload));
   },

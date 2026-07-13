@@ -887,6 +887,30 @@ ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedNa
   return filePath;
 });
 
+// "Load session…" on the desktop: a NATIVE open dialog (not the Chromium
+// showOpenFilePicker) so we get the file's real on-disk path back with the
+// bytes. The renderer binds that path as the silent-write target directly,
+// so auto-save arms and the window closes with no "save?" prompt — the same
+// as an OS-opened .ptl, and without depending on resolving a File System
+// Access handle's path. Returns null when the user cancels or the read fails.
+ipcMain.handle('pt-open-session-dialog', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
+    properties: ['openFile'],
+    filters: [{ name: 'Reading session', extensions: ['ptl'] }],
+  });
+  const filePath = filePaths[0];
+  if (canceled || !filePath) return null;
+  try {
+    const text = await fs.promises.readFile(filePath, 'utf8');
+    app.addRecentDocument(filePath);
+    return { name: path.basename(filePath), text, path: filePath };
+  } catch (e) {
+    console.warn('could not read session', filePath, e);
+    return null;
+  }
+});
+
 // Silent write-back for a session bound to an on-disk path (an
 // OS-opened .ptl, or one just saved through the shell dialog): auto-save
 // and in-app Save target it directly, no dialog. Returns whether it wrote.

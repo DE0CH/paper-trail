@@ -1194,6 +1194,20 @@ export class Controller {
 
   /** Toolbar / menu entry point: pick a reading-session file. */
   async requestLoadSession(): Promise<void> {
+    // Desktop: a NATIVE open dialog returns the file's real path, so the
+    // session binds a silent-write target directly (auto-save arms, the
+    // window closes with no prompt) — no dependency on resolving a File
+    // System Access handle's path. The browser (no shell) keeps the
+    // Chromium picker below and binds via the handle.
+    if (window.ptDesktop?.openSessionDialog) {
+      const picked = await window.ptDesktop.openSessionDialog();
+      if (picked) {
+        const file = new File([picked.text], picked.name, { type: 'text/plain' });
+        // An empty path is treated as unbound — never write to a bad target.
+        await this.openProgressFile(file, null, picked.path || null);
+      }
+      return;
+    }
     if (window.showOpenFilePicker) {
       try {
         const [handle] = await window.showOpenFilePicker({
@@ -1202,10 +1216,7 @@ export class Controller {
             accept: { 'text/plain': [PROGRESS_EXT] },
           }],
         });
-        if (handle) {
-          const file = await handle.getFile();
-          await this.openProgressFile(file, handle, this.desktopPathFor(file));
-        }
+        if (handle) await this.openProgressFile(await handle.getFile(), handle);
         return;
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return;
