@@ -21,6 +21,13 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   they break local tsc; not mine).
 - v0.5.11 = latest release. History: [shipped-versions](shipped-versions.md).
 
+## Active: infra migration (2026-07)
+- [infra-migration-2026-07](infra-migration-2026-07.md) — repo now
+  de0ch-org/paper-trail; CI moving to Depot runners (label map, keep
+  arm/intel legs + Hyper-V jobs on github-hosted); Codecov needs
+  re-linking (fail_ci_if_error stays). Browser-only blockers: escalate
+  to the human, never hack around.
+
 ## Hard rules (owner)
 - NEVER force push — any ref, any reason; append-only, fix forward
   (.claude/settings.json deny rules + hook enforce it).
