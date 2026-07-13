@@ -3,10 +3,23 @@
 // (Open With…, dropping a PDF on the Dock icon, recent documents). No
 // filesystem or Node access is exposed.
 
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('ptDesktop', {
   platform: process.platform,
+  // The on-disk path of a File the renderer already holds (a drop, a
+  // showOpenFilePicker handle's getFile(), an <input> pick). Lets every
+  // open method bind the same silent-write target as an OS-opened file,
+  // so autosave arms and the close-flush writes synchronously — no matter
+  // how the .ptl was opened. Empty string when Electron can't resolve one.
+  getPathForFile: (file: File): string => {
+    try { return webUtils.getPathForFile(file); } catch { return ''; }
+  },
+  // "Load session…" via a native open dialog: returns the picked .ptl's
+  // text AND its real on-disk path, so the renderer binds a silent-write
+  // target directly (no File System Access handle needed). Null on cancel.
+  openSessionDialog: (): Promise<{ name: string; text: string; path: string } | null> =>
+    ipcRenderer.invoke('pt-open-session-dialog') as Promise<{ name: string; text: string; path: string } | null>,
   onMenu: (cb: (action: string, payload?: string) => void) => {
     ipcRenderer.on('pt-menu', (_event, action: string, payload?: string) => cb(action, payload));
   },

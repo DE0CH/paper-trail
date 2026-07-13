@@ -1194,6 +1194,20 @@ export class Controller {
 
   /** Toolbar / menu entry point: pick a reading-session file. */
   async requestLoadSession(): Promise<void> {
+    // Desktop: a NATIVE open dialog returns the file's real path, so the
+    // session binds a silent-write target directly (auto-save arms, the
+    // window closes with no prompt) — no dependency on resolving a File
+    // System Access handle's path. The browser (no shell) keeps the
+    // Chromium picker below and binds via the handle.
+    if (window.ptDesktop?.openSessionDialog) {
+      const picked = await window.ptDesktop.openSessionDialog();
+      if (picked) {
+        const file = new File([picked.text], picked.name, { type: 'text/plain' });
+        // An empty path is treated as unbound — never write to a bad target.
+        await this.openProgressFile(file, null, picked.path || null);
+      }
+      return;
+    }
     if (window.showOpenFilePicker) {
       try {
         const [handle] = await window.showOpenFilePicker({
@@ -1227,7 +1241,10 @@ export class Controller {
           }],
           excludeAcceptAllOption: false,
         });
-        if (handle) await this.openFile(await handle.getFile(), handle);
+        if (handle) {
+          const file = await handle.getFile();
+          await this.openFile(file, handle, this.desktopPathFor(file));
+        }
         return;
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return; // user cancelled
@@ -1259,6 +1276,17 @@ export class Controller {
     this.fileInput.click();
   }
 
+  /**
+   * Desktop only: the on-disk path for a File the renderer already holds
+   * (a drop, a picker handle's getFile()). Binding it as session.path makes
+   * auto-save arm and the close-flush write synchronously — the very same
+   * silent target an OS-opened .ptl gets — no matter HOW the file was
+   * opened. Null off the desktop shell, or when Electron can't resolve one.
+   */
+  private desktopPathFor(file: File): string | null {
+    return window.ptDesktop?.getPathForFile?.(file) || null;
+  }
+
   async openDropped(dt: DataTransfer): Promise<void> {
     const item = dt.items?.[0];
     const f = dt.files?.[0];
@@ -1269,7 +1297,10 @@ export class Controller {
         handle = (await item.getAsFileSystemHandle()) as FileSystemFileHandle | null;
       }
     } catch { /* handle stays null */ }
-    void this.openFile(f, handle);
+    // A dropped file carries its real path in the desktop shell, so a
+    // dropped .ptl binds exactly like an OS-opened one (auto-save + silent
+    // close), not as an unbound "where do I save?" session.
+    void this.openFile(f, handle, this.desktopPathFor(f));
   }
 
   /**
