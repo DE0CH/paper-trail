@@ -93,9 +93,12 @@ function serveFeed(): { server: http.Server; newVersion: string } {
     }
     if (name.endsWith('.zip')) {
       res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': String(zip.length) });
-      // ~14s drip: long enough for the progress bar to read as a real
-      // download and for the canceled run to click Cancel mid-flight.
-      const chunk = Math.ceil(zip.length / 28);
+      // ~24s drip: the download stays visibly in flight long enough that
+      // 'downloading' is trivially caught and — for the canceled run — the
+      // Cancel click always lands MID-download (a shorter drip once
+      // completed before Cancel, so the take ended on "Ready to update"
+      // instead of demonstrating the interruption).
+      const chunk = Math.ceil(zip.length / 48);
       let sent = 0;
       const timer = setInterval(() => {
         if (sent >= zip.length || res.destroyed) { clearInterval(timer); res.end(); return; }
