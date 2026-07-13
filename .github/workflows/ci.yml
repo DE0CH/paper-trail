@@ -123,6 +123,11 @@ jobs:
         shell: bash
         run: node build-node/test/searchCommitState.js
 
+      - name: The rename input never shifts the text (no-jank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renameNoShift.js
+
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
         shell: bash
@@ -372,6 +377,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/searchCommitState.js
+
+      - name: The rename input never shifts the text (no-jank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renameNoShift.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
