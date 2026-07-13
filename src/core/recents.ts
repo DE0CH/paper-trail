@@ -31,12 +31,48 @@ export interface RecentDisplay {
  *      (the first-save case — no duplicate row);
  *   3. else → push a new row.
  */
+// Two handle slots match when both are null, or both point at the same
+// file (isSameEntry). One null and one not never match.
+async function sameSlot(
+  a: FileSystemFileHandle | null,
+  b: FileSystemFileHandle | null,
+): Promise<boolean> {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  return a.isSameEntry(b);
+}
+
 export async function updateRecent(
   list: RecentEntry[],
   incoming: RecentEntry,
 ): Promise<RecentEntry[]> {
-  void list; void incoming;
-  throw new Error('updateRecent not implemented');
+  // 1. exact pair match → refresh timestamp + names.
+  for (const e of list) {
+    if (await sameSlot(e.pdfHandle, incoming.pdfHandle)
+      && await sameSlot(e.sessionFileHandle, incoming.sessionFileHandle)) {
+      e.timestamp = incoming.timestamp;
+      e.pdfName = incoming.pdfName;
+      e.sessionFileName = incoming.sessionFileName;
+      return list;
+    }
+  }
+  // 2. first save: a session arriving for a pdf whose row still has a null
+  //    session slot upgrades that row in place (no duplicate).
+  if (incoming.sessionFileHandle !== null) {
+    for (const e of list) {
+      if (e.sessionFileHandle === null
+        && await sameSlot(e.pdfHandle, incoming.pdfHandle)) {
+        e.sessionFileHandle = incoming.sessionFileHandle;
+        e.sessionFileName = incoming.sessionFileName;
+        e.pdfName = incoming.pdfName;
+        e.timestamp = incoming.timestamp;
+        return list;
+      }
+    }
+  }
+  // 3. otherwise a brand-new row.
+  list.push(incoming);
+  return list;
 }
 
 /**
@@ -45,6 +81,12 @@ export async function updateRecent(
  * (O(n^2) by design — the list is short and this reads plainly).
  */
 export function buildDisplayList(list: RecentEntry[]): RecentDisplay[] {
-  void list;
-  throw new Error('buildDisplayList not implemented');
+  const sorted = [...list].sort((a, b) => b.timestamp - a.timestamp);
+  return sorted.map((entry) => {
+    const shared = sorted.some((o) => o !== entry && o.pdfName === entry.pdfName);
+    const text = shared && entry.sessionFileName
+      ? `${entry.pdfName} — ${entry.sessionFileName}`
+      : entry.pdfName;
+    return { entry, text };
+  });
 }
