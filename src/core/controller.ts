@@ -394,16 +394,22 @@ export class Controller {
     try {
       // Line-oriented plain-text format: small, clear git diffs.
       const text = serializeProgress(this.progressFileObject());
+      let ok = false;
       if (this.session.path && window.ptDesktop?.saveSessionToPath) {
         // Desktop: write straight back to the bound file path (no handle
         // exists for an OS-opened .ptl).
-        await window.ptDesktop.saveSessionToPath(this.session.path, text);
+        ok = await window.ptDesktop.saveSessionToPath(this.session.path, text);
       } else if (this.session.handle) {
         const w = await this.session.handle.createWritable();
         await w.write(text);
         await w.close();
+        ok = true;
       }
-      this.session.dirty = false;
+      // Only a SUCCESSFUL write clears dirty. A failed write — the path
+      // handler returned false, or a handle write threw (skips this line) —
+      // leaves the change dirty so it's never silently lost; the next
+      // auto-save / manual save / close-flush retries it.
+      if (ok) this.session.dirty = false;
     } finally {
       this.session.saving = false;
       this.notify();
