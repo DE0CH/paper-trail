@@ -74,7 +74,6 @@ export class Controller {
 
   private docOpen = false;
   private currentName = '';
-  private currentFp: string | null = null;
   private searchEntry: ReturnType<NavStacks['visit']> | null = null;
   private outline: OutlineNode[] = [];
   private recents: RecentEntry[] = [];
@@ -534,8 +533,12 @@ export class Controller {
         throw e;
       }
       this.session.handle = handle;
-      this.freshSession = false;
-      void this.recordRecent(this.currentPdfHandle, handle, this.currentName, handle.name);
+      // First save of a fresh session: record the now-bound pair (this
+      // upgrades the PDF's session-less recent in place).
+      if (this.freshSession) {
+        this.freshSession = false;
+        void this.recordRecent(this.currentPdfHandle, handle, this.currentName, handle.name);
+      }
     }
     await this.writeProgress();
     this.showToast('Progress saved');
@@ -879,7 +882,6 @@ export class Controller {
       if (!doc) return;
       this.docOpen = true;
       this.currentName = name;
-      this.currentFp = doc.fingerprints?.[0] ?? null;
       this.currentSource = source ?? handle ?? null;
       this.searchEntry = null;
       this.currentPage = 1;
