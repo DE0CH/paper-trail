@@ -300,6 +300,10 @@ function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
     win.webContents.send('pt-open-file', {
       name,
       data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      // The real on-disk path: an OS-opened .ptl binds to it so the
+      // session auto-saves back silently (there is no
+      // FileSystemFileHandle for a file the shell handed us).
+      path: filePath,
     });
     app.addRecentDocument(filePath);
     // macOS: title-bar proxy for the real file behind this window.
@@ -824,6 +828,20 @@ ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedNa
   await fs.promises.writeFile(filePath, req.text, 'utf8');
   app.addRecentDocument(filePath);
   return filePath;
+});
+
+// Silent write-back for a session bound to an on-disk path (an
+// OS-opened .ptl, or one just saved through the shell dialog): auto-save
+// and in-app Save target it directly, no dialog. Returns whether it wrote.
+ipcMain.handle('pt-save-session-to-path', async (
+  _event, req: { path: string; text: string }) => {
+  try {
+    await fs.promises.writeFile(req.path, req.text, 'utf8');
+    return true;
+  } catch (e) {
+    console.warn('could not write session to', req.path, e);
+    return false;
+  }
 });
 
 // The dot in the macOS close button mirrors unsaved session changes.

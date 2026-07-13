@@ -1,0 +1,24 @@
+# Focused dev workflow: build + run ONLY the OS-opened-session path-bind
+# test, for fast red/green iteration on the Depot mirror. The bug and fix
+# are platform-independent (shared IPC/controller logic), so one mac leg
+# proves it; the full ci.yml runs it on windows + mac for the release.
+
+name: session path-bind test
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-macos-latest' || 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: OS-opened session binds to its file path
+        run: npx electron build-node/test/desktopSessionPathBind.js
