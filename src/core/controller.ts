@@ -985,6 +985,12 @@ export class Controller {
     this.pendingProgressHandle = progressHandle;
     this.pendingProgressPath = progressPath;
     this.hist.load(json.state.hist);
+    // Set an explicit, non-bare title so the desktop shell reveals this
+    // window right away. A document-opening window stays hidden until its
+    // title leaves the app name (createWindow's showWhenLoaded reveal);
+    // an OS-opened .ptl has no PDF to load and so never set a title,
+    // leaving the window hidden until the 4s safety timer fired.
+    document.title = `${json.pdf.name || 'Reading session'} — Paper Trail`;
     this.notify();
   }
 

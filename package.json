@@ -21,6 +21,7 @@
     "test:desktop:edges": "electron build-node/test/desktopEdges.js",
     "test:os-open-flash": "electron build-node/test/osOpenFlash.js",
     "test:os-open-derived": "electron build-node/test/osOpenDerivedTitle.js",
+    "test:os-open-session": "electron build-node/test/osOpenSessionReveal.js",
     "test:desktop": "electron build-node/test/desktopSave.js",
     "test:offline": "electron build-node/test/desktopOffline.js",
     "test:autosave": "electron build-node/test/desktopAutosave.js",

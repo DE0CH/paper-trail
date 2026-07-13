@@ -160,6 +160,11 @@ jobs:
         shell: bash
         run: npx electron build-node/test/osOpenDerivedTitle.js
 
+      - name: A double-clicked .ptl session reveals its window at once
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/osOpenSessionReveal.js
+
       - name: Jump List New Window task opens a fresh window
         if: ${{ !cancelled() }}
         shell: bash
@@ -398,6 +403,10 @@ jobs:
       - name: A derived (URL) title never reveals an empty window
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/osOpenDerivedTitle.js
+
+      - name: A double-clicked .ptl session reveals its window at once
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/osOpenSessionReveal.js
 
       - name: Jump List New Window task opens a fresh window
         if: ${{ !cancelled() }}
