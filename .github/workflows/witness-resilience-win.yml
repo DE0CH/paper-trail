@@ -6,11 +6,6 @@ name: Windows update resilience (focused)
 
 on:
   workflow_dispatch: {}
-  # Branch-scoped push trigger: lets this brand-new workflow run on the
-  # mirror (Depot) without being registered on the default branch, which
-  # workflow_dispatch would require. Only ever fires for this dev branch.
-  push:
-    branches: [update-resilience-win]
 
 jobs:
   resilience:
