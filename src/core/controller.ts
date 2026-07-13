@@ -206,6 +206,9 @@ export class Controller {
       // format-level hooks for tests
       progressText: () => serializeProgress(this.progressFileObject()),
       parseProgressText: (t: string) => parseProgress(t),
+      // in-memory search-commit state: true = uncommitted (the next
+      // find-next overwrites this entry); false = committed/none.
+      searchUncommitted: () => this.searchEntry !== null,
     };
   }
 
@@ -396,6 +399,7 @@ export class Controller {
 
   async saveProgress({ viaShellDialog = false } = {}): Promise<void> {
     if (!this.docOpen) return;
+    this.commitSearch(); // explicit Save commits; auto-save (writeProgress) must NOT
     // Desktop: a session bound to an on-disk path (an OS-opened .ptl, or
     // one already saved through the shell) writes straight back to it —
     // no dialog.
@@ -500,6 +504,7 @@ export class Controller {
    * history into a new stack first.
    */
   jumpVia(pos: Pos, label: string, fork = false, { captureLeave = true } = {}): void {
+    this.commitSearch(); // followed a link/outline/page-jump/mark: found it, moved on
     // Real jumps pin the position you left onto the entry you were on,
     // so Back returns exactly there. Marking is not a jump — you're
     // already at `pos` — and must not rewrite the previous anchor.
@@ -525,6 +530,7 @@ export class Controller {
 
   goBack(): void {
     if (!this.docOpen || !this.hist.canBack()) return;
+    this.commitSearch();
     this.hist.updateCurrentPos(this.viewer.currentPosition());
     const n = this.hist.back();
     if (n) this.viewer.scrollTo(n.pos);
@@ -532,6 +538,7 @@ export class Controller {
 
   goForward(): void {
     if (!this.docOpen || !this.hist.canForward()) return;
+    this.commitSearch();
     this.hist.updateCurrentPos(this.viewer.currentPosition());
     const n = this.hist.forward();
     if (n) this.viewer.scrollTo(n.pos);
@@ -539,6 +546,7 @@ export class Controller {
 
   histEntryClick(i: number): void {
     if (!this.docOpen) return; // read-only preview while a session waits for its PDF
+    this.commitSearch();
     if (i === this.hist.active.index) {
       this.viewer.scrollTo(this.hist.current.pos);
       return;
@@ -558,6 +566,7 @@ export class Controller {
 
   stackSwitch(id: number): void {
     if (id === this.hist.activeId) return;
+    this.commitSearch();
     if (!this.docOpen) {
       // preview mode: allow browsing trails, but never touch positions
       this.hist.switchStack(id);
@@ -570,18 +579,21 @@ export class Controller {
 
   stackClose(id: number): void {
     if (!this.docOpen) return;
+    this.commitSearch();
     const wasActive = this.hist.closeStack(id);
     if (wasActive && this.hist.current) this.viewer.scrollTo(this.hist.current.pos);
   }
 
   stackRename(id: number, name: string): void {
     if (!this.docOpen) return;
+    this.commitSearch();
     this.hist.renameStack(id, name);
     this.notify(); // restore the row even if the name was rejected
   }
 
   entryRename(i: number, label: string): void {
     if (!this.docOpen) return;
+    this.commitSearch(); // naming an entry = deciding to keep it, i.e. moved on
     this.hist.renameEntry(i, label);
     this.notify();
   }
@@ -589,6 +601,7 @@ export class Controller {
   /** Trails-panel +: start a fresh trail at the current position. */
   stackNew(): void {
     if (!this.docOpen) return;
+    this.commitSearch();
     this.hist.newStack(this.viewer.currentPosition());
     this.notify();
   }
@@ -596,6 +609,7 @@ export class Controller {
   /** Duplicate a trail; the copy becomes the active one. */
   stackDuplicate(id: number): void {
     if (!this.docOpen) return;
+    this.commitSearch();
     this.hist.duplicateStack(id);
     this.notify();
   }
@@ -607,6 +621,7 @@ export class Controller {
 
   clearHistory(): void {
     if (!this.docOpen) return;
+    this.commitSearch(); // history is being replaced — drop the dangling pointer
     this.hist.clearAll();
     this.hist.updateCurrentPos(this.viewer.currentPosition());
     this.notify();
@@ -619,6 +634,7 @@ export class Controller {
    */
   undoHist(): void {
     if (!this.docOpen) return;
+    this.commitSearch(); // undo replaces the history snapshot the entry lives in
     if (this.lastReplaceAction === 'undoable' && this.replaceUndoSlot) {
       void this.applyReplaceSlot(this.replaceUndoSlot, 'redoable');
       return;
@@ -629,6 +645,7 @@ export class Controller {
 
   redoHist(): void {
     if (!this.docOpen) return;
+    this.commitSearch();
     if (this.lastReplaceAction === 'redoable' && this.replaceRedoSlot) {
       void this.applyReplaceSlot(this.replaceRedoSlot, 'undoable');
       return;
@@ -723,6 +740,18 @@ export class Controller {
     if (jump && q && this.search.matches.length) await this.gotoMatch(1);
   }
 
+  /**
+   * Commit the current (uncommitted) search entry: freeze it in history
+   * and drop the pointer, so the NEXT search adds a fresh entry instead of
+   * moving this one. Called from an explicit, enumerated list of committing
+   * actions (see the call sites) \u2014 deliberately NOT from find-next, the
+   * search itself, scrolling, zooming, or AUTO-SAVE, which all leave the
+   * entry uncommitted so repeated find-next keeps overwriting it.
+   */
+  commitSearch(): void {
+    this.searchEntry = null;
+  }
+
   async gotoMatch(dir: 1 | -1): Promise<void> {
     const m = this.search.step(dir);
     this.notify();
@@ -730,6 +759,13 @@ export class Controller {
     const yr = await this.search.matchYRatio(m);
     const pos: Pos = { page: m.page, yRatio: Math.max(0, yr - 0.05) };
     const label = `\u201c${this.search.query}\u201d`;
+    // Uncommitted \u21d2 move the existing entry to this match; committed
+    // (searchEntry null, after a committing action) \u21d2 push a fresh one.
+    // The identity check is belt-and-suspenders: should some future
+    // cursor-moving action ever forget its commitSearch() hook, this
+    // falls to the else branch (a clean fresh entry) instead of writing
+    // the label onto searchEntry while the position lands on a different
+    // current entry.
     if (this.searchEntry && this.hist.current === this.searchEntry) {
       // Iterating matches: move the existing search entry along instead of
       // pushing one entry per match.
@@ -1065,12 +1101,14 @@ export class Controller {
   /** Re-anchor a history entry to the current reading position. */
   entrySetPos(i: number): void {
     if (!this.docOpen) return;
+    this.commitSearch(); // re-anchoring mutates the history the entry lives in
     this.hist.setEntryPos(i, this.viewer.currentPosition());
   }
 
   /** Remove one entry from the active trail (its × button). */
   entryRemove(i: number): void {
     if (!this.docOpen) return;
+    this.commitSearch(); // mutating the history the entry lives in
     this.hist.removeEntry(i);
     this.notify();
   }
@@ -1114,6 +1152,7 @@ export class Controller {
       await this.openFile(file, handle);
       return;
     }
+    this.commitSearch(); // replacing the document: the search is done
     const prevSlot: ReplaceSlot | null = this.currentSource
       ? { source: this.currentSource, state: this.serializeState() }
       : null;

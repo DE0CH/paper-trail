@@ -18,6 +18,7 @@ export default function SearchBar({ snap, searchRef, open, onClose }: {
 
   const close = () => {
     if (searchRef.current) searchRef.current.value = '';
+    controller.commitSearch(); // dismissing the find bar (Esc / ×): found it (or gave up), moved on
     void controller.runSearch('', { jump: false });
     onClose();
   };
