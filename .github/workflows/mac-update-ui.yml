@@ -1,8 +1,9 @@
-# Records the Software Update window's state walkthrough on a mac
-# runner (manual trigger) for owner review: the real update.html UI
-# driven through checking / available / downloading / ready / up to
-# date / error. Uploads capturePage frames (always) and a native
-# screencapture movie (best effort).
+# Full-display recording of the Sparkle-style Software Update WINDOW on
+# a mac runner (manual trigger) for owner review. Two videos: a FINISHED
+# update and a CANCELED one. macos-14 (real display; grants the
+# osascript/cliclick UI scripting; no macOS-15 ScreenCaptureKit consent).
+# The running app and the update zip are Developer ID SIGNED so Squirrel
+# will stage the update and the flow reaches "Ready to update".
 
 name: macOS update UI recording
 
@@ -11,7 +12,7 @@ on:
 
 jobs:
   record:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -20,21 +21,56 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      - name: Serve the web build
-        run: |
-          node build-node/node/server.js 8377 &
-          for i in $(seq 1 60); do
-            curl -s -o /dev/null http://127.0.0.1:8377/ && break
-            sleep 0.5
-          done
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
 
-      - name: Drive the update window through its states, recording
-        run: npx electron build-node/tools/updateUiDemo.js
+      # zip (not dir): the zip target bakes app-update.yml into the
+      # bundle before signing (dir omits it -> ERR_UPDATER_CHANNEL_FILE_
+      # NOT_FOUND). The unpacked .app it leaves in dist-electron is what
+      # the recorder runs.
+      - name: Package the app (signed, with update metadata)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none
+
+      - name: Build the next version into the update feed (a real signed zip)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));const [a,b]=p.version.split('.').map(Number);p.version=a+'.'+(b+1)+'.0';fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none -c.directories.output=dist-update-feed
+          git checkout -- package.json package-lock.json
+
+      - name: Install the cursor driver and the frame extractor
+        run: brew install cliclick ffmpeg
+
+      - name: Record — FINISHED update
+        run: node build-node/tools/updateWindowRecord.js finished
+
+      - name: Record — CANCELED update
+        if: ${{ !cancelled() }}
+        run: node build-node/tools/updateWindowRecord.js canceled
+
+      - name: Extract review frames
+        if: always()
+        run: |
+          for m in finished canceled; do
+            if [ -f "update-window-$m.mov" ]; then
+              mkdir -p "frames-$m"
+              ffmpeg -i "update-window-$m.mov" -vf fps=2 "frames-$m/frame%04d.png"
+            fi
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mac-update-ui
+          name: sparkle-update-window
           path: |
-            update-ui-frames/
-            update-ui.mov
+            update-window-finished.mov
+            update-window-canceled.mov
+            frames-finished/
+            frames-canceled/
+            ff-finished.log
+            ff-canceled.log
