@@ -7,9 +7,10 @@ name: CI
 
 on:
   push:
-    # every branch — feature branches get the same verdicts as main;
-    # tags are excluded (the release workflow runs this via workflow_call)
-    branches: ['**']
+    # main only — per-branch push CI was too costly (owner). Feature
+    # branches validate on demand via workflow_dispatch or a push to the
+    # de0ch-org Depot mirror; tags run this via the release workflow_call.
+    branches: [main]
   pull_request: {}
   workflow_dispatch: {}
   # the release workflow runs this full pyramid first and publishes
