@@ -32,6 +32,14 @@ the whole pyramid. Keep it on the working branch as a dev aid; the
 authoritative gate stays the full ci.yml via the release, so it need
 not merge to main.
 
+**Per-platform red is mandatory** (owner, 2026-07-13): a bug that
+"affects mac and windows" must be witnessed RED on EACH platform
+separately — write/run the test on macOS AND on Windows and watch each
+go red before the fix, then green after. Never infer "the fix is in
+shared code so both are covered"; that's not TDD. If one platform's
+"red" run comes back green without the fix, that platform isn't
+affected — say so with that evidence.
+
 **How to apply:** still WRITE the test first and confirm it targets the
 real bug; just don't gate the fix push on seeing red land — fan the two
 runs out together. Also: sanity-check the test TERMINATES in bounded
