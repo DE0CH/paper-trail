@@ -109,6 +109,11 @@ declare global {
       setDocumentEdited: (edited: boolean) => void;
       saveSessionFallback: (text: string, suggestedName: string) => Promise<string | null>;
       saveSessionToPath?: (path: string, text: string) => Promise<boolean>;
+      // Flush on window close: the main process writes the bound path so an
+      // autosaved session closes instantly with no prompt. Returns whether
+      // the write succeeded; a failed write (unexpected — likely a bug)
+      // falls back to the normal "save?" prompt so nothing is lost.
+      saveSessionOnClose?: (path: string, text: string) => boolean;
       openInNewWindow: (name: string, data: ArrayBuffer) => void;
     };
     __pt?: unknown;

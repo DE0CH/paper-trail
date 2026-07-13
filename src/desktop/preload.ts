@@ -35,4 +35,10 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   openInNewWindow: (name: string, data: ArrayBuffer) => {
     ipcRenderer.send('pt-open-new-window', { name, data });
   },
+  // Flush as the window closes: a synchronous round-trip so the renderer
+  // learns whether the write succeeded before it decides whether to close.
+  // A tiny .ptl write is sub-millisecond, so the close still feels instant;
+  // on failure beforeunload falls back to the normal save prompt.
+  saveSessionOnClose: (filePath: string, text: string): boolean =>
+    ipcRenderer.sendSync('pt-save-session-on-close', { path: filePath, text }) as boolean,
 });

@@ -173,11 +173,24 @@ export class Controller {
     }, { passive: false });
 
     window.addEventListener('beforeunload', (e) => {
-      // Warn about unsaved reading progress. When bound to a progress file
-      // this only triggers if an auto-save hasn't landed yet.
-      if (this.docOpen && this.session.dirty) {
-        e.preventDefault();
+      if (!this.docOpen || !this.session.dirty) return;
+      // Autosave target on disk (a bound .ptl path): don't nag — flush the
+      // change and close AT ONCE. The write is a synchronous round-trip to
+      // the main process (a tiny .ptl writes in well under a millisecond,
+      // so the close still feels instant); on success the window closes, on
+      // a failed write we fall through to the normal save prompt below.
+      // beforeunload can't await, but a path binding is silent-writable
+      // synchronously (canWriteSilently short-circuits on session.path).
+      if (this.session.path && window.ptDesktop?.saveSessionOnClose) {
+        const ok = window.ptDesktop.saveSessionOnClose(
+          this.session.path, serializeProgress(this.progressFileObject()));
+        if (ok) { this.session.dirty = false; return; } // saved silently — close now
+        // The background write FAILED (unexpected — probably a bug). Never
+        // lose the change: fall through to the normal save prompt so the
+        // user resolves it with Save / Don't Save as usual.
       }
+      // No silent target (or a failed silent write): warn before closing.
+      e.preventDefault();
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {
@@ -381,16 +394,22 @@ export class Controller {
     try {
       // Line-oriented plain-text format: small, clear git diffs.
       const text = serializeProgress(this.progressFileObject());
+      let ok = false;
       if (this.session.path && window.ptDesktop?.saveSessionToPath) {
         // Desktop: write straight back to the bound file path (no handle
         // exists for an OS-opened .ptl).
-        await window.ptDesktop.saveSessionToPath(this.session.path, text);
+        ok = await window.ptDesktop.saveSessionToPath(this.session.path, text);
       } else if (this.session.handle) {
         const w = await this.session.handle.createWritable();
         await w.write(text);
         await w.close();
+        ok = true;
       }
-      this.session.dirty = false;
+      // Only a SUCCESSFUL write clears dirty. A failed write — the path
+      // handler returned false, or a handle write threw (skips this line) —
+      // leaves the change dirty so it's never silently lost; the next
+      // auto-save / manual save / close-flush retries it.
+      if (ok) this.session.dirty = false;
     } finally {
       this.session.saving = false;
       this.notify();
