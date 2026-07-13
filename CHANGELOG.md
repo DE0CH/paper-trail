@@ -3,6 +3,28 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.14
+
+- In the macOS update window, Cancel (and closing the window) now simply
+  dismisses it and lets the download keep running in the background,
+  instead of stopping it — updates download automatically, so there's
+  nothing to abort; the next check goes straight to "Restart to Update"
+  once it's ready.
+- On Windows, reopening Paper Trail while an update is installing no
+  longer flashes an empty, broken-looking window: it quietly keeps the
+  current version running and applies the update the next time you quit.
+- Closing a window whose reading session auto-saves no longer asks
+  whether to save — it closes right away and writes your changes in the
+  background. If a save ever fails, the window returns with the normal
+  save prompt so nothing is lost.
+- Double-clicking a reading session (.ptl) now shows its window
+  immediately instead of after a brief delay.
+- When searching, pressing Enter to step through matches keeps a single
+  entry in your history; the next search, after you do something else,
+  starts a fresh one.
+- The rename box no longer shifts the text sideways when you start
+  editing.
+
 ## 0.5.13
 
 - The macOS "Check for Updates…" flow is now a proper update window,
