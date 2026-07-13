@@ -83,10 +83,28 @@ on their github labels. Guard every release/publish/deploy job with
 `if: ${{ github.repository_owner == 'de0ch' }}` so the mirror NEVER
 re-publishes or deploys — only the public repo does.
 
-**Codecov**: linked to de0ch/paper-trail; failed with "Repository not
-found" only while the repo was briefly at de0ch-org. Back at de0ch it
-should work again (ci.yml step stays `fail_ci_if_error: true`, owner's
-choice — do not weaken).
+**CI philosophy (owner, 2026-07-13):** DEV = fast iteration (feature
+branches → Depot mirror); MAIN + RELEASE = quality assurance — run
+EVERYTHING on GitHub, SIMPLE setup, NO convoluted workflow logic
+(complicated CI logic hurts readability + breeds bugs), even redundantly
+(release.yml re-runs the full ci.yml pyramid on purpose) — quality at the
+expense of workflow time. So prefer SIMPLIFYING the workflow over adding
+clever conditionals; keep main's outcome "everything on GitHub."
+
+**Depot split (owner policy):** WINDOWS always on GitHub-hosted, never
+Depot — Depot's ephemeral Windows has no interactive desktop session so
+the electron desktop-GUI e2e tests can't launch there. ci.yml windows/
+windows-update jobs are just `runs-on: ${{ matrix.runner }}` (no Depot
+conditional); Mac keeps the owner-keyed `depot-macos-latest`/`macos-latest`.
+Feature branch on the mirror → Mac/Linux Depot + Windows github-hosted;
+main (de0ch, GitHub) → everything github-hosted.
+
+**Codecov**: linked to de0ch/paper-trail (public). The private mirror
+de0ch-org isn't registered → upload returns "Repository not found". The
+step keeps `fail_ci_if_error: true` (owner's choice — do not weaken) but
+is GATED to the canonical repo: `if: … && github.repository ==
+'de0ch/paper-trail'`, so it runs on origin/main and is skipped on the
+mirror (Depot) rather than failing every mirror Windows job.
 
 **Browser-only blockers — escalate, don't hack** (owner rule): GitHub
 org settings, the Depot dashboard, Depot App permissions, billing can't
