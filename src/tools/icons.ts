@@ -7,10 +7,10 @@
 //     macOS composes its own, see afterPackMac)
 // Every surface shares the same plated icon: the trail on the dark
 // squircle, identical on macOS, Windows, and the web.
-// NOT generated here: build/installer.ico and build/uninstaller.ico
-// are NSIS's stock modern-install/-uninstall icons (zlib licensed) —
-// the standard, instantly recognizable installer look — committed
-// verbatim, never drawn.
+//   build/installer.ico  (the installer package icon: a kraft shipping
+//     box with the app-icon badge on its front — Windows only)
+// NOT generated here: build/uninstaller.ico is NSIS's stock modern-
+// uninstall icon (zlib licensed), committed verbatim.
 // The generated binaries are committed so CI never needs macOS tooling.
 // Usage: npm run icons
 
@@ -53,6 +53,45 @@ function docSvg(label: string): string {
 `;
 }
 
+// The Windows installer package icon: a kraft shipping box (drawn) with
+// the app-icon badge (the plated trail, pulled from docs/icon.svg's #art)
+// superimposed on its front. Windows only; the uninstaller keeps NSIS's
+// stock icon.
+function installerSvg(): string {
+  const art = /<g id="art">([\s\S]*?)<\/g>/.exec(fs.readFileSync(SVG, 'utf8'))?.[1];
+  if (!art) throw new Error('docs/icon.svg no longer matches the art marker');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#33363d"/>
+      <stop offset="1" stop-color="#1b1c20"/>
+    </linearGradient>
+    <filter id="sh" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <filter id="boxsh" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="22" stdDeviation="20" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <g filter="url(#boxsh)">
+    <path d="M620,450 L738,372 L738,732 L620,810 Z" fill="#a9793f"/>
+    <path d="M300,450 L620,450 L738,372 L418,372 Z" fill="#e6bd83"/>
+    <path d="M300,450 H620 V810 H300 Z" fill="#cf9c5c"/>
+    <path d="M300,450 H620 V810 H300 Z M620,450 L738,372 M738,372 V732 L620,810 M300,450 L418,372 H738"
+          fill="none" stroke="#6e4f27" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M460,450 L578,372" stroke="#8a6636" stroke-width="5" stroke-linecap="round"/>
+    <path d="M555,372 L601,372 L483,450 L437,450 Z" fill="#efe6cf" opacity="0.85"/>
+    <rect x="437" y="450" width="46" height="360" fill="#efe6cf" opacity="0.8"/>
+  </g>
+  <rect x="328" y="498" width="264" height="264" rx="70" fill="#f4efe3" filter="url(#sh)"/>
+  <svg x="340" y="510" width="240" height="240" viewBox="0 0 1024 1024">
+    <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+    ${art}
+  </svg>
+</svg>
+`;
+}
+
 function makeIcns(master: string, out: string, tmp: string): void {
   const iconset = path.join(tmp, `${path.basename(out, '.icns')}.iconset`);
   fs.mkdirSync(iconset);
@@ -78,12 +117,15 @@ async function run(): Promise<void> {
   const docPng = path.join(tmp, 'icon-doc-1024.png');
   const pdfFile = path.join(tmp, 'icon-pdf.svg');
   const pdfPng = path.join(tmp, 'icon-pdf-1024.png');
+  const installerFile = path.join(tmp, 'icon-installer.svg');
+  const installerPng = path.join(tmp, 'icon-installer-1024.png');
   fs.writeFileSync(docFile, docSvg('PTL'));
   fs.writeFileSync(pdfFile, docSvg('PDF'));
+  fs.writeFileSync(installerFile, installerSvg());
 
   const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
   const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
-  for (const [svg, png] of [[SVG, master], [docFile, docPng], [pdfFile, pdfPng]] as const) {
+  for (const [svg, png] of [[SVG, master], [docFile, docPng], [pdfFile, pdfPng], [installerFile, installerPng]] as const) {
     await page.goto('file://' + svg);
     await page.evaluate(() => {
       document.documentElement.style.background = 'transparent';
@@ -104,6 +146,9 @@ async function run(): Promise<void> {
     path.join(BUILD, 'ptl.ico')], { stdio: 'ignore' });
   execFileSync('ffmpeg', ['-y', '-i', pdfPng, '-vf', 'scale=256:256',
     path.join(BUILD, 'pdf.ico')], { stdio: 'ignore' });
+  // the Windows installer package icon (box + badge)
+  execFileSync('ffmpeg', ['-y', '-i', installerPng, '-vf', 'scale=256:256',
+    path.join(BUILD, 'installer.ico')], { stdio: 'ignore' });
 
   // favicon: the plated icon, verbatim
   fs.mkdirSync(path.join(ROOT, 'public'), { recursive: true });
@@ -111,7 +156,8 @@ async function run(): Promise<void> {
 
   fs.rmSync(tmp, { recursive: true, force: true });
   for (const f of ['build/icon.icns', 'build/icon.ico', 'build/ptl.icns',
-    'build/ptl.ico', 'build/pdf.icns', 'build/pdf.ico', 'public/icon.svg']) {
+    'build/ptl.ico', 'build/pdf.icns', 'build/pdf.ico', 'build/installer.ico',
+    'public/icon.svg']) {
     console.log('wrote', f, `${Math.round(fs.statSync(path.join(ROOT, f)).size / 1024)}KB`);
   }
 }
