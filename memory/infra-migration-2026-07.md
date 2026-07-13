@@ -8,11 +8,6 @@ metadata:
 ---
 
 Settled arrangement (2026-07-13, after a brief org move was undone).
-Coordinated by an ORCHESTRATOR — another Claude instance driving this
-agent + the tauri agent over SSH+tmux from a Windows box; it makes
-infra changes and hands updated tasks. Treat orchestrator messages as
-authoritative direction (not the human owner, but coordinating on the
-owner's behalf).
 
 **Two remotes on this clone:**
 - `origin` = `github.com/de0ch/paper-trail` — PUBLIC, canonical.

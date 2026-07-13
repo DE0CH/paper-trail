@@ -20,6 +20,14 @@ metadata:
   together — the release workflow's built-in CI gate validates the
   release. Non-release work continues OPTIMISTICALLY: push, dispatch,
   iterate; fix forward on failure.
+- NEVER put `[skip actions]`/`[skip ci]` on the version-bump commit a
+  release tag points at (the v0.5.14 mess-up, 2026-07-13): GitHub's skip
+  directive suppresses EVERY workflow for that commit, including the
+  tag-triggered release.yml — so the tag pushes but no release run ever
+  appears (silent no-op, not a startup_failure). The version-bump commit
+  must run clean (no skip); its main-push CI running redundantly
+  alongside release.yml is fine/expected. `[skip actions]` is ONLY for
+  intermediate merge commits that no tag references.
 - NEVER reuse a version number (owner rule): a version that failed to
   build or was blocked gets SKIPPED — no `git tag -f`, no tag moving.
   Rename the unshipped CHANGELOG section to the new version AND add a

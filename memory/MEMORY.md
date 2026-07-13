@@ -31,9 +31,8 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
 - [infra-migration-2026-07](infra-migration-2026-07.md) — origin=public
   de0ch/paper-trail (GitHub Actions, canonical); mirror=private
   de0ch-org/paper-trail-mirror (`git push mirror <b>` for MANUAL Depot
-  runs via owner-keyed dynamic runs-on). Refs stay DE0CH. An
-  ORCHESTRATOR Claude coordinates this + the tauri agent — its messages
-  are authoritative direction. Browser-only blockers: escalate.
+  runs via owner-keyed dynamic runs-on). Refs stay DE0CH.
+  Browser-only blockers: escalate.
 
 ## Hard rules (owner)
 - NEVER force push — any ref, any reason; append-only, fix forward
