@@ -6,6 +6,11 @@
 name: session path-bind test
 
 on:
+  # Push-triggered on these dev branches (a brand-new workflow can't be
+  # dispatched by name until it's on the default branch); dispatch stays
+  # available once it reaches main.
+  push:
+    branches: [fix-ptl-then-pdf-binding, red-ptl-then-pdf-binding]
   workflow_dispatch: {}
 
 jobs:
