@@ -1,0 +1,21 @@
+# Dev-iteration validation for the minimise-nonnull-assertions branch:
+# runs the full ci.yml (build + whole suite) on a push to this branch
+# prefix, so the type-flow refactor is validated on the Depot mirror
+# without waiting for main. Fires only on minimise-** — never on main.
+# Delete at merge.
+name: Focus non-null
+
+on:
+  push:
+    branches: ['minimise-**']
+
+permissions:
+  contents: read
+  # ci.yml requests id-token: write (Codecov OIDC); a caller must grant
+  # at least as much or the run startup-fails.
+  id-token: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
