@@ -64,6 +64,36 @@ async function run(): Promise<void> {
     check(`toolbar controls are vertically centred (worst top/bottom gap diff ${worstCenter.toFixed(2)}px)`,
       worstCenter <= EPS);
 
+    // ---- zoom control: − / % / + share one vertical centre ------------
+    const zoom = await page.evaluate(() => {
+      const box = (id: string) => {
+        const el = document.getElementById(id);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        const tn = [...el.childNodes].find((n) => n.nodeType === 3 && (n.textContent ?? '').trim());
+        let glyphMid: number | null = null;
+        if (tn) {
+          const rg = document.createRange(); rg.selectNodeContents(tn);
+          const g = rg.getBoundingClientRect(); glyphMid = (g.top + g.bottom) / 2;
+        }
+        return { mid: (r.top + r.bottom) / 2, top: r.top, bottom: r.bottom, glyphMid };
+      };
+      return { minus: box('btnZoomOut'), pct: box('zoomPct'), plus: box('btnZoomIn') };
+    });
+    if (zoom.minus && zoom.pct && zoom.plus) {
+      console.log(`\nzoom box mids:   −=${zoom.minus.mid.toFixed(2)} %=${zoom.pct.mid.toFixed(2)} +=${zoom.plus.mid.toFixed(2)}`);
+      console.log(`zoom glyph mids: −=${zoom.minus.glyphMid?.toFixed(2)} %=${zoom.pct.glyphMid?.toFixed(2)} +=${zoom.plus.glyphMid?.toFixed(2)}`);
+      const mids = [zoom.minus.mid, zoom.pct.mid, zoom.plus.mid];
+      check(`zoom −/%/+ boxes share one vertical centre (spread ${(Math.max(...mids) - Math.min(...mids)).toFixed(2)}px)`,
+        Math.max(...mids) - Math.min(...mids) <= EPS);
+      const g = [zoom.minus.glyphMid, zoom.pct.glyphMid, zoom.plus.glyphMid].filter((v): v is number => v != null);
+      if (g.length === 3) {
+        console.log(`zoom glyph-mid spread = ${(Math.max(...g) - Math.min(...g)).toFixed(2)}px`);
+        check(`zoom −/%/+ glyphs share one vertical centre (spread ${(Math.max(...g) - Math.min(...g)).toFixed(2)}px)`,
+          Math.max(...g) - Math.min(...g) <= EPS);
+      }
+    }
+
     // ---- panels: one row metric across trails / history / outline -------
     const rows = await page.evaluate(() => {
       const grab = (sel: string) => ([...document.querySelectorAll(sel)] as HTMLElement[])
@@ -107,7 +137,7 @@ async function run(): Promise<void> {
           g = { top: gb.top - r.top, bot: r.bottom - gb.bottom, h: gb.height };
         }
         return {
-          rowH: r.height,
+          rowH: r.height, fontPx: parseFloat(getComputedStyle(label).fontSize),
           spanTop: s.top - r.top, spanBot: r.bottom - s.bottom, spanH: s.height,
           glyph: g,
         };
@@ -121,9 +151,12 @@ async function run(): Promise<void> {
     console.log('\nrow-label vertical position (px from row edges):');
     for (const [name, m] of Object.entries(labelPos)) {
       if (!m) { console.log(`  ${name}: (not found)`); continue; }
-      console.log(`  ${name}: rowH=${m.rowH.toFixed(1)}  span[top=${m.spanTop.toFixed(2)} `
+      console.log(`  ${name}: rowH=${m.rowH.toFixed(1)} fontPx=${m.fontPx.toFixed(1)}  span[top=${m.spanTop.toFixed(2)} `
         + `bot=${m.spanBot.toFixed(2)} h=${m.spanH.toFixed(1)}]  `
         + `glyph[top=${m.glyph?.top.toFixed(2)} bot=${m.glyph?.bot.toFixed(2)} h=${m.glyph?.h.toFixed(1)}]`);
+      check(`${name} row label is vertically centred (span gap diff ${Math.abs(m.spanTop - m.spanBot).toFixed(2)}px)`,
+        Math.abs(m.spanTop - m.spanBot) <= EPS);
+      check(`${name} row label font is 12px (${m.fontPx.toFixed(1)}px)`, Math.abs(m.fontPx - 12) <= 0.5);
     }
 
     // ---- panel headers share one vertical text position ---------------

@@ -64,7 +64,7 @@ function StackRow({ snap, id, name }: {
         />
       ) : (
         <span
-          className="name flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+          className="name flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px]"
           onDoubleClick={(e) => {
             e.stopPropagation();
             setEditing(true);
@@ -152,7 +152,7 @@ function HistRow({ label, page, current, index, removable }: {
         />
       ) : (
         <span
-          className="lbl flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+          className="lbl flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px]"
           onDoubleClick={(e) => {
             e.stopPropagation();
             setEditing(true);

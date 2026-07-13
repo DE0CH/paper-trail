@@ -19,6 +19,15 @@ html, body, #root {
   overflow: hidden;
   background: var(--color-bgapp);
   color: var(--color-fgapp);
+}
+/* The UI font lives on <body>, NOT <html>. Tailwind's rem-based sizes
+   (h-6, h-8, gap, padding…) resolve against the ROOT (html) font-size,
+   so a 13px font on <html> silently scaled EVERY rem utility to 0.8125×
+   — h-6 rendered 19.5px instead of 24px, cramming the text line into the
+   row (the "bottom-hug"). Leaving <html> at the 16px default keeps the
+   spacing scale on its intended pixels; the 13px UI text is set on <body>
+   and inherits down. */
+body {
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
