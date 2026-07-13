@@ -30,6 +30,20 @@ metadata:
   INSIDE release.yml — duplicates the branch-push run; owner explicitly
   prefers self-contained logic over saving runners (rejected the
   wait-for-branch-CI dedup; reverted).
+- REUSABLE-WORKFLOW PERMISSION RULE (the v0.5.12 startup_failure): a
+  called workflow can't be granted MORE permissions than its caller. If
+  ci.yml declares `permissions: id-token: write` (it does — Codecov
+  OIDC), then EVERY caller (release.yml) must ALSO grant `id-token:
+  write` at its top-level `permissions:`, or GitHub refuses to start the
+  release with a bare `startup_failure` (no logs, no failed job). Symptom
+  to recognize: `gh run list` shows the release run as `startup_failure`
+  the instant it's created. Whenever ci.yml's permissions grow, mirror
+  them into release.yml. (A throwaway branch with a minimal
+  `uses: ./ci.yml` caller is the fast way to confirm — it flips from
+  startup_failure to queued the moment the caller's perms match.)
+- ci.yml matrix must be workflow_call-safe: use a STATIC matrix + a
+  `runs-on:` expression for owner-keyed runner selection, NOT
+  `fromJSON` computed matrices.
 - Every release needs a user-facing `## <version>` CHANGELOG section;
   the workflow refuses to build without one and copies it into the
   GitHub Release notes.

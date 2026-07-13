@@ -5,21 +5,22 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
 ~/paper-trail-main (this 4GB orchestrator box). The PAPER stayed at
 ~/Downloads/arXiv-2411.01678v1 (not a git repo; see paper-build.md).
 
-## Current state (2026-07-12, session 4 in flight)
-- docs/handoff.md = authoritative to-do: native update UI rebuild,
-  update-flash-close investigation, queue green, release v0.5.12.
-- preview-rebuild MERGED into main (ec848e2) after green 29210950829.
-- update-flash-close: witness rebuilt (freeze installer via
-  NtSuspendProcess, reopen mid-install); fix 6925b16 reverted on
-  branch awaiting red run 29211903833, then re-apply + fix the
-  Start-Process arg-quoting bug (PS 5.1 joins unquoted).
-- Owner spotted an undiagnosed problem in update-ui.mov (run
-  29209950363 artifact) — review frames via CI artifact, fold into the
-  new native-flow recording.
+## Current state (2026-07-13, session 4)
+- **v0.5.13 SHIPPED+verified** (latest release): Sparkle-style native
+  Software Update WINDOW + interruptable Cancel, mac/win update-
+  resilience tests, .ptl-then-PDF save-binding fix, native doc/app/
+  installer icons, native scrollbars, no-flash windows. History +
+  per-version detail: [shipped-versions](shipped-versions.md).
+- v0.5.12 SKIPPED (release startup_failure: caller release.yml lacked
+  id-token:write that reusable ci.yml requests for Codecov OIDC).
+- REMAINING: deliver two mac update videos (finished + canceled) from
+  the "macOS update UI recording" workflow — recorder drip widened to
+  ~24s (2f3c56a) so Cancel lands mid-download; watch frames back before
+  delivering. update-flash-close DEFERRED (cut from release; held fix
+  skips the update — docs/flash-close-finding.md; needs owner decision).
 - tauri-experiment branch = separate Linux-box session; hands off
   (src-tauri/, src/test/tauriE2ePage.ts sit untracked here — leftovers,
   they break local tsc; not mine).
-- v0.5.11 = latest release. History: [shipped-versions](shipped-versions.md).
 
 ## Active: CI/repo arrangement (2026-07)
 - [infra-migration-2026-07](infra-migration-2026-07.md) — origin=public
