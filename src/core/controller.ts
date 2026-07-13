@@ -1202,7 +1202,10 @@ export class Controller {
             accept: { 'text/plain': [PROGRESS_EXT] },
           }],
         });
-        if (handle) await this.openProgressFile(await handle.getFile(), handle);
+        if (handle) {
+          const file = await handle.getFile();
+          await this.openProgressFile(file, handle, this.desktopPathFor(file));
+        }
         return;
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return;
@@ -1227,7 +1230,10 @@ export class Controller {
           }],
           excludeAcceptAllOption: false,
         });
-        if (handle) await this.openFile(await handle.getFile(), handle);
+        if (handle) {
+          const file = await handle.getFile();
+          await this.openFile(file, handle, this.desktopPathFor(file));
+        }
         return;
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return; // user cancelled
@@ -1259,6 +1265,17 @@ export class Controller {
     this.fileInput.click();
   }
 
+  /**
+   * Desktop only: the on-disk path for a File the renderer already holds
+   * (a drop, a picker handle's getFile()). Binding it as session.path makes
+   * auto-save arm and the close-flush write synchronously — the very same
+   * silent target an OS-opened .ptl gets — no matter HOW the file was
+   * opened. Null off the desktop shell, or when Electron can't resolve one.
+   */
+  private desktopPathFor(file: File): string | null {
+    return window.ptDesktop?.getPathForFile?.(file) || null;
+  }
+
   async openDropped(dt: DataTransfer): Promise<void> {
     const item = dt.items?.[0];
     const f = dt.files?.[0];
@@ -1269,7 +1286,10 @@ export class Controller {
         handle = (await item.getAsFileSystemHandle()) as FileSystemFileHandle | null;
       }
     } catch { /* handle stays null */ }
-    void this.openFile(f, handle);
+    // A dropped file carries its real path in the desktop shell, so a
+    // dropped .ptl binds exactly like an OS-opened one (auto-save + silent
+    // close), not as an unbound "where do I save?" session.
+    void this.openFile(f, handle, this.desktopPathFor(f));
   }
 
   /**

@@ -103,6 +103,9 @@ declare global {
     }) => Promise<FileSystemFileHandle>;
     ptDesktop?: {
       platform: string; // process.platform of the shell ('darwin', 'win32', ...)
+      // On-disk path of a File the renderer holds (drop / picker handle /
+      // input), so every open method binds the same silent-write target.
+      getPathForFile?: (file: File) => string;
       onMenu: (cb: (action: MenuAction, payload?: string) => void) => void;
       onOpenFile: (cb: (file: { name: string; data: ArrayBuffer; path?: string }) => void) => void;
       showContextMenu: (ctx: ContextMenuRequest) => Promise<string | null>;
