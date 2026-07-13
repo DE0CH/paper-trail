@@ -130,6 +130,33 @@ function findApp(): string | null {
   return null;
 }
 
+/**
+ * electron-updater caches completed downloads (and Squirrel stages the
+ * pending update) under ~/Library/Caches/<updaterCacheDirName> — a
+ * location PT_USERDATA does NOT redirect. The finished run leaves a
+ * fully-downloaded 0.6.0 there, so a later canceled run's autoDownload
+ * validates the cached zip and jumps straight to 'downloaded' before
+ * Cancel can fire (SELF-VERIFY: download never started, state=downloaded).
+ * Clear it so each run must really transfer over the (stalled) feed.
+ */
+function clearUpdaterCache(appBundle: string): void {
+  const caches = path.join(os.homedir(), 'Library', 'Caches');
+  const names = new Set<string>();
+  try {
+    const cfg = fs.readFileSync(path.join(appBundle, 'Contents', 'Resources', 'app-update.yml'), 'utf8');
+    const m = /updaterCacheDirName:\s*(\S+)/.exec(cfg);
+    if (m) names.add(m[1]);
+  } catch { /* fall back to the name glob below */ }
+  try {
+    for (const e of fs.readdirSync(caches)) {
+      if (names.has(e) || /paper.?trail/i.test(e) || e.startsWith('local.paper-trail')) {
+        fs.rmSync(path.join(caches, e), { recursive: true, force: true });
+        console.log(`cleared updater cache: ${e}`);
+      }
+    }
+  } catch (e) { console.log('cache clear skipped: ' + String(e)); }
+}
+
 async function pageState(page: Page): Promise<string> {
   return await page.locator('#pt-update-root').getAttribute('data-state') ?? '';
 }
@@ -149,6 +176,10 @@ async function run(): Promise<void> {
   const app = path.join(appDir, `${PRODUCT}.app`);
   execFileSync('ditto', [packaged!, app]);
   const bin = path.join(app, 'Contents', 'MacOS', PRODUCT);
+
+  // Don't inherit a completed download from the finished run — otherwise
+  // the canceled run reaches 'downloaded' before Cancel can fire.
+  clearUpdaterCache(app);
 
   const { server, newVersion } = serveFeed();
   console.log(`recording [${MODE}] -> ${newVersion}`);
