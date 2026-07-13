@@ -11,8 +11,6 @@ import { chromium, type Page } from 'playwright-core';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8377';
 
-interface Stat { avg: number; med: number; min: number; max: number }
-
 async function heapMB(page: Page): Promise<number> {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('HeapProfiler.enable');
