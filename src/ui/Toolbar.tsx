@@ -4,10 +4,16 @@ import {
   IconSidebar, IconToc, IconBack, IconForward, IconSwap, IconGitHub,
 } from './icons';
 
-const btn = 'px-2.5 py-1 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
-const input = 'bg-inputbg text-fgapp border border-borderapp rounded-md px-2 py-1 outline-none focus:border-accent';
+// Every interactive control in the toolbar shares ONE height (h-7 = 28px)
+// so the whole bar reads as a single row: text buttons used to be ~26.2px
+// (py-1 + the 18.2px line box) while icon buttons and the page input were
+// 28px, so the hover pills didn't line up. Fixed height + items-center
+// centres the label vertically; box-border keeps the input the same 28px
+// despite its 1px frame.
+const btn = 'inline-flex items-center h-7 px-2.5 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
+const input = 'bg-inputbg text-fgapp border border-borderapp rounded-md h-7 px-2 outline-none focus:border-accent';
 const sep = <span className="w-px h-5 bg-borderapp mx-1" />;
-const iconBtn = `${btn} inline-flex items-center justify-center h-7 px-2`;
+const iconBtn = `${btn} justify-center px-2`;
 
 export default function Toolbar({
   snap,
