@@ -1,0 +1,42 @@
+# Dev-iteration hot-path profiler on Depot runners. Fires only on perf-**
+# branches, and only on the private mirror (where Depot runners live) — a
+# no-op on the public repo. Delete/ignore for main; this is a measurement tool.
+name: Hot-path profiler (Depot)
+on:
+  push:
+    branches: ['perf-**']
+jobs:
+  profile:
+    if: ${{ github.repository == 'de0ch-org/paper-trail-mirror' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [depot-ubuntu-24.04, depot-macos-latest]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate fixtures + large profiling PDF
+        run: |
+          node build-node/tools/fixture.js
+          node build-node/tools/perfBigPdf.js 600
+      - name: Start the web server
+        shell: bash
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+      - name: Hot-path profile
+        shell: bash
+        run: node build-node/tools/perfHot.js 2>&1 | tee "perf-hot-${{ matrix.runner }}.txt"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: perf-hot-${{ matrix.runner }}
+          path: perf-hot-${{ matrix.runner }}.txt
