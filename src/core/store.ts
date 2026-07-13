@@ -1,9 +1,10 @@
-// Persistence: UI prefs in localStorage, recent files (with optional
-// FileSystemFileHandle for one-click reopen) in IndexedDB. Reading state
-// deliberately lives ONLY in explicit session files: opening a plain PDF
+// Persistence: UI prefs in localStorage; the recently-opened list — pairs
+// of (PDF handle, saved-session handle) — in IndexedDB (handles are
+// structured-cloneable, strings-only localStorage can't hold them).
+// Reading state lives ONLY in explicit session files: opening a plain PDF
 // always starts fresh.
 
-import type { RecentEntry } from './types';
+import type { RecentEntry } from './recents';
 
 const UI_KEY = 'pt:ui';
 
@@ -30,11 +31,14 @@ export function saveUI(patch: UiPrefs): void {
   } catch { /* ignore */ }
 }
 
-// ---------- IndexedDB (recents + file handles) ----------
+// ---------- IndexedDB (the recents pair-list) ----------
 
 const DB_NAME = 'paper-trail';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const RECENTS = 'recents';
+// The whole list is one record under this key (identity is the handle
+// pair, which isn't a usable key — callers dedupe with isSameEntry).
+const LIST_KEY = 'list';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 function idb(): Promise<IDBDatabase> {
@@ -42,9 +46,11 @@ function idb(): Promise<IDBDatabase> {
     dbPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
-        if (!req.result.objectStoreNames.contains(RECENTS)) {
-          req.result.createObjectStore(RECENTS, { keyPath: 'fp' });
-        }
+        // Pre-1.0: recents moved from fingerprint-keyed rows to a single
+        // stored pair-list, so drop any old store and recreate.
+        const db = req.result;
+        if (db.objectStoreNames.contains(RECENTS)) db.deleteObjectStore(RECENTS);
+        db.createObjectStore(RECENTS); // out-of-line keys: one record, the list
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -53,65 +59,32 @@ function idb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-export async function putRecent(entry: Partial<RecentEntry> & { fp: string }): Promise<void> {
-  try {
-    const db = await idb();
-    const existing = await getRecent(entry.fp);
-    const merged: RecentEntry = { ...(existing ?? { name: '', ts: 0 }), ...entry } as RecentEntry;
-    // never clobber a stored handle with undefined
-    if (!entry.handle && existing?.handle) merged.handle = existing.handle;
-    if (!entry.progressHandle && existing?.progressHandle) {
-      merged.progressHandle = existing.progressHandle;
-    }
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(RECENTS, 'readwrite');
-      tx.objectStore(RECENTS).put(merged);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch (e) {
-    console.warn('putRecent failed', e);
-  }
-}
-
-export async function removeRecent(fp: string): Promise<void> {
-  try {
-    const db = await idb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(RECENTS, 'readwrite');
-      tx.objectStore(RECENTS).delete(fp);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch (e) {
-    console.warn('removeRecent failed', e);
-  }
-}
-
-export async function getRecent(fp: string): Promise<RecentEntry | null> {
+/** The whole recents list as stored (callers sort by timestamp). */
+export async function getRecents(): Promise<RecentEntry[]> {
   try {
     const db = await idb();
     return await new Promise((resolve, reject) => {
-      const req = db.transaction(RECENTS).objectStore(RECENTS).get(fp);
-      req.onsuccess = () => resolve((req.result as RecentEntry) ?? null);
-      req.onerror = () => reject(req.error);
-    });
-  } catch {
-    return null;
-  }
-}
-
-export async function getRecents(limit = 8): Promise<RecentEntry[]> {
-  try {
-    const db = await idb();
-    const all = await new Promise<RecentEntry[]>((resolve, reject) => {
-      const req = db.transaction(RECENTS).objectStore(RECENTS).getAll();
+      const req = db.transaction(RECENTS).objectStore(RECENTS).get(LIST_KEY);
       req.onsuccess = () => resolve((req.result as RecentEntry[]) ?? []);
       req.onerror = () => reject(req.error);
     });
-    return all.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
   } catch {
     return [];
+  }
+}
+
+/** Persist the recents list verbatim (the caller trims/sorts). */
+export async function saveRecents(list: RecentEntry[]): Promise<void> {
+  try {
+    const db = await idb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(RECENTS, 'readwrite');
+      tx.objectStore(RECENTS).put(list, LIST_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn('saveRecents failed', e);
   }
 }
 

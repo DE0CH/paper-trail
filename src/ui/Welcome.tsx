@@ -55,16 +55,16 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
         {snap.recents.length > 0 && (
           <div id="recent" className="mt-5 text-left">
             <h3 className="text-dim text-xs uppercase tracking-wider mb-1">Recent</h3>
-            {snap.recents.map((r) => (
+            {snap.recents.map((d) => (
               <div
-                key={r.fp}
+                key={`${d.entry.timestamp}|${d.entry.pdfName}|${d.entry.sessionFileName}`}
                 className="recentItem group flex items-center px-2.5 py-1.5 rounded-md cursor-pointer text-fgapp hover:bg-hoverrow"
-                onClick={() => void controller.openRecent(r)}
+                onClick={() => void controller.openRecent(d.entry)}
               >
                 <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {r.name}
+                  {d.text}
                   <span className="text-dim text-[11px] ml-2">
-                    {new Date(r.ts).toLocaleDateString()}
+                    {new Date(d.entry.timestamp).toLocaleDateString()}
                   </span>
                 </span>
                 <button
@@ -72,7 +72,7 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
                   title="Remove from this list"
                   onClick={(e) => {
                     e.stopPropagation();
-                    void controller.removeRecent(r.fp);
+                    void controller.removeRecent(d.entry);
                   }}
                 >
                   <IconClose />

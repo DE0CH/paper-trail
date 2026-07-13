@@ -8,13 +8,16 @@ import { NavStacks } from './history';
 import { SearchController } from './search';
 import { Preview } from './preview';
 import {
-  putRecent, getRecents, removeRecent, ensureReadPermission,
+  getRecents, saveRecents, ensureReadPermission,
 } from './store';
+import {
+  updateRecent, buildDisplayList, type RecentEntry, type RecentDisplay,
+} from './recents';
 import {
   parseProgress, serializeProgress, progressVersion, PROGRESS_EXT, PROGRESS_VERSION,
 } from './progressFormat';
 import type {
-  HistStack, OutlineNode, Pos, ProgressFile, RecentEntry, SerializedState,
+  HistStack, OutlineNode, Pos, ProgressFile, SerializedState,
 } from './types';
 
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
@@ -33,7 +36,7 @@ export interface Snapshot {
   activeStackId: number;
   activeIndex: number;
   outline: OutlineNode[];
-  recents: RecentEntry[];
+  recents: RecentDisplay[];
   searchCount: string;
   save: SaveState;
   saveBound: boolean;
@@ -75,6 +78,12 @@ export class Controller {
   private searchEntry: ReturnType<NavStacks['visit']> | null = null;
   private outline: OutlineNode[] = [];
   private recents: RecentEntry[] = [];
+  // The open PDF's handle — recents are keyed on it; null for desktop
+  // path-only opens, which don't populate the in-app list.
+  private currentPdfHandle: FileSystemFileHandle | null = null;
+  // A fresh (never-saved) session: set when a PDF opens without a bound
+  // session, cleared on the first save or when an existing session loads.
+  private freshSession = false;
   private toast_: { id: number; msg: string } | null = null;
   private toastSeq = 0;
   private currentPage = 1;
@@ -251,7 +260,7 @@ export class Controller {
         activeStackId: this.hist.activeId,
         activeIndex: this.hist.active.index,
         outline: this.outline,
-        recents: this.recents,
+        recents: buildDisplayList(this.recents),
         searchCount: this.search ? this.search.countLabel() : '',
         save: this.session.saving
           ? 'saving'
@@ -367,9 +376,37 @@ export class Controller {
   }
 
   /** Remove one entry from the welcome screen's Recent list. */
-  async removeRecent(fp: string): Promise<void> {
-    await removeRecent(fp);
-    await this.refreshRecents();
+  async removeRecent(entry: RecentEntry): Promise<void> {
+    this.recents = this.recents.filter((e) => e !== entry);
+    await saveRecents(this.recents);
+    this.notify();
+  }
+
+  // Record (or refresh) a recent for the open PDF and its session, keyed on
+  // the PDF handle (so desktop path-only opens, which have no handle, don't
+  // list). Defensive: a handle without isSameEntry (e2e fakes) just no-ops.
+  private async recordRecent(
+    pdfHandle: FileSystemFileHandle | null,
+    sessionHandle: FileSystemFileHandle | null,
+    pdfName: string,
+    sessionName: string,
+  ): Promise<void> {
+    if (!pdfHandle) return;
+    try {
+      await updateRecent(this.recents, {
+        pdfHandle,
+        sessionFileHandle: sessionHandle,
+        pdfName,
+        sessionFileName: sessionName,
+        timestamp: Date.now(),
+      });
+      this.recents.sort((a, b) => b.timestamp - a.timestamp);
+      if (this.recents.length > 12) this.recents.length = 12;
+      await saveRecents(this.recents);
+      this.notify();
+    } catch (e) {
+      console.warn('recordRecent failed', e);
+    }
   }
 
   // ---------- reading-progress session files ----------
@@ -497,14 +534,8 @@ export class Controller {
         throw e;
       }
       this.session.handle = handle;
-      if (this.currentFp) {
-        void putRecent({
-          fp: this.currentFp,
-          name: this.currentName,
-          ts: Date.now(),
-          progressHandle: handle,
-        });
-      }
+      this.freshSession = false;
+      void this.recordRecent(this.currentPdfHandle, handle, this.currentName, handle.name);
     }
     await this.writeProgress();
     this.showToast('Progress saved');
@@ -877,16 +908,9 @@ export class Controller {
       this.mismatch_ = (progress && progress.pdf.name && progress.pdf.name !== name)
         ? { savedName: progress.pdf.name, openName: name }
         : null;
-      if (this.currentFp) {
-        void putRecent({
-          fp: this.currentFp,
-          name,
-          ts: Date.now(),
-          handle: handle ?? undefined,
-          progressHandle: progressHandle ?? undefined,
-        });
-        void this.refreshRecents();
-      }
+      this.currentPdfHandle = handle;
+      this.freshSession = !(progressHandle || progressPath);
+      void this.recordRecent(handle, progressHandle, name, progressHandle?.name ?? '');
       this.currentPage = this.viewer.currentPosition().page;
       this.notify();
     } catch (e) {
@@ -1069,13 +1093,10 @@ export class Controller {
     this.mismatch_ = (cs.json.pdf.name && cs.json.pdf.name !== this.currentName)
       ? { savedName: cs.json.pdf.name, openName: this.currentName }
       : null;
-    if (this.currentFp && cs.progressHandle) {
-      void putRecent({
-        fp: this.currentFp,
-        name: this.currentName,
-        ts: Date.now(),
-        progressHandle: cs.progressHandle,
-      });
+    this.freshSession = false;
+    if (cs.progressHandle) {
+      void this.recordRecent(
+        this.currentPdfHandle, cs.progressHandle, this.currentName, cs.progressHandle.name);
     }
     this.notify();
   }
@@ -1279,33 +1300,51 @@ export class Controller {
    * a clear message with everything left as it was.
    */
   async openRecent(entry: RecentEntry): Promise<void> {
+    // Accept the new pair-shape and the legacy {handle, progressHandle,
+    // name} shape the e2e harness constructs.
+    const e = entry as unknown as {
+      pdfHandle?: FileSystemFileHandle | null;
+      sessionFileHandle?: FileSystemFileHandle | null;
+      handle?: FileSystemFileHandle | null;
+      progressHandle?: FileSystemFileHandle | null;
+      pdfName?: string; name?: string;
+    };
+    const pdfHandle = e.pdfHandle ?? e.handle ?? null;
+    const sessionHandle = e.sessionFileHandle ?? e.progressHandle ?? null;
+    const pdfName = e.pdfName ?? e.name ?? 'the PDF';
     const fail = (what: string) =>
-      this.showToast(`Couldn\u2019t reopen \u201c${entry.name}\u201d \u2014 ${what}.`, 6000);
+      this.showToast(`Couldn\u2019t reopen \u201c${pdfName}\u201d \u2014 ${what}.`, 6000);
+
+    if (!pdfHandle) { fail('the PDF is missing'); return; }
 
     // Read BOTH files completely before touching any state.
+    if (!(await ensureReadPermission(pdfHandle))) {
+      // Distinct from "missing": the browser reset the grant and the
+      // re-request was declined \u2014 say so instead of blaming the file.
+      fail('Paper Trail wasn\u2019t given permission to open it \u2014 try again');
+      return;
+    }
     let pdfFile: File;
     let pdfBytes: Uint8Array;
     try {
-      if (!entry.handle || !(await ensureReadPermission(entry.handle))) {
-        throw new Error('PDF handle unavailable');
-      }
-      pdfFile = await entry.handle.getFile();
+      pdfFile = await pdfHandle.getFile();
       pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
-    } catch (e) {
-      console.warn('openRecent: PDF unreadable', e);
+    } catch (err) {
+      console.warn('openRecent: PDF unreadable', err);
       fail('the PDF is missing');
       return;
     }
     let progress: ProgressFile | null = null;
-    if (entry.progressHandle) {
+    if (sessionHandle) {
+      if (!(await ensureReadPermission(sessionHandle))) {
+        fail('Paper Trail wasn\u2019t given permission to open its session \u2014 try again');
+        return;
+      }
       let sessionText: string;
       try {
-        if (!(await ensureReadPermission(entry.progressHandle))) {
-          throw new Error('session handle unavailable');
-        }
-        sessionText = await (await entry.progressHandle.getFile()).text();
-      } catch (e) {
-        console.warn('openRecent: session unreadable', e);
+        sessionText = await (await sessionHandle.getFile()).text();
+      } catch (err) {
+        console.warn('openRecent: session unreadable', err);
         fail('its saved session file is missing');
         return;
       }
@@ -1316,10 +1355,10 @@ export class Controller {
       }
     }
     await this.openData(pdfBytes, pdfFile.name, {
-      handle: entry.handle,
-      source: entry.handle,
+      handle: pdfHandle,
+      source: pdfHandle,
       progress,
-      progressHandle: progress ? entry.progressHandle ?? null : null,
+      progressHandle: progress ? sessionHandle : null,
     });
   }
 
