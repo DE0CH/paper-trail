@@ -86,9 +86,11 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
 - Capture the session transcript (~/.claude/projects/<project>/
   <session>.jsonl, gzipped) into docs/transcripts/ BEFORE compaction;
   commit it. Naming: session-N.
-- Commit per feature/iteration; draft commit before debugging. Signed
-  commits via Bitwarden SSH key: on "No private key found" the owner
-  must approve in the Bitwarden GUI — say so, then retry.
+- Commit per feature/iteration; draft commit before debugging. Commits
+  are UNSIGNED (2026-07-13): owner had me remove user.signingkey +
+  commit.gpgsign/tag.gpgsign from ~/.gitconfig after the Goldwarden SSH
+  vault stayed locked. No GUI approval step anymore — just commit. (Repo
+  CLAUDE.md still says "signed commits via Bitwarden" — stale.)
 - Parallelize with agents/background tasks; final answers at the END of
   the reply; acknowledge every mid-work user message in the very next
   reply. 3-letter file extensions, high-entropy temp names.
