@@ -47,6 +47,7 @@ export default function App() {
   searchOpenRef.current = searchOpen;
   const closeSearch = () => {
     if (searchRef.current) searchRef.current.value = '';
+    controller.commitSearch(); // dismissing the search box: found it (or gave up), moved on
     void controller.runSearch('', { jump: false });
     setSearchOpen(false);
   };
