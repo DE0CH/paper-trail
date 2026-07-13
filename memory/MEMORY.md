@@ -73,6 +73,10 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   MathJax), WStarCats.tex fixes; `./build-html.sh`; PDF: pdflatex x2.
 
 ## Workflow preferences
+- Correcting a record (memory, docs, comments): DELETE the wrong
+  statement and state only the current truth — never keep the error and
+  annotate it "this was wrong, now it's X" (owner rule 2026-07-13).
+  Records hold the current fact, not the history of mistakes.
 - Capture the session transcript (~/.claude/projects/<project>/
   <session>.jsonl, gzipped) into docs/transcripts/ BEFORE compaction;
   commit it. Naming: session-N.
