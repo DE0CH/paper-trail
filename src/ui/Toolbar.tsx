@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { controller, type Snapshot } from '../core/controller';
 import {
   IconSidebar, IconToc, IconBack, IconForward, IconSwap, IconGitHub,
+  IconMinus, IconPlus,
 } from './icons';
 
 // Every interactive control in the toolbar shares ONE height (h-7 = 28px)
@@ -114,9 +115,9 @@ export default function Toolbar({
       <span id="pageCount" className="text-dim">/ {snap.numPages}</span>
       {sep}
 
-      <button id="btnZoomOut" className={btn} title="Zoom out" onClick={() => controller.zoomOut()}>&minus;</button>
+      <button id="btnZoomOut" className={iconBtn} title="Zoom out" onClick={() => controller.zoomOut()}><IconMinus /></button>
       <span id="zoomPct" className="text-dim min-w-10 text-center">{snap.zoomPercent}%</span>
-      <button id="btnZoomIn" className={btn} title="Zoom in" onClick={() => controller.zoomIn()}>+</button>
+      <button id="btnZoomIn" className={iconBtn} title="Zoom in" onClick={() => controller.zoomIn()}><IconPlus /></button>
       <button className={btn} title="Fit width" onClick={() => controller.fitWidth()}>Fit</button>
 
       {/* Web-only: the desktop app behaves like an offline app and should

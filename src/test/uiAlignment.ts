@@ -80,6 +80,12 @@ async function run(): Promise<void> {
         if (tn) {
           const rg = document.createRange(); rg.selectNodeContents(tn);
           const g = rg.getBoundingClientRect(); glyphMid = (g.top + g.bottom) / 2;
+        } else {
+          // SVG-icon button (zoom − / + are now inline SVGs, not font
+          // glyphs): no text node — measure the icon's own geometry, which
+          // (unlike a font glyph) sits exactly at its box centre.
+          const svg = el.querySelector('svg');
+          if (svg) { const g = svg.getBoundingClientRect(); glyphMid = (g.top + g.bottom) / 2; }
         }
         return { mid: (r.top + r.bottom) / 2, top: r.top, bottom: r.bottom, glyphMid };
       };

@@ -71,6 +71,8 @@ export const IconChevron = ({ size = 16 }: { size?: number }) => (
 
 export const IconPlus = () => <Svg d={['M5 12h14', 'M12 5v14']} />;
 
+export const IconMinus = () => <Svg d={['M5 12h14']} />;
+
 /** Clear history (trash can). */
 export const IconTrash = () => (
   <Svg d={[
