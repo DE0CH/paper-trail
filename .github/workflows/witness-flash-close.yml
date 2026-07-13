@@ -8,6 +8,10 @@ name: witness flash-close
 
 on:
   workflow_dispatch: {}
+  # A new workflow file on a non-default branch can't be dispatched by
+  # name; a branch-scoped push trigger runs the red/green TDD variants.
+  push:
+    branches: [flash-close-silent, flash-close-silent-red]
 
 jobs:
   witness:

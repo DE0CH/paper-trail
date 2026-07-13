@@ -1,8 +1,11 @@
 // Reopening the app WHILE a quit-install is replacing its files must
 // not flash-close and vanish (the owner's report: "looks like it's
-// corrupt"). The contract: a reopen that lands mid-install ends with
-// the app RUNNING, on the NEW version, with the double-clicked
-// document open. Runners install in ~2s, so a raced reopen keeps
+// corrupt"). The contract (owner decision 2026-07-13, see
+// docs/flash-close-finding.md): a reopen that lands mid-install CANCELS
+// the update and ends with the app RUNNING on the OLD version (the
+// update is deferred, not applied), the double-clicked document open,
+// no corrupt/half-replaced install, and SILENTLY — no "Updating Paper
+// Trail…" marquee. Runners install in ~2s, so a raced reopen keeps
 // missing the window (runs 29208984460, 29209714448); this witness
 // removes the race: it FREEZES the installer process the moment it
 // appears (NtSuspendProcess), reopens against the frozen mid-install
@@ -79,6 +82,18 @@ function windowTitles(imageName: string): string {
       ForEach-Object { $_.MainWindowTitle }) -join ' | '`);
   } catch {
     return '';
+  }
+}
+
+// The (now dropped) held-fix marquee was a PowerShell WinForms dialog
+// titled 'Paper Trail'. The silent cancel must never show it.
+function marqueeShowing(): boolean {
+  try {
+    const n = ps(`(Get-Process | Where-Object { $_.ProcessName -eq 'powershell'`
+      + ` -and $_.MainWindowTitle -eq '${PRODUCT}' } | Measure-Object).Count`);
+    return Number(n) > 0;
+  } catch {
+    return false;
   }
 }
 
@@ -193,7 +208,8 @@ async function run(): Promise<void> {
     console.error('FAIL  the app did not install');
     process.exit(1);
   }
-  console.log(`reopen during install: ${exeVersion(exe)} -> ${newVersion} (${os.arch()})`);
+  const oldVersion = exeVersion(exe);
+  console.log(`reopen during install: ${oldVersion} -> ${newVersion} (${os.arch()})`);
 
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-updd-'));
 
@@ -270,30 +286,51 @@ async function run(): Promise<void> {
     + ` reopening now`);
   spawn(exe, [pdf], { detached: true, stdio: 'ignore', env }).unref();
 
-  // Let the reopen do whatever it does against the frozen install —
-  // start the old version, crash, or (fixed) hand off and get out of
-  // the way. Observe, don't assert: the contract is the end state.
-  await waitFor(() => running(appImage), 15_000, 500);
+  // The silent cancel must never show the dropped held-fix marquee.
+  // Watch for it across the whole reopen+settle window.
+  let marqueeEver = false;
+  const watchMarquee = setInterval(() => {
+    if (marqueeShowing()) marqueeEver = true;
+  }, 300);
+
+  // The silent cancel kills the frozen installer and starts the OLD
+  // version. Observe until the reopened app is up.
+  await waitFor(() => running(appImage), 30_000, 500);
   console.log(`  reopen settled: app running=${running(appImage)};`
-    + ` thawing the installer`);
-  thaw(frozenPid);
+    + ` thawing any surviving installer`);
+  thaw(frozenPid); // no-op if the cancel already killed it
 
-  // The end state is the whole contract: the update completed…
-  const updated = await waitFor(
-    () => norm(exeVersion(exe)) === norm(newVersion), 180_000);
-  check('the update still completes (the reopen must not wedge it)',
-    updated, `exe now ${exeVersion(exe) || '(unreadable)'}`);
-
-  // …the app the user asked for is actually running — no flash…
+  // The end state is the whole (relaxed) contract. Owner decision
+  // (docs/flash-close-finding.md): a reopen mid-install CANCELS the
+  // update and runs the OLD version — the update is deferred, not
+  // completed.
   const appUp = await waitFor(() => running(appImage), 120_000);
-  check('the reopened app ends up running the new version (no flash-close)',
-    appUp && updated, `running=${appUp}`);
+  check('the reopened app ends up running (no flash-close)', appUp,
+    `running=${appUp}`);
 
-  // …and it opened the document the user double-clicked.
+  // …on the OLD version — the update was deferred, not applied…
+  const onOld = await waitFor(
+    () => norm(exeVersion(exe)) === norm(oldVersion)
+      && norm(exeVersion(exe)) !== norm(newVersion), 60_000);
+  check('the update is deferred — the app runs the OLD version', onOld,
+    `exe now ${exeVersion(exe) || '(unreadable)'} (old ${oldVersion}, new ${newVersion})`);
+
+  // …with no corrupt / half-replaced install: the exe is a valid,
+  // launchable old-version binary (proven by the app running it)…
+  check('no corrupt / half-replaced install', appUp && onOld,
+    `version readable=${exeVersion(exe) !== ''}`);
+
+  // …it opened the document the user double-clicked…
   const docOpen = await waitFor(
     () => windowTitles(appImage).includes('Reopened Paper'), 60_000);
   check('…with the double-clicked document open',
     docOpen, windowTitles(appImage) || '(no window titles)');
+
+  // …and it was SILENT — no "Updating Paper Trail…" marquee ever showed.
+  clearInterval(watchMarquee);
+  if (marqueeShowing()) marqueeEver = true;
+  check('the cancel is silent — no "Updating Paper Trail…" marquee',
+    !marqueeEver);
 
   // Cleanup: the reopened app is a detached process.
   spawnSync('taskkill', ['/F', '/IM', appImage], { timeout: 60_000 });

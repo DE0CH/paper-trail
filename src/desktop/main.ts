@@ -22,7 +22,7 @@ import contextMenu from 'electron-context-menu';
 import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
-import { handoffWhileUpdating } from './updateGuard';
+import { cancelUpdateOnReopen } from './updateGuard';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
 // other end is already closed; a console write (electron-updater logs
@@ -33,16 +33,14 @@ process.stderr.on('error', () => { /* swallow EPIPE */ });
 
 const SMOKE = process.argv.includes('--smoke');
 
-// A reopen while the quit-install is replacing our files must not run
-// from the half-replaced install (it flashes closed and looks corrupt):
-// hand off to a detached progress window that reopens the app when the
-// installer finishes, and get out of the way before taking any locks.
+// A reopen while a quit-install is replacing our files must not run from
+// the half-replaced install (it flashes closed and looks corrupt). Owner
+// decision: such a reopen CANCELS the update and brings up the OLD
+// version silently — stop the installer before it replaces our files,
+// then fall through to a normal start (which opens the file args). The
+// downloaded update stays cached and re-applies on the next clean quit.
 if (process.platform === 'win32' && !SMOKE) {
-  const reopenArgs = process.argv.slice(1)
-    .filter((a) => /\.(pdf|ptl)$/i.test(a) && fs.existsSync(a));
-  if (handoffWhileUpdating(process.execPath, reopenArgs)) {
-    app.exit(0);
-  }
+  cancelUpdateOnReopen(process.execPath);
 }
 
 // build-node/desktop -> project root
