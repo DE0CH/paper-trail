@@ -83,13 +83,16 @@ on their github labels. Guard every release/publish/deploy job with
 `if: ${{ github.repository_owner == 'de0ch' }}` so the mirror NEVER
 re-publishes or deploys — only the public repo does.
 
-**CI philosophy (owner, 2026-07-13):** DEV = fast iteration (feature
-branches → Depot mirror); MAIN + RELEASE = quality assurance — run
-EVERYTHING on GitHub, SIMPLE setup, NO convoluted workflow logic
-(complicated CI logic hurts readability + breeds bugs), even redundantly
-(release.yml re-runs the full ci.yml pyramid on purpose) — quality at the
-expense of workflow time. So prefer SIMPLIFYING the workflow over adding
-clever conditionals; keep main's outcome "everything on GitHub."
+**CI philosophy (owner, 2026-07-13):** Depot is FASTER, GitHub is higher
+QUALITY (more thorough/authoritative). The speed↔quality tradeoff shifts
+GRADUALLY toward GitHub as you approach release: DEV = fast iteration
+(feature branches → Depot mirror); as work moves toward MAIN + RELEASE it
+moves toward GitHub = quality assurance — run EVERYTHING on GitHub, SIMPLE
+setup, NO convoluted workflow logic (complicated CI logic hurts
+readability + breeds bugs), even redundantly (release.yml re-runs the full
+ci.yml pyramid on purpose) — quality at the expense of workflow time. So
+prefer SIMPLIFYING the workflow over adding clever conditionals; keep
+main's outcome "everything on GitHub."
 
 **Depot split (owner policy):** WINDOWS always on GitHub-hosted, never
 Depot — Depot's ephemeral Windows has no interactive desktop session so
