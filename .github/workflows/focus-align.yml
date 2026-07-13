@@ -1,0 +1,29 @@
+# Dev-iteration only: runs the measured alignment guard on the bottom-hug
+# branch so the fix can be watched red->green fast. Never fires on main.
+# Delete at merge.
+name: Focus align
+on:
+  push:
+    branches: ['ui-bottomhug', 'ui-align-**']
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: Start the web server
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          node build-node/tools/geometry.js
+      - name: Measured alignment guard (row-label centring)
+        run: node build-node/test/uiAlignment.js

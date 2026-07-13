@@ -86,6 +86,46 @@ async function run(): Promise<void> {
       check(`${name} rows share one left edge (spread ${leftSpread.toFixed(2)}px)`, leftSpread <= EPS);
     }
 
+    // ---- row LABELS must sit vertically centred in their row ----------
+    // measures both the flex-item (span) box and the glyph box against the
+    // row edges: symmetric top/bottom gaps == centred. Distinguishes a
+    // flex-centring miss (span off-centre) from a font/line-box issue.
+    const labelPos = await page.evaluate(() => {
+      const measure = (rowSel: string, labelSel: string | null) => {
+        const row = document.querySelector(rowSel) as HTMLElement | null;
+        if (!row) return null;
+        const label = (labelSel ? row.querySelector(labelSel) : row) as HTMLElement | null;
+        if (!label) return null;
+        const r = row.getBoundingClientRect();
+        const s = label.getBoundingClientRect();
+        const textNode = [...label.childNodes].find(
+          (n) => n.nodeType === 3 && (n.textContent ?? '').trim().length > 0);
+        let g: { top: number; bot: number; h: number } | null = null;
+        if (textNode) {
+          const rg = document.createRange(); rg.selectNodeContents(textNode);
+          const gb = rg.getBoundingClientRect();
+          g = { top: gb.top - r.top, bot: r.bottom - gb.bottom, h: gb.height };
+        }
+        return {
+          rowH: r.height,
+          spanTop: s.top - r.top, spanBot: r.bottom - s.bottom, spanH: s.height,
+          glyph: g,
+        };
+      };
+      return {
+        trail: measure('.stackRow', '.name'),
+        hist: measure('.histItem', '.lbl'),
+        outline: measure('.outlineItem', null),
+      };
+    });
+    console.log('\nrow-label vertical position (px from row edges):');
+    for (const [name, m] of Object.entries(labelPos)) {
+      if (!m) { console.log(`  ${name}: (not found)`); continue; }
+      console.log(`  ${name}: rowH=${m.rowH.toFixed(1)}  span[top=${m.spanTop.toFixed(2)} `
+        + `bot=${m.spanBot.toFixed(2)} h=${m.spanH.toFixed(1)}]  `
+        + `glyph[top=${m.glyph?.top.toFixed(2)} bot=${m.glyph?.bot.toFixed(2)} h=${m.glyph?.h.toFixed(1)}]`);
+    }
+
     // ---- panel headers share one vertical text position ---------------
     const headTop = () => page.evaluate(() => {
       const textTop = (el?: Element | null): number | null => {
