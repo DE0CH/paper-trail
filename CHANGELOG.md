@@ -3,6 +3,27 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.12
+
+- The macOS "Check for Updates…" flow is now a proper update window,
+  like the ones many Mac apps use: it announces the new version and
+  lets you Update Now or Later, shows a progress bar while it downloads
+  — which you can Cancel to stop the download — and offers Restart to
+  Update once it's ready.
+- Documents no longer wear the app's icon: on macOS they get the
+  system-composed document icon, and on Windows a proper page icon with
+  the Paper Trail logo and file-type label.
+- A new app icon — the trail on a dark squircle — identical on macOS,
+  Windows, and the web.
+- The installer and uninstaller use the standard installer icons
+  instead of hand-drawn ones.
+- Scrollbars are the operating system's own dark scrollbars again; on
+  Windows the rail and arrow buttons are back.
+- Windows opened for a document never flash empty first.
+- The reference hover preview opens reliably even while the page is
+  still re-rendering.
+- The README gained the new logo plus build and coverage badges.
+
 ## 0.5.11
 
 - The Windows installer is no longer pixelated on HiDPI screens.

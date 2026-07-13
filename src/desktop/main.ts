@@ -19,7 +19,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
-import { autoUpdater } from 'electron-updater';
+import { autoUpdater, CancellationToken } from 'electron-updater';
 import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
 
@@ -409,6 +409,10 @@ type UpdateUiState =
 let updateWin: BrowserWindow | null = null;
 let updateUi: UpdateUiState = { state: 'checking' };
 let availableVersion: string | null = null;
+// The token for the download currently in flight (background or the one
+// the user asked for), so a Cancel can actually STOP it rather than just
+// hide the window. Cleared when the download finishes or is cancelled.
+let currentDownload: CancellationToken | null = null;
 
 function setUpdateUi(s: UpdateUiState): void {
   updateUi = s;
@@ -432,6 +436,9 @@ function openUpdateWindow(): void {
     maximizable: false,
     fullscreenable: false,
     title: 'Software Update',
+    // A light system window (the Sparkle-style updater look), not the
+    // app's dark chrome; the page adapts to the system appearance.
+    backgroundColor: '#ececec',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'updatePreload.js'),
@@ -461,6 +468,7 @@ ipcMain.on('pt-update-action', (event, action: string) => {
     || event.sender !== updateWin.webContents) return;
   if (action === 'later') updateWin.close();
   else if (action === 'download') startInteractiveDownload();
+  else if (action === 'cancel') cancelDownload();
   else if (action === 'restart') void restartToUpdate();
 });
 
@@ -472,10 +480,30 @@ function startInteractiveDownload(): void {
     return;
   }
   setUpdateUi({ state: 'downloading', version, percent: 0 });
-  // The background check usually has this download in flight already;
-  // re-checking is a no-op then, and restarts the download after an
-  // earlier network failure. Failures surface via the 'error' event.
-  autoUpdater.checkForUpdates().catch(() => { /* the event reports it */ });
+  // Kick off (or rejoin) the download and keep its cancellation token so
+  // Cancel can stop it. With autoDownload on, checkForUpdates returns the
+  // token for the download it (re)starts; a background download already
+  // in flight is superseded by this one. Failures surface via 'error'.
+  autoUpdater.checkForUpdates()
+    .then((r) => { if (r?.cancellationToken) currentDownload = r.cancellationToken; })
+    .catch(() => { /* the event reports it */ });
+}
+
+/**
+ * Cancel a download in progress and drop back to the offer so the user
+ * can start it again. Actually stops the transfer (the download does not
+ * keep running in the background) and leaves the updater ready for the
+ * next check — no wedged half-state.
+ */
+function cancelDownload(): void {
+  if (currentDownload) {
+    currentDownload.cancel();
+    currentDownload = null;
+  }
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(-1);
+  }
+  if (availableVersion) setUpdateUi({ state: 'available', version: availableVersion });
 }
 
 /**
@@ -509,6 +537,7 @@ function setupAutoUpdates(): void {
   });
   autoUpdater.on('update-downloaded', (info) => {
     downloadedVersion = info.version;
+    currentDownload = null;
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(-1);
     }
@@ -523,6 +552,10 @@ function setupAutoUpdates(): void {
     }
   });
   autoUpdater.on('error', (e) => {
+    // Cancelling a download rejects with a cancellation error — that is
+    // the user's own doing, not a failure to surface (cancelDownload has
+    // already dropped back to the offer).
+    if (/cancell?ed/i.test(String(e))) { dbg('download cancelled'); return; }
     dbg('auto-update error', e);
     // Only states the window is actively waiting on turn into an error
     // view; a failed background re-check never hijacks a settled one.
@@ -535,7 +568,9 @@ function setupAutoUpdates(): void {
     }
   });
   const check = () => {
-    autoUpdater.checkForUpdates().catch((e) => dbg('update check failed', e));
+    autoUpdater.checkForUpdates()
+      .then((r) => { if (r?.cancellationToken) currentDownload = r.cancellationToken; })
+      .catch((e) => dbg('update check failed', e));
   };
   check();
   setInterval(check, 6 * 60 * 60 * 1000);

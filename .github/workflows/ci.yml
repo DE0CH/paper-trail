@@ -378,6 +378,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateWindowEdges.js
 
+      - name: Update download is cancellable (Cancel stops the transfer)
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/updateWindowCancel.js
+
       - name: Restart edge cases (re-check after Cancel, second window, Don't Save)
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/updateRestartEdges.js

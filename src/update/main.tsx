@@ -1,14 +1,15 @@
-// The desktop shell's Software Update window: one fixed-size window
-// that moves through the standard update states — checking, up to
-// date, update available, downloading (progress bar), ready to
-// restart, error — with a stable button row (fixed-width buttons, no
-// layout shift between states). The main process owns the real state
-// and pushes it over the ptUpdate bridge; every button is a plain
-// request back to it.
+// The desktop shell's Software Update window: a Sparkle-style native
+// macOS updater window that moves through the standard states —
+// checking, up to date, update available, downloading (progress bar),
+// ready to restart, error — with a stable button row (fixed-width
+// buttons, no layout shift between states). The main process owns the
+// real state and pushes it over the ptUpdate bridge; every button is a
+// plain request back to it. During a download the secondary button is
+// a REAL Cancel that stops the download (main process side).
 
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import '../ui/globals.css';
+import './updateWindow.css';
 
 type UpdateUiState =
   | { state: 'checking'; appVersion: string }
@@ -18,7 +19,7 @@ type UpdateUiState =
   | { state: 'downloaded'; version: string; appVersion: string }
   | { state: 'error'; detail: string; appVersion: string };
 
-type UpdateAction = 'download' | 'restart' | 'later';
+type UpdateAction = 'download' | 'cancel' | 'restart' | 'later';
 
 declare global {
   interface Window {
@@ -81,9 +82,11 @@ function buttons(s: UpdateUiState): { primary: ButtonSpec; secondary: ButtonSpec
         secondary: later,
       };
     case 'downloading':
+      // A real Cancel: it stops the download (main process) and drops
+      // back to the offer, not a "Later" that only hides the window.
       return {
         primary: { label: 'Restart to Update', action: 'restart', enabled: false, shown: true },
-        secondary: later,
+        secondary: { label: 'Cancel', action: 'cancel', enabled: true, shown: true },
       };
     case 'downloaded':
       return {
@@ -96,14 +99,11 @@ function buttons(s: UpdateUiState): { primary: ButtonSpec; secondary: ButtonSpec
 }
 
 function Button({ id, spec }: { id: string; spec: ButtonSpec }) {
-  const base = 'min-w-32 rounded-md border px-3 py-1.5 text-center transition-colors';
-  const kind = id === 'pt-update-primary'
-    ? 'border-accent bg-accent text-white enabled:hover:brightness-110'
-    : 'border-borderapp bg-hoverrow text-fgapp enabled:hover:bg-panel';
+  const kind = id === 'pt-update-primary' ? 'pt-upd-btn-primary' : 'pt-upd-btn-secondary';
   return (
     <button
       id={id}
-      className={`${base} ${kind} disabled:opacity-45`}
+      className={`pt-upd-btn ${kind}`}
       style={spec.shown ? undefined : { visibility: 'hidden' }}
       disabled={!spec.enabled}
       onClick={() => window.ptUpdate?.action(spec.action)}
@@ -127,31 +127,22 @@ function UpdateWindow() {
   const percent = s.state === 'downloading' ? Math.max(0, Math.min(100, s.percent)) : 0;
 
   return (
-    <div id="pt-update-root" data-state={s.state}
-      className="flex h-full select-none gap-5 p-6">
-      <img src="/icon.svg" alt="" className="h-16 w-16 shrink-0" draggable={false} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div id="pt-update-title" className="font-semibold">{title}</div>
-        <div id="pt-update-detail"
-          className="mt-1 overflow-hidden text-ellipsis text-dim"
-          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-          {detail}
-        </div>
-        {/* The bar's slot is always reserved so states swap without the
-            buttons moving. */}
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+    <div id="pt-update-root" data-state={s.state} className="pt-upd">
+      <img src="/icon.svg" alt="" className="pt-upd-icon" draggable={false} />
+      <div className="pt-upd-body">
+        <div id="pt-update-title" className="pt-upd-title">{title}</div>
+        <div id="pt-update-detail" className="pt-upd-detail">{detail}</div>
+        <div className="pt-upd-progress-track"
           style={{ visibility: busy ? 'visible' : 'hidden' }}>
-          <div className="h-full w-full rounded-full bg-borderapp">
-            <div id="pt-update-progress"
-              className={s.state === 'checking'
-                ? 'h-full w-1/4 animate-pulse rounded-full bg-accent'
-                : 'h-full rounded-full bg-accent'}
-              style={s.state === 'downloading' ? { width: `${percent}%` } : undefined}
-              data-percent={s.state === 'downloading' ? Math.round(percent) : undefined}
-            />
-          </div>
+          <div id="pt-update-progress"
+            className={s.state === 'checking'
+              ? 'pt-upd-progress-bar indeterminate'
+              : 'pt-upd-progress-bar'}
+            style={s.state === 'downloading' ? { width: `${percent}%` } : undefined}
+            data-percent={s.state === 'downloading' ? Math.round(percent) : undefined}
+          />
         </div>
-        <div className="mt-auto flex justify-end gap-2.5 pt-4">
+        <div className="pt-upd-buttons">
           <Button id="pt-update-secondary" spec={secondary} />
           <Button id="pt-update-primary" spec={primary} />
         </div>
