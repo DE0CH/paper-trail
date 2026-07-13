@@ -52,3 +52,11 @@ abort_${PT_UID}:
 notRunning_${PT_UID}:
   !undef PT_UID
 !macroend
+
+; Windows' "Installed apps" / Add-Remove-Programs list reads DisplayIcon.
+; electron-builder's default left it showing the stock uninstaller icon
+; (the red no-entry circle). Anchor it to the installed app exe, whose
+; embedded icon is the app icon (the trail).
+!macro customInstall
+  WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}" "DisplayIcon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+!macroend
