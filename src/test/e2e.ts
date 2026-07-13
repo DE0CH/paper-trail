@@ -242,7 +242,16 @@ async function run(): Promise<void> {
         span.holders === 41 && span.lastRendered && /p\.\s*41/.test(span.label ?? ''),
         JSON.stringify(span));
 
-      // The top edge resizes the popup too (bottom edge stays put).
+      // The top edge resizes the popup too (bottom edge stays put). The
+      // preview opens flush against its top-clamp (toolbar bottom + 8, and
+      // the toolbar is now its intended 40px), leaving no room to drag the
+      // top edge up. So first drag the top edge DOWN to make headroom, then
+      // the real check: drag it back UP and confirm it grows upward.
+      const pv0 = (await page.locator('#preview').boundingBox())!;
+      await page.mouse.move(pv0.x + pv0.width / 2, pv0.y + 1);
+      await page.mouse.down();
+      await page.mouse.move(pv0.x + pv0.width / 2, pv0.y + 80, { steps: 6 });
+      await page.mouse.up();
       const pvBox = (await page.locator('#preview').boundingBox())!;
       await page.mouse.move(pvBox.x + pvBox.width / 2, pvBox.y + 1);
       await page.mouse.down();
