@@ -146,6 +146,11 @@ jobs:
         shell: bash
         run: node build-node/test/desktopE2e.js
 
+      - name: Right-click "Search for this" fills the find box
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchSelectionBox.js
+
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
         shell: bash
@@ -419,6 +424,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/desktopE2e.js
+
+      - name: Right-click "Search for this" fills the find box
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchSelectionBox.js
 
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}

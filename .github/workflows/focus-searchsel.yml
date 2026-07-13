@@ -1,0 +1,27 @@
+# Dev-iteration workflow: fast red/green for the search-selection fix.
+# Fires only on the fix-search-selection** branch prefix (a push trigger,
+# because workflow_dispatch won't run off a non-default branch). Runs the
+# one focused Electron test on a GUI runner. Drop at merge.
+name: Search-selection focus
+
+on:
+  push:
+    branches: ['fix-search-selection**']
+
+permissions:
+  contents: read
+
+jobs:
+  searchsel:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: Right-click "Search for this" fills the find box
+        run: node build-node/test/searchSelectionBox.js
