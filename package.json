@@ -20,6 +20,7 @@
     "test:e2e:preview-rebuild": "node build-node/test/previewRebuild.js",
     "test:e2e:search-commit": "node build-node/test/searchCommitState.js",
     "test:e2e:rename-shift": "node build-node/test/renameNoShift.js",
+    "test:e2e:race": "node build-node/test/raceConditions.js",
     "test:desktop:edges": "electron build-node/test/desktopEdges.js",
     "test:os-open-flash": "electron build-node/test/osOpenFlash.js",
     "test:os-open-derived": "electron build-node/test/osOpenDerivedTitle.js",

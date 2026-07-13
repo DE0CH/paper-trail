@@ -136,6 +136,11 @@ jobs:
         shell: bash
         run: node build-node/test/renameNoShift.js
 
+      - name: Rapid-action race conditions stay consistent (CPU-throttled)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/raceConditions.js
+
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
         shell: bash
@@ -394,6 +399,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/renameNoShift.js
+
+      - name: Rapid-action race conditions stay consistent (CPU-throttled)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/raceConditions.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
