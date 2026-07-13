@@ -1,0 +1,68 @@
+# On-demand DEV build of the desktop apps — does NOT run or require CI.
+# For examining a build during development while the full release CI is
+# red/flaky. Unsigned (mac: right-click > Open, or `xattr -cr` the .app;
+# Windows: SmartScreen "More info > Run anyway"). Artifacts are attached
+# to the run, NOT published as a release and NOT deployed.
+#
+# Run it:  Actions > "Dev build (no CI)" > Run workflow  (pick a branch),
+# or:      gh workflow run dev-build.yml --ref <branch> [-f ref=<sha>]
+
+name: Dev build (no CI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "branch/tag/SHA to build (blank = the ref you dispatch on)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Package mac (unsigned — no CI, no notarization)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac --publish never -c.mac.notarize=false -c.mac.identity=null -c.mac.hardenedRuntime=false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-trail-mac-dev
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Package windows (unsigned — no CI)
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-trail-windows-dev
+          path: |
+            dist-electron/*.exe
+            dist-electron/*-win.zip
+          if-no-files-found: error
