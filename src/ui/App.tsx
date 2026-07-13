@@ -11,7 +11,10 @@ import Welcome from './Welcome';
 // Each panel owns its width independently: resizing, closing, or opening
 // one panel never changes the others' sizes — neighbors just shift and the
 // viewer absorbs the difference.
-const MIN_W = { nav: 90, stacks: 80, side: 150 } as const;
+// nav min holds the 3 header buttons (expand/collapse/close, ~98px with
+// padding at the intended 28px size) plus room for the two tabs, so the
+// Pages/Outline tabs never slide fully under the buttons on a narrow panel.
+const MIN_W = { nav: 140, stacks: 80, side: 150 } as const;
 const VIEWER_MIN = 260;
 
 const clampW = (v: number, min: number, max: number) =>
