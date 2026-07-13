@@ -1,0 +1,52 @@
+# Focused dev harness for the reopen-during-quit-install witness: build,
+# package the current version, build the next version into a feed, then
+# run ONLY updateWinOpenDuringInstall.js — nothing else in the pyramid.
+# Manual dispatch on the Depot mirror for fast red/green TDD iteration.
+# Not part of the release gate (the full ci.yml is authoritative).
+
+name: witness flash-close
+
+on:
+  workflow_dispatch: {}
+  # A new workflow file on a non-default branch can't be dispatched by
+  # name; a branch-scoped push trigger runs the red/green TDD variants.
+  push:
+    branches: [flash-close-silent, flash-close-silent-red]
+
+jobs:
+  witness:
+    # x64 Depot on the mirror; github-hosted on the public repo.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-windows-2025' || 'windows-latest' }}
+    # A hard ceiling so a wedged install can never hang the run for an
+    # hour again — the test's own PowerShell timeouts should settle it
+    # well within this.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Package the current version (installer only)
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Build the next version into the update feed
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        shell: bash
+        run: |
+          npm version patch --no-git-tag-version
+          npx electron-builder --win nsis --publish never -c.directories.output=dist-update-feed
+          git checkout -- package.json package-lock.json
+
+      - name: Reopening DURING the quit-install never flash-closes
+        shell: bash
+        run: node build-node/test/updateWinOpenDuringInstall.js

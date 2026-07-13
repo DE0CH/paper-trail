@@ -1,0 +1,63 @@
+# Focused dev harness for the MAC reopen-during-update witness: build a
+# SIGNED mac zip (Squirrel.Mac refuses unsigned updates), build the next
+# version into a feed, then run ONLY updateMacOpenDuringInstall.js. Proves
+# the reopen-during-install contract on macOS (atomic Squirrel bundle
+# swap — the win32 silent-cancel fix never runs here). Not part of the
+# release gate. A branch-scoped push trigger runs the TDD variant.
+
+name: witness flash-close mac
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [flash-close-silent]
+
+jobs:
+  witness:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      HAS_CERT: ${{ secrets.MAC_CERT_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Package the current version (signed zip)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          if [ "$HAS_CERT" != "true" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none
+
+      - name: Build the next version into the update feed (signed)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          if [ "$HAS_CERT" != "true" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npm version patch --no-git-tag-version
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none -c.directories.output=dist-update-feed
+          git checkout -- package.json package-lock.json
+
+      - name: Reopening DURING the mac quit-install is safe and silent
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacOpenDuringInstall.js
+
+      - name: No signing cert — skip (Squirrel.Mac needs a signed update)
+        if: env.HAS_CERT != 'true'
+        run: echo "::warning::MAC_CERT_P12 unset; mac reopen-during-install witness skipped"
