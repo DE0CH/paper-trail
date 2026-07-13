@@ -52,8 +52,13 @@ $timer.Add_Tick({
 $timer.Start()
 [void][System.Windows.Forms.Application]::Run($form)
 Start-Sleep -Seconds 1
-if ($fileArgs.Count -gt 0) { Start-Process -FilePath $exe -ArgumentList $fileArgs }
-else { Start-Process -FilePath $exe }
+if ($fileArgs.Count -gt 0) {
+  # Quote each path: -ArgumentList joins an array with spaces WITHOUT
+  # quoting, so an unquoted "Reopened Paper.pdf" would split into two
+  # args and the reopened app would fail to open the document.
+  $quoted = $fileArgs | ForEach-Object { '"' + $_ + '"' }
+  Start-Process -FilePath $exe -ArgumentList $quoted
+} else { Start-Process -FilePath $exe }
 `;
 
 /**
