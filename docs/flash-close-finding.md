@@ -23,23 +23,35 @@ NSIS can't replace the locked exe, so the install **aborts**, and the
 fix's "Updating…" marquee then relaunches the **old** version. The held
 fix trades the flash-close crash for a *silently-skipped update*.
 
-## Open decision (owner)
-1. **Refine the fix (keep the strong contract "update still completes").**
-   Make the reopen release the exe fast and/or have the marquee VERIFY the
-   install succeeded and RE-RUN the pending installer (from the updater
-   cache) after our process has exited, then relaunch the new version. A
-   fork is attempting this.
-2. **Relax the contract.** Accept "reopen during install → app runs the
-   OLD version with the document, update defers to the next quit" (no
-   crash, no data loss). If chosen, the witness's "update still completes"
-   assertion is too strong and would be relaxed — a TEST-CONTRACT change
-   requiring the owner's explicit permission.
+## Decision (owner, 2026-07-13)
+**Relax the contract — and make it SILENT.** A reopen that lands mid-
+install must **cancel/defer the update and bring up the OLD version
+silently**: no flash-close, no marquee, no error. The app opens the
+double-clicked document on the currently-installed (old) version; the
+downloaded update stays cached and applies on the next clean quit.
+
+Consequences:
+- The held fix's **"Updating Paper Trail…" marquee is dropped** — the
+  handoff must be silent (updateGuard.ts).
+- The reopen must cancel the pending install **cleanly** (no half-
+  replaced/corrupt files); the app's files must remain the intact old
+  version. The old-version outcome the held fix already reaches is
+  correct — this just removes the marquee and stops treating "the
+  update didn't complete" as a failure.
+- The witness's **"the update still completes" assertion is relaxed**
+  (owner granted this test-contract change): assert instead no flash-
+  close (app runs), the document opens, the app is the OLD version
+  (update deferred, not lost), and no corrupt/partial install.
 
 ## Status
-- **Cut from v0.5.12** (unvalidated fix — not shipped). v0.5.12 ships the
-  other four tracks (Sparkle update window + cancel, mac/win resilience
-  tests, .ptl-then-PDF save-binding fix).
+- **Cut from v0.5.13** (shipped without it; v0.5.12 was skipped). The
+  release shipped the other tracks (Sparkle update window + cancel,
+  mac/win resilience tests, .ptl-then-PDF save-binding fix).
+- The decision above is now made — implementing the **silent cancel/
+  defer** path: reopen mid-install → old version + document, no marquee,
+  update deferred to next quit, and relaxing the witness accordingly.
 - Branch `update-flash-close` holds the reliable RED witness + focused
-  `witness-flash-close.yml`; the fix stays reverted there. Fix attempts
-  live on throwaway `-green*` branches. The full `ci.yml` witness step is
-  NOT wired for release until the fix is correct.
+  `witness-flash-close.yml`; `update-flash-close-fixed` holds the (now
+  superseded) marquee handoff whose safe old-version outcome is the base
+  to make silent. The full `ci.yml` witness step is NOT wired for
+  release until the silent fix is correct against the relaxed contract.
