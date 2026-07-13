@@ -3,7 +3,7 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
-## 0.5.14
+## 0.5.15
 
 - In the macOS update window, Cancel (and closing the window) now simply
   dismisses it and lets the download keep running in the background,
