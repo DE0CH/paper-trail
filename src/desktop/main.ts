@@ -481,18 +481,26 @@ function startInteractiveDownload(): void {
   }
   setUpdateUi({ state: 'downloading', version, percent: 0 });
   // autoDownload is on, so the check that found this update already has
-  // the transfer in flight; re-checking returns the token for it (and
-  // restarts it after an earlier failure). Keep the token so Cancel can
-  // stop the transfer. Failures surface via the 'error' event.
-  //
-  // We drive downloads through autoDownload rather than an explicit
-  // downloadUpdate() on purpose: downloadUpdate makes the mac updater
-  // verify the running app's code signature, which an unsigned dev
-  // Electron on Intel lacks — real (signed) apps are fine, but it broke
-  // the dev update-window tests on macos-15-intel.
-  autoUpdater.checkForUpdates()
-    .then((r) => { if (r?.cancellationToken) currentDownload = r.cancellationToken; })
-    .catch(() => { /* the event reports it */ });
+  // the transfer in flight and currentDownload holds ITS token — reuse
+  // it (Cancel must cancel that exact download, not a token from a fresh
+  // checkForUpdates, which does not control the one already running).
+  // Only (re)start a check when nothing is downloading, e.g. after a
+  // Cancel. We avoid an explicit downloadUpdate() on purpose: it makes
+  // the mac updater verify the running app's code signature, which an
+  // unsigned dev Electron on Intel lacks (real signed apps are fine, but
+  // it broke the dev update-window tests on macos-15-intel).
+  if (!currentDownload) {
+    autoUpdater.checkForUpdates()
+      .then(rememberDownloadToken)
+      .catch(() => { /* the event reports it */ });
+  }
+}
+
+// The cancellation token belongs to the check that STARTED the download;
+// a later check returns a token that does not control it. Keep the first
+// one until the download finishes or is cancelled.
+function rememberDownloadToken(r: { cancellationToken?: CancellationToken } | null): void {
+  if (r?.cancellationToken && !currentDownload) currentDownload = r.cancellationToken;
 }
 
 /**
@@ -582,7 +590,7 @@ function setupAutoUpdates(): void {
     // autoDownload starts the background transfer; keep its token so a
     // Cancel can stop even a download that began before the window opened.
     autoUpdater.checkForUpdates()
-      .then((r) => { if (r?.cancellationToken) currentDownload = r.cancellationToken; })
+      .then(rememberDownloadToken)
       .catch((e) => dbg('update check failed', e));
   };
   check();
@@ -642,7 +650,7 @@ async function checkForUpdatesInteractive(): Promise<void> {
     const r = await autoUpdater.checkForUpdates();
     // autoDownload started the transfer here; hold its token so Cancel
     // can stop it even before the user pressed Update Now.
-    if (r?.cancellationToken) currentDownload = r.cancellationToken;
+    rememberDownloadToken(r);
     const latest = r?.updateInfo.version;
     if (!latest || latest === app.getVersion()) {
       setUpdateUi({ state: 'none' });
