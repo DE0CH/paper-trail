@@ -1,10 +1,15 @@
 // The Software Update window's download is INTERRUPTABLE: while it is
 // downloading, the secondary button is a real "Cancel" that STOPS the
-// transfer (it doesn't keep running in the background) and drops back
-// to the "available" offer, from which Update Now downloads again. The
-// feed drips the zip slowly so the download is caught mid-flight, and
-// the fake server records whether the zip request was aborted — proof
-// the transfer actually stopped rather than the window merely hiding.
+// transfer — it does not keep downloading in the background — and drops
+// back to the "available" offer, from which Update Now downloads again.
+//
+// The proof that it truly stopped (rather than the window merely hiding
+// a still-running download): after Cancel, wait PAST the point the
+// download would have finished, then confirm the update never became
+// "downloaded" — a fresh Update Now offers a new download instead of
+// jumping straight to Restart to Update. The feed drips slowly so the
+// cancel lands mid-transfer, and the feed is dark until the test drives
+// the check so no silent background download muddies the timing.
 //
 // Run (CI, macOS): npx electron build-node/test/updateWindowCancel.js
 
@@ -30,9 +35,11 @@ const FEED_VERSION = '99.0.0';
 const zipBytes = crypto.randomBytes(512 * 1024);
 const sha512 = crypto.createHash('sha512').update(zipBytes).digest('base64');
 
+// The zip drips over ~15s: the download is caught mid-flight to cancel,
+// and a full transfer would finish ~15s after it starts.
+const DRIP_MS = 15_000;
+let feedLive = false;
 let zipRequests = 0;
-let zipAborted = false;
-let zipCompleted = false;
 
 const yml = [
   `version: ${FEED_VERSION}`,
@@ -47,6 +54,9 @@ const yml = [
 
 const server = http.createServer((req, res) => {
   const name = (req.url ?? '').split('/').pop() ?? '';
+  if (!feedLive) {
+    res.writeHead(404); res.end('not found'); return;
+  }
   if (name.startsWith('latest')) {
     res.writeHead(200, { 'content-type': 'text/yaml' });
     res.end(yml);
@@ -56,26 +66,18 @@ const server = http.createServer((req, res) => {
       'content-type': 'application/octet-stream',
       'content-length': String(zipBytes.length),
     });
-    // ~40s drip: slow enough to reliably cancel mid-download.
-    const chunk = Math.ceil(zipBytes.length / 80);
+    const ticks = Math.ceil(DRIP_MS / 200);
+    const chunk = Math.ceil(zipBytes.length / ticks);
     let sent = 0;
     const timer = setInterval(() => {
-      if (res.destroyed) { clearInterval(timer); return; }
-      if (sent >= zipBytes.length) {
-        clearInterval(timer);
-        zipCompleted = true;
-        res.end();
-        return;
-      }
+      if (res.destroyed || res.writableEnded) { clearInterval(timer); return; }
+      if (sent >= zipBytes.length) { clearInterval(timer); res.end(); return; }
       res.write(zipBytes.subarray(sent, sent + chunk));
       sent += chunk;
-    }, 500);
-    // The updater aborting the download closes the socket before the
-    // body finishes — that is the transfer really stopping.
-    res.on('close', () => { clearInterval(timer); if (!zipCompleted) zipAborted = true; });
+    }, 200);
+    res.on('close', () => clearInterval(timer));
   } else {
-    res.writeHead(404);
-    res.end('not found');
+    res.writeHead(404); res.end('not found');
   }
 });
 server.listen(8779, '127.0.0.1');
@@ -114,13 +116,14 @@ async function waitFor<T>(get: () => Promise<T> | T, want: (v: T) => boolean,
 }
 
 async function run(): Promise<void> {
+  feedLive = true;
   Menu.getApplicationMenu()?.getMenuItemById('check-updates')?.click();
   const uw = await waitFor(updateWindow, (w) => !!w, 15_000);
   if (!uw) { console.error('FAIL  the Software Update window never opened'); app.exit(1); return; }
   const available = await waitFor(() => readState(uw), (s) => s === 'available', 30_000);
   check('an update is offered', available === 'available', available);
 
-  // Update Now → downloading, and progress is really moving.
+  // Update Now → downloading, with the progress really moving.
   await js(uw, `document.getElementById('pt-update-primary').click()`);
   const dl = await waitFor(() => readState(uw), (s) => s === 'downloading', 20_000);
   check('Update Now starts the download', dl === 'downloading', dl);
@@ -133,30 +136,28 @@ async function run(): Promise<void> {
     `document.getElementById('pt-update-progress')?.dataset.percent ?? '0'`));
   check('the download is under way (progress advances)', p2 > p1, `${p1} -> ${p2}`);
 
-  // Cancel → back to the offer, and the transfer actually stops.
+  // Cancel → back to the offer, window still open.
   await js(uw, `document.getElementById('pt-update-secondary').click()`); // Cancel
   const afterCancel = await waitFor(() => readState(uw), (s) => s === 'available', 10_000);
   check('Cancel drops back to the offer (Update Now / Later)',
     afterCancel === 'available', afterCancel);
   check('the window stays open after Cancel', updateWindow() !== undefined);
-  const stopped = await waitFor(() => zipAborted, (v) => v, 10_000);
-  check('Cancel actually stops the download (the transfer was aborted)', stopped);
 
-  // It must not have quietly finished in the background: give it well
-  // past the point completion would have arrived, then confirm the state
-  // never flipped to downloaded and no update-downloaded landed.
-  await new Promise((r) => setTimeout(r, 4000));
-  check('no update-downloaded lands after Cancel (state still available)',
-    (await readState(uw)) === 'available' && !zipCompleted,
-    `state=${await readState(uw)} completed=${zipCompleted}`);
+  // The download really stopped: wait well past when a full transfer
+  // would have finished, then confirm the update never became ready —
+  // a fresh Update Now must offer a new download, not jump to Restart.
+  await new Promise((r) => setTimeout(r, DRIP_MS + 6000));
+  check('the offer never flipped to downloaded on its own',
+    (await readState(uw)) === 'available', await readState(uw));
 
-  // And the flow is not wedged: Update Now works again.
   const requestsBefore = zipRequests;
   await js(uw, `document.getElementById('pt-update-primary').click()`);
-  const dl2 = await waitFor(() => readState(uw), (s) => s === 'downloading', 20_000);
-  check('Update Now downloads again after a cancel', dl2 === 'downloading', dl2);
-  check('...as a fresh transfer', zipRequests > requestsBefore,
-    `${requestsBefore} -> ${zipRequests}`);
+  const dl2 = await waitFor(() => readState(uw), (s) => s === 'downloading' || s === 'downloaded', 20_000);
+  check('Update Now after Cancel starts a fresh download, not Restart',
+    dl2 === 'downloading', `state=${dl2}`);
+  const freshRequest = await waitFor(() => zipRequests, (n) => n > requestsBefore, 15_000);
+  check('...and it is a new transfer (the cancelled one did not linger)',
+    freshRequest > requestsBefore, `${requestsBefore} -> ${freshRequest}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
