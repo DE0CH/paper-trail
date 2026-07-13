@@ -36,17 +36,20 @@ paid GitHub minutes, starts immediately vs the public queue): push the
 branch to `mirror` and `gh workflow run --repo de0ch-org/paper-trail-
 mirror`. RECORDING RUNNERS (ground truth, side-by-side probe 2026-07-13, run
 29219980572):
-- **Windows recordings CAN run on Depot** (`depot-windows-2025`). It
-  has a full interactive desktop (console Administrator Active,
-  dwm+explorer running); `CopyFromScreen` and `ffmpeg gdigrab` both
-  capture the real desktop (gdigrab: exit 0, 45 frames @ 15 fps). Its
-  display is 800×600 on a software Microsoft Basic Display Adapter
-  (windows-latest is 1024×768 / Hyper-V video) — that 800×600 is also
-  what clamped the desktopEdges window-bounds test. Prefer Depot for
-  Windows recordings (saves GitHub minutes); the goal is to record on
-  Depot. Open item under active investigation: prove/settle smooth
-  capture of on-screen MOTION on the Basic Display Adapter and whether
-  the resolution can be raised. The NSIS install works on Depot too.
+- **Windows recordings on Depot** (`depot-windows-2025`): records fine
+  WITH real motion (verified end-to-end, run 29220525182). Recipe:
+  `ffmpeg -y -f gdigrab -framerate 30 -draw_mouse 1 -i desktop -t <sec>
+  out.mp4` (~21-30 fps, smooth; the Basic Display Adapter does NOT hand
+  a frozen buffer). `ddagrab` does NOT work on either runner (no D3D11
+  desktop duplication). The ONE hard limit: resolution is locked at
+  **800×600** — the Basic Display Adapter enumerates 0 display modes and
+  can't be raised via API (would need a firmware/registry framebuffer
+  override + reboot). windows-latest gives 1920×1080 (Hyper-V synthetic
+  GPU). So: SIMPLE Windows recordings → Depot (saves minutes); but
+  POLISHED APP-UI demos → windows-latest, because the app window
+  (~1440×940) is clipped/cramped at 800×600 and 1920×1080 looks
+  materially better. The 800×600 default is also what clamped the
+  desktopEdges window-bounds test. NSIS install works on Depot too.
 - **macOS recordings → github-hosted `macos-14`, NEVER Depot.** Depot
   macOS (AWS EC2) IS headless, denies osascript assistive access
   (-25211), and macOS 15 pops a ScreenCaptureKit consent that derails
