@@ -36,6 +36,9 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
+  // A pending query to drop into the find box once it mounts (e.g. the
+  // right-click "Search for this" selection). Consumed by the effect below.
+  const [searchSeed, setSearchSeed] = useState<string | null>(null);
   const [widths, setWidths] = useState(initialWidths);
   const [dragOver, setDragOver] = useState(false);
   const [navOpen, setNavOpen] = useState(() => loadUI().navOpen ?? true);
@@ -62,10 +65,18 @@ export default function App() {
   };
   useEffect(() => {
     if (searchOpen) {
+      // The bar is now mounted, so searchRef is live. If a query is
+      // pending (search-selection), fill the box with it — doing this in
+      // an inline microtask right after setSearchOpen fires BEFORE the
+      // mount, when the ref is still null, which left the box empty.
+      if (searchSeed != null && searchRef.current) {
+        searchRef.current.value = searchSeed;
+        setSearchSeed(null);
+      }
       searchRef.current?.focus();
       searchRef.current?.select();
     }
-  }, [searchOpen]);
+  }, [searchOpen, searchSeed]);
 
   const toggleNav = () => setNavOpen((v) => {
     saveUI({ navOpen: !v });
@@ -286,14 +297,9 @@ export default function App() {
           break;
         case 'search-selection':
           if (payload) {
+            setSearchSeed(payload); // the effect fills the box once it mounts
             setSearchOpen(true);
-            queueMicrotask(() => {
-              if (searchRef.current) {
-                searchRef.current.value = payload;
-                searchRef.current.focus();
-              }
-              void controller.runSearch(payload);
-            });
+            void controller.runSearch(payload);
           }
           break;
         case 'toggle-sidebar': setSidebarVisible((v) => !v); break;
