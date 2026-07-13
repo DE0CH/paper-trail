@@ -28,6 +28,26 @@ owner's behalf).
 earlier de0ch-org move + the `de0ch-org` ref rewrite were both fully
 undone. Do NOT rewrite refs to de0ch-org.
 
+**Per-commit CI is main-push only** (owner, 2026-07-13): ci.yml
+`on.push.branches: [main]` (was `['**']`). Feature branches validate
+on demand — `gh workflow run ci.yml --ref <branch>` or a push to the
+mirror. PREFER the Depot mirror for any manual CI trigger (private, no
+paid GitHub minutes, starts immediately vs the public queue): push the
+branch to `mirror` and `gh workflow run --repo de0ch-org/paper-trail-
+mirror`. EXCEPTION — the macOS update-UI RECORDER must run on public
+github-hosted `macos-14`: Depot macOS denies osascript assistive
+access (-25211), and macOS 15 pops a ScreenCaptureKit screen-recording
+consent that derails screencapture; macos-14 has neither.
+
+**Depot-Windows env flakes** (AWS EC2, no Hyper-V, different display):
+`desktopEdges` (window-bounds round-trip) and `updateWinOpenAfterUpdate`
+fail there for environment reasons, not code — they pass on GitHub
+windows. Judge a mirror run by the steps that matter, not these two.
+
+**Memory lives on main**; feature branches carry stale copies (they
+branched before the memory commits). Do memory edits on main, commit
+with `[skip actions]` (GitHub honors it — no CI on main for that push).
+
 **Depot via dynamic runs-on** (add before pushing a branch to mirror):
 one workflow file, owner-keyed labels so public uses GitHub-hosted and
 the mirror uses Depot:
