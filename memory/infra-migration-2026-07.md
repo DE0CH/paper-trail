@@ -34,10 +34,20 @@ on demand — `gh workflow run ci.yml --ref <branch>` or a push to the
 mirror. PREFER the Depot mirror for any manual CI trigger (private, no
 paid GitHub minutes, starts immediately vs the public queue): push the
 branch to `mirror` and `gh workflow run --repo de0ch-org/paper-trail-
-mirror`. EXCEPTION — the macOS update-UI RECORDER runs on public github-hosted
-`macos-14`: Depot macOS denies osascript assistive access (-25211), and
-macOS 15 pops a ScreenCaptureKit screen-recording consent that derails
-screencapture; macos-14 has neither. Depot-macOS viability (probed
+mirror`. EXCEPTION — ALL SCREEN RECORDINGS (mac AND windows) run on public
+github-hosted runners, never Depot. Core reason: Depot's runners are
+AWS EC2 and HEADLESS (no real rendering display) — a recording needs a
+visible desktop (ffmpeg gdigrab on Windows; screencapture / ffmpeg
+avfoundation on macOS). github-hosted runners have a real display
+(proven: media.yml records on windows-latest, the update-UI recorder
+records on macos-14). Specifics: Depot macOS is CONFIRMED headless
+(probe 2026-07-13) AND denies osascript assistive access (-25211) AND
+macOS 15 pops a ScreenCaptureKit consent that derails capture → recorder
+runs on `macos-14`. Depot Windows is INFERRED headless (its window-
+bounds round-trip test failed, consistent with the confirmed-headless
+Depot mac) → Windows recordings run on `windows-latest`. The NSIS
+install itself is fine on Depot; it's the DISPLAY the recording needs
+that Depot lacks. Depot-macOS viability (probed
 2026-07-13, runner macOS 15.7.3): NOT usable as-is — `screencapture -v`
 (video) exits immediately with no .mov, System Events times out
 (-1712/-25211), cliclick lacks accessibility. BUT Depot has SIP
