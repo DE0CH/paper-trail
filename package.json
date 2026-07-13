@@ -36,6 +36,7 @@
     "test:update:mac:install": "node build-node/test/updateMacInstall.js",
     "test:update:mac:window-install": "node build-node/test/updateMacWindowInstall.js",
     "test:update:mac:cancel-quit": "node build-node/test/updateMacCancelThenQuit.js",
+    "test:update:mac:open-during": "node build-node/test/updateMacOpenDuringInstall.js",
     "test:update:window": "electron build-node/test/updateWindow.js",
     "test:update:window-edges": "electron build-node/test/updateWindowEdges.js",
     "test:update:unsaved": "electron build-node/test/updateRestartUnsaved.js",
