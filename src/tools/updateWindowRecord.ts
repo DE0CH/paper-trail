@@ -210,18 +210,26 @@ async function run(): Promise<void> {
 
     feedLive = true; // now the interactive check finds a fresh update
 
-    // 1 — the app menu → Check for Updates…
-    glideTo(axCenter(`menu bar item "${PRODUCT}" of menu bar 1`));
-    cliclick(`c:${cursor.x},${cursor.y}`); await sleep(700);
-    const item = axCenter(`menu item "Check for Updates…" of menu 1 of menu bar item "${PRODUCT}" of menu bar 1`);
-    glideTo(item); cliclick(`c:${item.x},${item.y}`);
-
-    // 2 — the update window opens
+    // 1 — the app menu → Check for Updates…, then 2 — the update window
+    // opens. The menu-bar AX click is occasionally DROPPED on the runner
+    // (the menu doesn't open, or the item click misses), so re-issue the
+    // whole gesture until the update window actually appears rather than
+    // failing the take on a one-off miss.
     let page: Page | undefined;
-    const deadline = Date.now() + 30_000;
-    while (!page && Date.now() < deadline) {
-      page = eApp.windows().find((p) => p.url().includes('update.html'));
-      if (!page) await sleep(400);
+    const overall = Date.now() + 48_000;
+    for (let attempt = 0; !page && Date.now() < overall; attempt += 1) {
+      if (attempt > 0) { cliclick('kp:esc'); await sleep(600); } // close a half-open menu
+      glideTo(axCenter(`menu bar item "${PRODUCT}" of menu bar 1`));
+      cliclick(`c:${cursor.x},${cursor.y}`); await sleep(900);
+      try {
+        const item = axCenter(`menu item "Check for Updates…" of menu 1 of menu bar item "${PRODUCT}" of menu bar 1`);
+        glideTo(item); cliclick(`c:${item.x},${item.y}`);
+      } catch { /* the menu wasn't open this time — the loop re-tries */ }
+      const wait = Date.now() + 8_000;
+      while (!page && Date.now() < wait) {
+        page = eApp.windows().find((p) => p.url().includes('update.html'));
+        if (!page) await sleep(300);
+      }
     }
     if (!page) throw new Error('SELF-VERIFY: the update window never opened');
 
