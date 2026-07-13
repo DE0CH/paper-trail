@@ -3,6 +3,18 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.16
+
+- Opening a reading session now behaves the same however you open it.
+  Before, dragging a session file onto the window or using "Load
+  session…" could leave Paper Trail unsure where to save — so it didn't
+  auto-save, and asked "Do you want to save?" when you closed. Now every
+  way of opening binds the session, so it auto-saves and closes without
+  nagging. (In the browser, closing with unsaved changes still shows the
+  browser's own warning — that can't be avoided on the web.)
+- The Windows installer and the "Installed apps" entry now show a Paper
+  Trail package icon instead of a generic one.
+
 ## 0.5.15
 
 - In the macOS update window, Cancel (and closing the window) now simply
