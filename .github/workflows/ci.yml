@@ -151,6 +151,11 @@ jobs:
         shell: bash
         run: node build-node/test/desktopE2e.js
 
+      - name: Real drag-drop binds the on-disk path (no getPathForFile stub)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/desktopDropBinds.js
+
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
         shell: bash
@@ -429,6 +434,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/desktopE2e.js
+
+      - name: Real drag-drop binds the on-disk path (no getPathForFile stub)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/desktopDropBinds.js
 
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
