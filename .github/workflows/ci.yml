@@ -59,8 +59,12 @@ jobs:
         run: npm run coverage
 
       - name: Upload coverage to Codecov
-        # one leg is enough — the numbers are platform-independent
-        if: ${{ !cancelled() && matrix.runner == 'windows-latest' }}
+        # one leg is enough — the numbers are platform-independent. Only on
+        # the canonical public repo: the private Depot mirror
+        # (de0ch-org/paper-trail-mirror) isn't registered with Codecov, so
+        # the upload there fails "Repository not found" and, with
+        # fail_ci_if_error, would fail every mirror/Depot dev run.
+        if: ${{ !cancelled() && matrix.runner == 'windows-latest' && github.repository == 'de0ch/paper-trail' }}
         uses: codecov/codecov-action@v5
         with:
           files: coverage/lcov.info
@@ -122,6 +126,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/searchCommitState.js
+
+      - name: The rename input never shifts the text (no-jank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renameNoShift.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
@@ -382,6 +391,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/searchCommitState.js
+
+      - name: The rename input never shifts the text (no-jank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renameNoShift.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
