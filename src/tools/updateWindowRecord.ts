@@ -93,16 +93,25 @@ function serveFeed(): { server: http.Server; newVersion: string } {
     }
     if (name.endsWith('.zip')) {
       res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': String(zip.length) });
-      // ~24s drip: the download stays visibly in flight long enough that
-      // 'downloading' is trivially caught and — for the canceled run — the
-      // Cancel click always lands MID-download (a shorter drip once
-      // completed before Cancel, so the take ended on "Ready to update"
-      // instead of demonstrating the interruption).
-      const chunk = Math.ceil(zip.length / 48);
+      // The zip is dripped so the progress bar visibly fills (~15s).
+      // autoDownload starts the transfer the instant the check finds the
+      // update — BEFORE anything is clicked — so a drip that finishes on
+      // its own can reach 'downloaded' during the offer, and Update Now
+      // then jumps straight to "Ready to update" (exactly why the canceled
+      // take kept failing SELF-VERIFY: 'download never started,
+      // state=downloaded'). So for the CANCELED run the transfer must
+      // NEVER complete on its own: fill to ~65% then trickle one byte per
+      // tick (a keep-alive that never ends) so the state stays
+      // 'downloading' until the Cancel click aborts the connection.
+      // FINISHED completes normally to reach Ready → Restart.
+      const chunk = Math.ceil(zip.length / 30);
+      const stallAt = MODE === 'canceled' ? Math.floor(zip.length * 0.65) : zip.length;
       let sent = 0;
       const timer = setInterval(() => {
-        if (sent >= zip.length || res.destroyed) { clearInterval(timer); res.end(); return; }
-        res.write(zip.subarray(sent, sent + chunk)); sent += chunk;
+        if (res.destroyed) { clearInterval(timer); return; }
+        if (sent >= zip.length) { clearInterval(timer); res.end(); return; }
+        const step = sent >= stallAt ? 1 : chunk; // past the stall: trickle, never finishing
+        res.write(zip.subarray(sent, sent + step)); sent += step;
       }, 500);
       return;
     }
