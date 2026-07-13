@@ -3,7 +3,7 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
-## 0.5.12
+## 0.5.13
 
 - The macOS "Check for Updates…" flow is now a proper update window,
   like the ones many Mac apps use: it announces the new version and
@@ -26,6 +26,15 @@ matching section into the GitHub Release notes.
   session bound to that file, so auto-save works and Save no longer
   asks where to put it.
 - The README gained the new logo plus build and coverage badges.
+
+## 0.5.12 (skipped)
+
+Never released: the tagged build's release workflow startup-failed. The
+owner-keyed CI matrix used a `fromJSON` expression that is valid on a
+normal push but not when the release calls the CI as a reusable workflow
+(workflow_call). Version numbers are not reused, so these changes shipped
+as 0.5.13, with the matrix rewritten to a static matrix plus an
+owner-keyed `runs-on`.
 
 ## 0.5.11
 

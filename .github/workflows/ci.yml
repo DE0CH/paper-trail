@@ -22,10 +22,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
-        # mirror (de0ch-org): one Depot x64 leg for fast runs.
-        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-windows-2025"]') || fromJSON('["windows-latest","windows-11-arm"]') }}
-    runs-on: ${{ matrix.runner }}
+        runner: [windows-latest, windows-11-arm]
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): x64 on Depot, arm stays github-hosted. STATIC matrix +
+    # owner-keyed runs-on ON PURPOSE — a fromJSON matrix expression
+    # startup-fails the release's workflow_call (push worked, tag didn't).
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'windows-latest' && 'depot-windows-2025' || matrix.runner) || matrix.runner }}
     permissions:
       contents: read
       # the Codecov upload authenticates via GitHub OIDC (no token secret)
@@ -210,10 +212,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
-        # mirror (de0ch-org): one Depot x64 leg for fast runs.
-        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-windows-2025"]') || fromJSON('["windows-latest","windows-11-arm"]') }}
-    runs-on: ${{ matrix.runner }}
+        runner: [windows-latest, windows-11-arm]
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): x64 on Depot, arm stays github-hosted. STATIC matrix +
+    # owner-keyed runs-on ON PURPOSE — a fromJSON matrix expression
+    # startup-fails the release's workflow_call (push worked, tag didn't).
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'windows-latest' && 'depot-windows-2025' || matrix.runner) || matrix.runner }}
     steps:
       - uses: actions/checkout@v5
 
@@ -278,10 +282,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
-        # mirror (de0ch-org): one Depot Apple-silicon leg for fast runs.
-        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-macos-latest"]') || fromJSON('["macos-latest","macos-15-intel"]') }}
-    runs-on: ${{ matrix.runner }}
+        runner: [macos-latest, macos-15-intel]
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): Apple-silicon on Depot, Intel stays github-hosted.
+    # STATIC matrix + owner-keyed runs-on — a fromJSON matrix expression
+    # startup-fails the release's workflow_call.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'macos-latest' && 'depot-macos-latest' || matrix.runner) || matrix.runner }}
     steps:
       - uses: actions/checkout@v5
 
@@ -442,10 +448,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Public repo (de0ch): GitHub-hosted, both CPU arches. Private
-        # mirror (de0ch-org): one Depot Apple-silicon leg for fast runs.
-        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-macos-latest"]') || fromJSON('["macos-latest","macos-15-intel"]') }}
-    runs-on: ${{ matrix.runner }}
+        runner: [macos-latest, macos-15-intel]
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): Apple-silicon on Depot, Intel stays github-hosted.
+    # STATIC matrix + owner-keyed runs-on — a fromJSON matrix expression
+    # startup-fails the release's workflow_call.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'macos-latest' && 'depot-macos-latest' || matrix.runner) || matrix.runner }}
     env:
       HAS_CERT: ${{ secrets.MAC_CERT_P12 != '' }}
     steps:
