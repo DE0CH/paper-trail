@@ -413,6 +413,10 @@ let availableVersion: string | null = null;
 // the user asked for), so a Cancel can actually STOP it rather than just
 // hide the window. Cleared when the download finishes or is cancelled.
 let currentDownload: CancellationToken | null = null;
+// True while the update window is on screen: the window path downloads
+// only when the user clicks Update Now, so the background must not also
+// auto-start a silent download underneath it.
+let updateWindowOpen = false;
 
 function setUpdateUi(s: UpdateUiState): void {
   updateUi = s;
@@ -451,7 +455,8 @@ function openUpdateWindow(): void {
     if (process.env.PT_SHOT) updateWin.showInactive();
     else updateWin.show();
   });
-  updateWin.on('closed', () => { updateWin = null; });
+  updateWindowOpen = true;
+  updateWin.on('closed', () => { updateWin = null; updateWindowOpen = false; });
   void updateWin.loadURL(`${SCHEME}://app/update.html`);
 }
 
@@ -480,13 +485,24 @@ function startInteractiveDownload(): void {
     return;
   }
   setUpdateUi({ state: 'downloading', version, percent: 0 });
-  // Kick off (or rejoin) the download and keep its cancellation token so
-  // Cancel can stop it. With autoDownload on, checkForUpdates returns the
-  // token for the download it (re)starts; a background download already
-  // in flight is superseded by this one. Failures surface via 'error'.
-  autoUpdater.checkForUpdates()
-    .then((r) => { if (r?.cancellationToken) currentDownload = r.cancellationToken; })
-    .catch(() => { /* the event reports it */ });
+  // Reuse a background download already in flight (its token is ours to
+  // cancel); otherwise start one explicitly. Failures surface via 'error'.
+  if (!currentDownload) startDownload();
+}
+
+/**
+ * Start downloading the update we know about, holding a cancellation
+ * token so Cancel can stop the transfer. autoDownload is off, so this is
+ * the only thing that pulls bytes — one download, one token to cancel.
+ */
+function startDownload(): void {
+  const token = new CancellationToken();
+  currentDownload = token;
+  autoUpdater.downloadUpdate(token).catch((e) => {
+    // Cancelling rejects here — the user's own doing, not a failure.
+    if (token === currentDownload) currentDownload = null;
+    if (!/cancell?ed/i.test(String(e))) dbg('update download failed', e);
+  });
 }
 
 /**
@@ -514,7 +530,9 @@ function cancelDownload(): void {
  * a local feed with PT_UPDATE_URL and observe it via PT_UPDATE_TEST.
  */
 function setupAutoUpdates(): void {
-  autoUpdater.autoDownload = true;
+  // We drive downloads ourselves (startDownload) so a download can be
+  // cancelled with its token; autoDownload would start an untracked one.
+  autoUpdater.autoDownload = false;
   if (process.env.PT_UPDATE_URL) {
     autoUpdater.forceDevUpdateConfig = true;
     autoUpdater.setFeedURL({ provider: 'generic', url: process.env.PT_UPDATE_URL });
@@ -522,6 +540,16 @@ function setupAutoUpdates(): void {
     return;
   }
   autoUpdater.autoInstallOnAppQuit = true;
+  // Silent background updates: when no update window is driving, a found
+  // update downloads quietly and installs on the next quit — the same
+  // behaviour autoDownload used to give, now explicit so it shares the
+  // one cancellable download with the window path.
+  autoUpdater.on('update-available', (info) => {
+    availableVersion = info.version;
+    if (!updateWindowOpen && !currentDownload && downloadedVersion !== info.version) {
+      startDownload();
+    }
+  });
   // Background downloads are completely silent: no Dock/taskbar
   // progress, no toast nagging to restart — the update installs on the
   // next normal quit and the next start announces it (see
@@ -555,7 +583,7 @@ function setupAutoUpdates(): void {
     // Cancelling a download rejects with a cancellation error — that is
     // the user's own doing, not a failure to surface (cancelDownload has
     // already dropped back to the offer).
-    if (/cancell?ed/i.test(String(e))) { dbg('download cancelled'); return; }
+    if (/cancell?ed/i.test(String(e))) { currentDownload = null; dbg('download cancelled'); return; }
     dbg('auto-update error', e);
     // Only states the window is actively waiting on turn into an error
     // view; a failed background re-check never hijacks a settled one.
@@ -568,9 +596,9 @@ function setupAutoUpdates(): void {
     }
   });
   const check = () => {
-    autoUpdater.checkForUpdates()
-      .then((r) => { if (r?.cancellationToken) currentDownload = r.cancellationToken; })
-      .catch((e) => dbg('update check failed', e));
+    // Finding an update fires 'update-available', which downloads it
+    // silently when no window is open (autoDownload is off).
+    autoUpdater.checkForUpdates().catch((e) => dbg('update check failed', e));
   };
   check();
   setInterval(check, 6 * 60 * 60 * 1000);
