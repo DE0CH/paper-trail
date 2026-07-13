@@ -15,10 +15,18 @@ process.env.PT_SHOT = '1'; // show without stealing focus
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require(path.resolve(__dirname, '..', 'desktop', 'main.js'));
+
+// A BOUND session must never reach the save-location dialog. Auto-cancel
+// it so the test can never block: with the fix the dialog is never used
+// (the path binding saves silently); WITHOUT the fix an unbound Save
+// falls through to this dialog — cancelling it makes that path a clean
+// no-write failure instead of a hang.
+(dialog as { showSaveDialog: unknown }).showSaveDialog =
+  async () => ({ canceled: true, filePath: undefined });
 
 const pdfBytes = fs.readFileSync(path.resolve(__dirname, '..', '..', 'sample', 'cjk.pdf'));
 const pdfB64 = pdfBytes.toString('base64');
