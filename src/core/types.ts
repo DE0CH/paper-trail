@@ -104,10 +104,11 @@ declare global {
     ptDesktop?: {
       platform: string; // process.platform of the shell ('darwin', 'win32', ...)
       onMenu: (cb: (action: MenuAction, payload?: string) => void) => void;
-      onOpenFile: (cb: (file: { name: string; data: ArrayBuffer }) => void) => void;
+      onOpenFile: (cb: (file: { name: string; data: ArrayBuffer; path?: string }) => void) => void;
       showContextMenu: (ctx: ContextMenuRequest) => Promise<string | null>;
       setDocumentEdited: (edited: boolean) => void;
       saveSessionFallback: (text: string, suggestedName: string) => Promise<string | null>;
+      saveSessionToPath?: (path: string, text: string) => Promise<boolean>;
       openInNewWindow: (name: string, data: ArrayBuffer) => void;
     };
     __pt?: unknown;

@@ -10,8 +10,9 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   onMenu: (cb: (action: string, payload?: string) => void) => {
     ipcRenderer.on('pt-menu', (_event, action: string, payload?: string) => cb(action, payload));
   },
-  onOpenFile: (cb: (file: { name: string; data: ArrayBuffer }) => void) => {
-    ipcRenderer.on('pt-open-file', (_event, file: { name: string; data: ArrayBuffer }) => cb(file));
+  onOpenFile: (cb: (file: { name: string; data: ArrayBuffer; path?: string }) => void) => {
+    ipcRenderer.on('pt-open-file',
+      (_event, file: { name: string; data: ArrayBuffer; path?: string }) => cb(file));
     ipcRenderer.send('pt-open-file-ready');
   },
   // Native right-click menus: the renderer describes what was clicked,
@@ -27,6 +28,9 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   // the shell writes the file instead. Resolves to the path or null.
   saveSessionFallback: (text: string, suggestedName: string): Promise<string | null> =>
     ipcRenderer.invoke('pt-save-session', { text, suggestedName }) as Promise<string | null>,
+  // Silent write-back to an already-bound session file path (no dialog).
+  saveSessionToPath: (filePath: string, text: string): Promise<boolean> =>
+    ipcRenderer.invoke('pt-save-session-to-path', { path: filePath, text }) as Promise<boolean>,
   // A PDF picked while this window already shows one opens elsewhere.
   openInNewWindow: (name: string, data: ArrayBuffer) => {
     ipcRenderer.send('pt-open-new-window', { name, data });

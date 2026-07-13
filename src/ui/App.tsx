@@ -169,8 +169,8 @@ export default function App() {
     if (!window.ptDesktop) return;
     if (window.ptDesktop.platform === 'darwin') document.body.classList.add('desktopMac');
     if (window.ptDesktop.platform === 'win32') document.body.classList.add('desktopWin');
-    window.ptDesktop.onOpenFile(({ name, data }) => {
-      void controller.openFile(new File([data], name));
+    window.ptDesktop.onOpenFile(({ name, data, path }) => {
+      void controller.openFile(new File([data], name), null, path ?? null);
     });
   }, []);
 

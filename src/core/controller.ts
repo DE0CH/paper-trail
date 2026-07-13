@@ -48,6 +48,9 @@ export interface Snapshot {
 
 interface Session {
   handle: FileSystemFileHandle | null;
+  /** Desktop shell only: the bound .ptl's on-disk path (no handle exists
+   * for OS-opened files). Auto-save and Save write straight back to it. */
+  path: string | null;
   dirty: boolean;
   saving: boolean;
 }
@@ -64,7 +67,7 @@ export class Controller {
   hist = new NavStacks(null);
   search!: SearchController;
   preview: Preview | null = null;
-  session: Session = { handle: null, dirty: false, saving: false };
+  session: Session = { handle: null, path: null, dirty: false, saving: false };
 
   private docOpen = false;
   private currentName = '';
@@ -77,9 +80,11 @@ export class Controller {
   private currentPage = 1;
   private restoring = false;
   private pendingProgress: { json: ProgressFile } | null = null;
+  private pendingProgressPath: string | null = null;
   private confirmSession: {
     json: ProgressFile;
     progressHandle: FileSystemFileHandle | null;
+    progressPath: string | null;
   } | null = null;
   private mismatch_: { savedName: string; openName: string } | null = null;
 
@@ -176,7 +181,7 @@ export class Controller {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {
-        if (this.session.handle && this.session.dirty) {
+        if ((this.session.handle || this.session.path) && this.session.dirty) {
           this.writeProgressAuto().catch(() => { /* dirty flag stays honest */ });
         }
       }
@@ -236,10 +241,10 @@ export class Controller {
           ? 'saving'
           : this.session.dirty
             ? 'dirty'
-            : this.session.handle
+            : (this.session.handle || this.session.path)
               ? 'saved'
               : 'idle',
-        saveBound: !!this.session.handle,
+        saveBound: !!this.session.handle || !!this.session.path,
         toast: this.toast_,
         pendingPdfName: this.pendingProgress?.json.pdf.name ?? null,
         confirmPdfName: this.confirmSession?.json.pdf.name ?? null,
@@ -285,8 +290,9 @@ export class Controller {
       this.session.dirty = true;
       this.notify();
     }
-    if (this.session.handle) {
-      // Bound to a progress file: auto-save continuously (debounced).
+    if (this.session.handle || this.session.path) {
+      // Bound to a progress file (handle in the browser, path in the
+      // desktop shell): auto-save continuously (debounced).
       clearTimeout(this.fileSaveTimer);
       this.fileSaveTimer = setTimeout(() => {
         this.writeProgressAuto().catch((e) => console.warn('auto-save failed', e));
@@ -303,6 +309,9 @@ export class Controller {
    * always come back in the 'prompt' state).
    */
   private async canWriteSilently(): Promise<boolean> {
+    // A desktop path binding writes straight to disk (no permission UI),
+    // so it is always silent.
+    if (this.session.path) return true;
     const h = this.session.handle;
     if (!h) return false;
     if (!h.queryPermission) return true; // API absent (tests fake)
@@ -362,14 +371,22 @@ export class Controller {
   }
 
   async writeProgress(): Promise<void> {
-    if (!this.session.handle || this.session.saving || !this.docOpen) return;
+    if (this.session.saving || !this.docOpen) return;
+    if (!this.session.handle && !this.session.path) return;
     this.session.saving = true;
     this.notify();
     try {
-      const w = await this.session.handle.createWritable();
       // Line-oriented plain-text format: small, clear git diffs.
-      await w.write(serializeProgress(this.progressFileObject()));
-      await w.close();
+      const text = serializeProgress(this.progressFileObject());
+      if (this.session.path && window.ptDesktop?.saveSessionToPath) {
+        // Desktop: write straight back to the bound file path (no handle
+        // exists for an OS-opened .ptl).
+        await window.ptDesktop.saveSessionToPath(this.session.path, text);
+      } else if (this.session.handle) {
+        const w = await this.session.handle.createWritable();
+        await w.write(text);
+        await w.close();
+      }
       this.session.dirty = false;
     } finally {
       this.session.saving = false;
@@ -379,6 +396,19 @@ export class Controller {
 
   async saveProgress({ viaShellDialog = false } = {}): Promise<void> {
     if (!this.docOpen) return;
+    // Desktop: a session bound to an on-disk path (an OS-opened .ptl, or
+    // one already saved through the shell) writes straight back to it —
+    // no dialog.
+    if (this.session.path && window.ptDesktop?.saveSessionToPath) {
+      const ok = await window.ptDesktop.saveSessionToPath(
+        this.session.path, serializeProgress(this.progressFileObject()));
+      if (ok) {
+        this.session.dirty = false;
+        this.showToast('Session saved');
+        this.notify();
+      }
+      return;
+    }
     if (this.session.handle) {
       // User-initiated save: the right moment for a permission prompt if
       // one is needed (auto-save never prompts).
@@ -403,6 +433,9 @@ export class Controller {
         const saved = await window.ptDesktop.saveSessionFallback(
           serializeProgress(this.progressFileObject()), suggestedName);
         if (saved) {
+          // Bind the chosen path so auto-save and later saves write back
+          // to it silently (the shell dialog gives no handle).
+          this.session.path = saved;
           this.session.dirty = false;
           this.showToast('Session saved');
           this.notify();
@@ -425,12 +458,13 @@ export class Controller {
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return;
         // Menu items carry no user activation, so the picker throws in
-        // the desktop shell; let the shell save the file instead. (The
-        // session stays unbound — auto-save needs an in-app save.)
+        // the desktop shell; let the shell save the file instead — and
+        // bind the chosen path so auto-save arms from here on.
         if ((e as Error)?.name === 'SecurityError' && window.ptDesktop?.saveSessionFallback) {
           const saved = await window.ptDesktop.saveSessionFallback(
             serializeProgress(this.progressFileObject()), suggestedName);
           if (saved) {
+            this.session.path = saved;
             this.session.dirty = false;
             this.showToast('Session saved');
             this.notify();
@@ -644,6 +678,7 @@ export class Controller {
       source: slot.source,
       progress,
       progressHandle: this.session.handle,
+      progressPath: this.session.path,
     });
     this.adoptCurrentPdf();
     this.lastReplaceAction = next;
@@ -742,11 +777,16 @@ export class Controller {
       handle?: FileSystemFileHandle | null;
       progress?: ProgressFile | null;
       progressHandle?: FileSystemFileHandle | null;
+      /** Desktop shell: the bound .ptl's on-disk path (auto-save target). */
+      progressPath?: string | null;
       /** Re-readable reference to where the bytes came from (for undoable replace). */
       source?: PdfSource | null;
     } = {},
   ): Promise<void> {
-    const { handle = null, progress = null, progressHandle = null, source = null } = opts;
+    const {
+      handle = null, progress = null, progressHandle = null,
+      progressPath = null, source = null,
+    } = opts;
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
     try {
       const doc = await this.viewer.open({ data });
@@ -775,6 +815,7 @@ export class Controller {
       }
 
       this.session.handle = progressHandle;
+      this.session.path = progressPath;
       this.session.dirty = false;
       this.session.saving = false;
       clearTimeout(this.fileSaveTimer);
@@ -803,10 +844,14 @@ export class Controller {
     return /\.ptl$/i.test(name || '');
   }
 
-  async openFile(file: File, handle: FileSystemFileHandle | null = null): Promise<void> {
+  async openFile(
+    file: File,
+    handle: FileSystemFileHandle | null = null,
+    path: string | null = null,
+  ): Promise<void> {
     if (!file) return;
     if (this.isProgressName(file.name)) {
-      await this.openProgressFile(file, handle);
+      await this.openProgressFile(file, handle, path);
       return;
     }
     const buf = new Uint8Array(await file.arrayBuffer());
@@ -816,13 +861,16 @@ export class Controller {
       // PDF — restore that session (and bind its file for auto-save).
       const pp = this.pendingProgress;
       const ph = this.pendingProgressHandle;
+      const ppath = this.pendingProgressPath;
       this.pendingProgress = null;
       this.pendingProgressHandle = null;
+      this.pendingProgressPath = null;
       await this.openData(buf, file.name, {
         handle,
         source,
         progress: pp.json,
         progressHandle: ph,
+        progressPath: ppath,
       });
       return;
     }
@@ -876,6 +924,7 @@ export class Controller {
   discardPendingSession(): void {
     this.pendingProgress = null;
     this.pendingProgressHandle = null;
+    this.pendingProgressPath = null;
     this.hist.reset(); // clear the sidebar preview
     this.notify();
   }
@@ -892,6 +941,7 @@ export class Controller {
   private async openProgressFile(
     file: File,
     progressHandle: FileSystemFileHandle | null = null,
+    progressPath: string | null = null,
   ): Promise<void> {
     const text = await file.text();
     const json = parseProgress(text);
@@ -908,7 +958,7 @@ export class Controller {
       const trivial = this.hist.stacks.length === 1
         && this.hist.stacks[0].entries.length <= 1
         && !this.session.dirty;
-      this.confirmSession = { json, progressHandle };
+      this.confirmSession = { json, progressHandle, progressPath };
       if (trivial) {
         this.applyConfirmedSession();
       } else {
@@ -918,7 +968,7 @@ export class Controller {
     }
 
     // Session first: show the preview and ask the user for the PDF.
-    this.enterPendingState(json, progressHandle);
+    this.enterPendingState(json, progressHandle, progressPath);
   }
 
   /**
@@ -929,9 +979,11 @@ export class Controller {
   private enterPendingState(
     json: ProgressFile,
     progressHandle: FileSystemFileHandle | null,
+    progressPath: string | null = null,
   ): void {
     this.pendingProgress = { json };
     this.pendingProgressHandle = progressHandle;
+    this.pendingProgressPath = progressPath;
     this.hist.load(json.state.hist);
     this.notify();
   }
@@ -949,6 +1001,7 @@ export class Controller {
       this.restoring = false;
     }
     this.session.handle = cs.progressHandle;
+    this.session.path = cs.progressPath;
     this.session.dirty = false;
     this.session.saving = false;
     clearTimeout(this.fileSaveTimer);
@@ -1060,9 +1113,10 @@ export class Controller {
       : null;
     const progress = this.progressFileObject(); // carries the current state
     const progressHandle = this.session.handle;
+    const progressPath = this.session.path; // keep the desktop file binding
     const buf = new Uint8Array(await file.arrayBuffer());
     const source: PdfSource = handle ?? file;
-    await this.openData(buf, file.name, { handle, source, progress, progressHandle });
+    await this.openData(buf, file.name, { handle, source, progress, progressHandle, progressPath });
     // Deliberate swap: adopt the new PDF into the session, no banner.
     this.adoptCurrentPdf();
     if (prevSlot) {
