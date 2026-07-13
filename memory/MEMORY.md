@@ -87,13 +87,16 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   <session>.jsonl, gzipped) into docs/transcripts/ BEFORE compaction;
   commit it. Naming: session-N.
 - Commit per feature/iteration; draft commit before debugging. Commits
-  are SIGNED via the Bitwarden/Goldwarden ssh-agent: gitconfig has
-  commit.gpgsign+tag.gpgsign=true, gpg.format=ssh, signingkey
-  ~/.ssh/id_ed25519_signing.pub, and the PRIVATE key is served by the
-  ssh-agent (SSH_AUTH_SOCK). Signs when the vault is unlocked; on "agent
-  refused operation"/"Couldn't find key in agent" the vault is LOCKED —
-  owner unlocks in the Bitwarden GUI, then retry. In CLOUD sessions
-  signing is automatic (GitHub container key) — just commit.
+  are SIGNED via the rbw (Bitwarden CLI) ssh-agent — use the agent, never
+  extract the key. rbw-agent serves the SSH signing key from the unlocked
+  vault at /run/user/$(id -u)/rbw/ssh-agent-socket; ~/.bashrc exports
+  SSH_AUTH_SOCK there. gitconfig: commit.gpgsign+tag.gpgsign=true,
+  gpg.format=ssh, signingkey ~/.ssh/id_ed25519_signing.pub. Unlock with
+  `rbw unlock` (check `rbw unlocked`). GOTCHA: the old Goldwarden agent is
+  DEAD (~/.goldwarden-ssh-agent.sock gone); a shell with a stale
+  SSH_AUTH_SOCK pointing there fails to sign ("No private key found") —
+  override per-command: SSH_AUTH_SOCK=/run/user/$(id -u)/rbw/ssh-agent-socket
+  git commit ... In CLOUD sessions signing is automatic (GitHub container).
 - Parallelize with agents/background tasks; final answers at the END of
   the reply; acknowledge every mid-work user message in the very next
   reply. 3-letter file extensions, high-entropy temp names.

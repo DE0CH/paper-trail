@@ -290,16 +290,14 @@ cloud rather than obeying blindly:
   this was the 4 GB box's OOM constraint (`memory/orchestrator-only-machine.md`),
   **not** a universal rule. A cloud VM can likely build and do more. (Tests
   still on GitHub runners is a *separate*, still-valid owner rule — §9.)
-- **Signing** — locally it's the **Bitwarden/Goldwarden ssh-agent** setup:
-  `~/.gitconfig` has `commit.gpgsign=true`, `gpg.format=ssh`,
-  `signingkey=~/.ssh/id_ed25519_signing.pub`, and the **private key is
-  served by the ssh-agent** (`SSH_AUTH_SOCK`), not a file on disk. Commits
-  sign when the **vault is unlocked**; if a commit errors with "agent
-  refused operation" / "Couldn't find key in agent", the vault is **locked**
-  → the owner unlocks it in the Bitwarden/Goldwarden GUI, then retry. **In
-  the cloud, signing is automatic** via the GitHub container's key — just
-  commit. (`CLAUDE.md`'s "Signed commits via Bitwarden (owner approves in
-  GUI)" line still roughly holds; the GUI step is only for unlocking.)
+- **Signing** — locally via the **`rbw` (Bitwarden CLI) ssh-agent**: its
+  agent serves the SSH signing key from the unlocked vault at
+  `/run/user/$(id -u)/rbw/ssh-agent-socket`, and `~/.bashrc` exports
+  `SSH_AUTH_SOCK` there. Sign via the agent, never extract the key. Unlock
+  with `rbw unlock`. Watch for a **stale `SSH_AUTH_SOCK`** pointing at the
+  dead Goldwarden socket (`~/.goldwarden-ssh-agent.sock`) — override it to
+  the rbw socket per-command. **In the cloud, signing is automatic** via
+  the GitHub container's key — just commit. (Full detail in §8.)
 - **Memory location** — memory lives in `memory/` in the repo (git-tracked,
   15 files). On the local box `~/.claude/projects/<project>/memory` is a
   **symlink** to `memory/`; the cloud won't have that symlink, so memory is
@@ -342,18 +340,23 @@ cloud rather than obeying blindly:
 
 ## 8. Signing (summary)
 
-- **Commits are signed.** Locally it's the **Bitwarden/Goldwarden
-  ssh-agent** setup: `~/.gitconfig` has `commit.gpgsign=true` +
-  `tag.gpgsign=true`, `gpg.format=ssh`, `signingkey` pointing at
-  `~/.ssh/id_ed25519_signing.pub`, and the **private key comes from the
-  ssh-agent** (`SSH_AUTH_SOCK`) — so signing works when the **Bitwarden
-  vault is unlocked**. If a commit fails with "agent refused operation" /
-  "Couldn't find key in agent", the vault is **locked**: the owner unlocks
-  it in the Bitwarden/Goldwarden GUI, then retry (this blocked a commit
-  earlier in the session).
-- History churn (for context only): Bitwarden GUI signing → owner briefly
-  had me remove the key and push unsigned → owner re-enabled the ssh-agent
-  signing. Net: **sign commits normally.**
+- **Commits are signed via the `rbw` (Bitwarden CLI) ssh-agent** — using
+  the agent, never extracting the key. `rbw-agent` serves the SSH signing
+  key from the unlocked vault at `$XDG_RUNTIME_DIR/rbw/ssh-agent-socket`
+  (i.e. `/run/user/$(id -u)/rbw/ssh-agent-socket`). `~/.bashrc` **already
+  exports** `SSH_AUTH_SOCK` to that socket. git config:
+  `commit.gpgsign=true` + `tag.gpgsign=true`, `gpg.format=ssh`,
+  `signingkey=~/.ssh/id_ed25519_signing.pub`. Unlock with `rbw unlock`
+  (check `rbw unlocked`).
+- **Gotcha:** the old **Goldwarden** ssh-agent is dead —
+  `~/.goldwarden-ssh-agent.sock` no longer exists. A shell that inherited a
+  **stale `SSH_AUTH_SOCK`** pointing there will fail to sign
+  ("No private key found" / "agent refused operation"); override it to the
+  rbw socket for that command:
+  `SSH_AUTH_SOCK=/run/user/$(id -u)/rbw/ssh-agent-socket git commit …`.
+  (This is exactly what bit the earlier `docs/handoff.md` commit `d8cf1d8`
+  — a stale sock made it commit unsigned; it stays unsigned because
+  re-signing would need a forbidden force-push. All later commits sign.)
 - **In the cloud: signing is automatic** (GitHub container, owner's account
   key) — just commit.
 
