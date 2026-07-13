@@ -1,0 +1,28 @@
+# Focused fast-iteration workflow (manual dispatch) for the macOS
+# update-resilience test that needs NO code signature — the download-
+# phase interruption cases (corrupt download, kill mid-download,
+# recovery). Runs only that one test on a build, so a Depot mirror run
+# is build + one test instead of the whole CI pyramid. The signed
+# bundle-replacement case (updateMacKillDuringInstall) needs the mac
+# signing secrets, so it stays in ci.yml's mac-update job on de0ch.
+
+name: macOS update resilience (focused)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  resilience:
+    # Depot on the private mirror, GitHub-hosted on the public repo.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-macos-latest' || 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: Update resilience (corrupt download, kill mid-download, recovery)
+        run: node build-node/test/updateMacInterruptResilience.js
