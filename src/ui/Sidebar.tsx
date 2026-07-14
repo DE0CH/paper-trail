@@ -103,16 +103,18 @@ function StackRow({ snap, id, name }: {
           </button>
         </span>
       )}
-      <button
-        className={`x ${toolBtn} flex-none ${active ? '' : 'opacity-0'} group-hover:opacity-100`}
-        title="Close this trail"
-        onClick={(e) => {
-          e.stopPropagation();
-          controller.stackClose(id);
-        }}
-      >
-        <IconClose />
-      </button>
+      {!editing && (
+        <button
+          className={`x ${toolBtn} flex-none ${active ? '' : 'opacity-0'} group-hover:opacity-100`}
+          title="Close this trail"
+          onClick={(e) => {
+            e.stopPropagation();
+            controller.stackClose(id);
+          }}
+        >
+          <IconClose />
+        </button>
+      )}
     </div>
   );
 }
@@ -191,7 +193,7 @@ function HistRow({ label, page, current, index, removable }: {
           </button>
         </span>
       )}
-      {removable && (
+      {!editing && removable && (
         <button
           className={`rmEntry ${toolBtn} flex-none ${current ? '' : 'opacity-0'} group-hover:opacity-100`}
           title="Remove this entry from the trail"
