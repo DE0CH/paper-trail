@@ -1,0 +1,36 @@
+# TEMP focused runner for the two viewer bug repros (ghost page + off-center
+# zoom). Fast Linux browser run for red->green iteration. Delete before merge.
+name: Focus viewer
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['fix-viewer-ghost-offcenter']
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: node build-node/tools/fixture.js
+      - name: Start the web server
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+      - name: Ghost page after a large scale jump
+        if: ${{ !cancelled() }}
+        run: node build-node/test/ghostPageAfterFit.js
+      - name: No-anchor zoom stays horizontally centered
+        if: ${{ !cancelled() }}
+        run: node build-node/test/offCenterZoom.js
