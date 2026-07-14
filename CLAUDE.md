@@ -71,6 +71,13 @@ re-litigate without asking.
   owner is probably editing it concurrently: re-read and retry.
 - The owner also pushes to GitHub while Claude works: when a push is
   rejected, `git pull` (rebases per .gitconfig) and push again.
+- **Assume several agents share this one working tree.** Never run
+  `git checkout <branch>` in the shared checkout to do isolated work: it
+  drags every other agent's uncommitted changes onto the wrong branch
+  (exactly the collision that once stranded in-flight release/icon work
+  here). Each agent does its work in its own `git worktree` — a separate
+  directory with its own checked-out branch — and the orchestrator merges
+  the branches back. Leave the shared checkout on its baseline.
 - Keep audiences separate: instructions the owner gives Claude are NOT
   contributor/user documentation. CONTRIBUTING.md and README.md contain
   only what contributors/users need, written in full sentences (no
