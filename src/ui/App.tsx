@@ -342,11 +342,10 @@ export default function App() {
       depth = 0;
       setDragOver(false);
       if (!e.dataTransfer) return;
-      if (controller.getSnapshot().docOpen) {
-        const session = [...e.dataTransfer.files].find((f) => /\.ptl$/i.test(f.name));
-        if (session) void controller.openFile(session);
-        return;
-      }
+      // openDropped handles both cases identically — with a document open it
+      // loads a dropped .ptl (a dropped PDF stays a no-op); with nothing open
+      // it opens the dropped file — and BOTH resolve the desktop path, so a
+      // dropped .ptl binds for auto-save no matter what was already open.
       void controller.openDropped(e.dataTransfer);
     };
     window.addEventListener('dragenter', enter);

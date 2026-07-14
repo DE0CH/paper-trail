@@ -1288,18 +1288,23 @@ export class Controller {
   }
 
   async openDropped(dt: DataTransfer): Promise<void> {
-    const item = dt.items?.[0];
-    const f = dt.files?.[0];
+    const files = [...(dt.files ?? [])];
+    if (!files.length) return;
+    // With a document already open, dropping a PDF is a deliberate no-op
+    // (open another window for another paper) — only a dropped session file
+    // loads; with nothing open, the first dropped file opens.
+    const f = this.docOpen ? files.find((x) => /\.ptl$/i.test(x.name)) : files[0];
     if (!f) return;
+    const item = dt.items?.[0];
     let handle: FileSystemFileHandle | null = null;
     try {
       if (item?.getAsFileSystemHandle) {
         handle = (await item.getAsFileSystemHandle()) as FileSystemFileHandle | null;
       }
     } catch { /* handle stays null */ }
-    // A dropped file carries its real path in the desktop shell, so a
-    // dropped .ptl binds exactly like an OS-opened one (auto-save + silent
-    // close), not as an unbound "where do I save?" session.
+    // A dropped file carries its real path in the desktop shell, so a dropped
+    // .ptl binds exactly like an OS-opened one (auto-save + silent close) —
+    // whether or not a document is already open.
     void this.openFile(f, handle, this.desktopPathFor(f));
   }
 

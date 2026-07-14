@@ -9,13 +9,12 @@
 // auto-save armed. The fix derives the on-disk path at each bind site via
 // the desktop shell (ptDesktop.getPathForFile).
 //
-// This drives the REAL code paths (requestLoadSession, openDropped) with
-// ptDesktop.getPathForFile STUBBED to a known path — it verifies the
-// binding + close wiring deterministically, NOT Electron's own path
-// resolution (a real OS drop/picker can't be synthesized headlessly; that
-// is covered by a separate real-build probe). Pre-fix: session.path stays
-// null and beforeunload calls preventDefault -> FAIL. Post-fix: bound and
-// the close flushes silently -> PASS.
+// This drives requestLoadSession + the close-flush with the native dialog
+// STUBBED to a known path — verifying the Load-session binding + close
+// wiring deterministically. The REAL drag-drop path binding (a real File
+// with a real OS path resolved by webUtils.getPathForFile, no stub) is
+// covered by desktopDropBinds.ts. Pre-fix: session.path stays null and
+// beforeunload calls preventDefault -> FAIL. Post-fix: bound -> PASS.
 //
 // Run: node build-node/test/dropBindsSilentTarget.js   (server on 8377 first)
 
@@ -64,7 +63,6 @@ async function run(): Promise<void> {
       (window as any).showOpenFilePicker = async () => {
         const e: any = new Error('abort'); e.name = 'AbortError'; throw e;
       };
-      const makePtl = () => new File([ptlText], 'reading.ptl', { type: 'text/plain' });
       const applyIfPending = () => {
         if (!c.session.path && c.confirmSession) c.applyConfirmedSession();
       };
@@ -81,19 +79,7 @@ async function run(): Promise<void> {
       window.dispatchEvent(ev);
       const closePrevented = ev.defaultPrevented;
 
-      // (3) A dropped .ptl binds the same way (independent of the picker).
-      c.session.path = null; c.session.handle = null; c.confirmSession = null;
-      const fakeDt = { items: [], files: [makePtl()] } as unknown as DataTransfer;
-      await c.openDropped(fakeDt);
-      // openDropped fires openFile without awaiting (the drop handler is
-      // sync); wait for that async open to settle before asserting.
-      for (let i = 0; i < 60 && !c.session.path && !c.confirmSession; i += 1) {
-        await new Promise((r) => setTimeout(r, 25));
-      }
-      applyIfPending();
-      const dropBound: string | null = c.session.path;
-
-      return { pickerBound, closePrevented, closeSaves, dropBound };
+      return { pickerBound, closePrevented, closeSaves };
       /* eslint-enable @typescript-eslint/no-explicit-any */
     }, PTL_PATH);
 
@@ -102,8 +88,6 @@ async function run(): Promise<void> {
     check('a dirty autosaved session closes silently (no preventDefault, no prompt)',
       out.closePrevented === false && out.closeSaves.length >= 1,
       `preventDefault=${out.closePrevented} closeWrites=${out.closeSaves.length}`);
-    check('a dropped .ptl binds the same silent-write path',
-      out.dropBound === PTL_PATH, `session.path=${JSON.stringify(out.dropBound)}`);
   } finally {
     await browser.close();
   }
