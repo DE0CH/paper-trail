@@ -62,14 +62,6 @@ export interface OutlineNode {
   children: OutlineNode[];
 }
 
-export interface RecentEntry {
-  fp: string;
-  name: string;
-  ts: number;
-  handle?: FileSystemFileHandle;
-  progressHandle?: FileSystemFileHandle;
-}
-
 export type MenuAction =
   | 'open' | 'save' | 'save-from-close' | 'load-session' | 'replace-pdf' | 'back' | 'forward'
   | 'undo' | 'redo' | 'mark' | 'mark-branch' | 'reanchor'

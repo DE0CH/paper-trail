@@ -1,0 +1,22 @@
+# Fast dev-iteration workflow for the recents pair-redesign: builds and
+# runs ONLY the recents unit test, on push to a recents-** branch. Runs on
+# Depot when pushed to the de0ch-org mirror (owner-keyed runs-on), GitHub
+# otherwise. Not a gate on main — drop this file when the work merges.
+name: focus recents
+
+on:
+  push:
+    branches: ['recents-**']
+
+jobs:
+  recents-unit:
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-ubuntu-24.04' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Recents unit tests
+        run: node --test build-node/test/recentsUnit.js
