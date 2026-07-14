@@ -8,12 +8,18 @@ import { IconAnchor, IconClose, IconCopy, IconEdit, IconPlus, IconTrash } from '
 // metric): the 18.2px text line gets real air inside the highlight,
 // and rows touch instead of leaving phantom gaps.
 const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
-// The rename input occupies the exact box of the name span (same font,
-// fixed height, padding compensated by negative margin) so nothing
-// shifts. The accent outline is an INSET RING (box-shadow — no layout),
-// not a border: a 1px border would push the text 1px right (the negative
-// margin cancels the padding, not the border) and eat 1px of height.
-const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[12px] ring-1 ring-inset ring-accent rounded outline-none';
+// The rename input must occupy the SAME box as the name span so the text
+// never shifts on edit — match it on BOTH axes: the span's font-size and
+// its inherited line-height (body is 13px/1.4, so a 12px child's line box
+// is 16.8px). A fixed height is the trap: the old `h-5` (20px) was tuned
+// for the 13px font and outlived the 13→12px change, leaving the text in
+// a box 3.2px taller than the span (centres still align, so the box test
+// passed, but the text visibly shifted). Sizing by line-height keeps the
+// two boxes identical whatever the font. Horizontal padding is cancelled
+// by an equal negative margin; the accent outline is an INSET RING
+// (box-shadow, no layout), never a border (a 1px border would push the
+// text 1px right and eat 1px of height).
+const renameCls = 'rename flex-1 min-w-0 leading-[1.4] px-1 -mx-1 bg-inputbg text-fgapp text-[12px] ring-1 ring-inset ring-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
 // One shape for every small row button; the close button additionally
 // keeps a permanent flex slot so all rows align on it.
