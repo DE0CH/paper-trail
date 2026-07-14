@@ -1,13 +1,13 @@
 # Focused validation for the updater-simplification branch: after the
 # win32 flash-close guard and the mac Software Update window were removed,
-# this proves the app still builds and the SILENT auto-update path
-# (autoDownload + install-on-quit, driven by PT_UPDATE_TEST/PT_UPDATE_URL)
-# still works end to end. It runs the Windows silent-update suite, which
-# needs no code-signing certificate — the cleanest cert-free proof.
+# this proves the branch still compiles, bundles, and packages into a real
+# app after the surgery (main.ts, vite entry, deleted window files).
 #
-# Mirror-only (de0ch-org): a throwaway harness for this branch, not part
-# of the public de0ch CI. Windows stays GitHub-hosted (owner policy: Depot
-# Windows has no interactive desktop session for the electron GUI tests).
+# Mirror-only (de0ch-org), on Depot: the private mirror's GitHub-hosted
+# minutes are unavailable, and Depot can't run the Windows GUI silent-
+# update suite (no interactive desktop) — so the Windows silent-update
+# RUNTIME tests must be validated on the public de0ch origin instead. This
+# job is the strongest signal the mirror can give: a full build + package.
 name: Validate silent update (focused)
 
 on:
@@ -15,9 +15,9 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  windows-silent-update:
+  mac-build:
     if: ${{ github.repository_owner == 'de0ch-org' }}
-    runs-on: windows-latest
+    runs-on: depot-macos-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -27,53 +27,11 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run build
+      - name: Build (tsc renderer + vite bundle + tsc node/desktop)
+        run: npm run build
 
       - name: Generate the test-fixture PDFs
         run: node build-node/tools/fixture.js
 
-      - name: Package the current version (installer only)
-        env:
-          ELECTRON_BUILDER_7Z_FILTER: BCJ2
-        run: npx electron-builder --win nsis --publish never
-
-      - name: Build the next version into the update feed
-        env:
-          ELECTRON_BUILDER_7Z_FILTER: BCJ2
-        shell: bash
-        run: |
-          npm version patch --no-git-tag-version
-          npx electron-builder --win nsis --publish never -c.directories.output=dist-update-feed
-          git checkout -- package.json package-lock.json
-
-      - name: Update-feed names match the packaged artifacts
-        shell: bash
-        run: node build-node/test/updateFeedNames.js dist-electron dist-update-feed
-
-      - name: Auto-update test (real install-update-install cycle)
-        shell: bash
-        run: node build-node/test/updateWin.js
-
-      - name: Install-on-quit test (background download, normal quit)
-        shell: bash
-        run: node build-node/test/updateWinQuitInstall.js
-
-      - name: Double-click a PDF against a quit-installed update
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: node build-node/test/updateWinOpenAfterUpdate.js
-
-      - name: Resilience — hard kill during the download
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: node build-node/test/updateWinKillDuringDownload.js
-
-      - name: Resilience — hard kill during the install
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: node build-node/test/updateWinKillDuringInstall.js
-
-      - name: Resilience — a corrupt download is refused
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: node build-node/test/updateWinCorruptDownload.js
+      - name: Package the macOS app (unsigned)
+        run: npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none
