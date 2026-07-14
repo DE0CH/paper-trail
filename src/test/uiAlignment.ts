@@ -150,10 +150,19 @@ async function run(): Promise<void> {
       rowSpread <= EPS && Math.abs(rowHs[0] - 24) <= EPS,
       `heights ${[...new Set(rowHs.map((h) => h.toFixed(1)))].join(', ')}`);
 
-    // left edge is consistent within each panel (rows don't stagger)
+    // left edge is consistent within each panel (rows don't stagger). The
+    // outline is a TREE — nested sections indent 24px by design and may be
+    // expanded, so only its TOP-LEVEL rows (the minimum left edge) belong to
+    // the shared one-list metric. (Measuring all of them raced an
+    // expanded/expanding nested row and read a 24px indent as a stagger.)
     for (const [name, list] of Object.entries(rows) as [string, { left: number }[]][]) {
       if (list.length < 2) continue;
-      const lefts = list.map((r) => r.left);
+      const min = Math.min(...list.map((r) => r.left));
+      const topLevel = name === 'outline'
+        ? list.filter((r) => r.left <= min + EPS)
+        : list;
+      if (topLevel.length < 2) continue;
+      const lefts = topLevel.map((r) => r.left);
       const leftSpread = Math.max(...lefts) - Math.min(...lefts);
       check(`${name} rows share one left edge (spread ${leftSpread.toFixed(2)}px)`, leftSpread <= EPS);
     }
