@@ -39,6 +39,11 @@ export interface PageRec {
   annotDiv: HTMLDivElement | null;
   annots: Annot[] | null;
   rendered: boolean;
+  // A rendered page whose canvas is currently a stretched smooth-zoom
+  // placeholder (wrong scale, awaiting a fresh render). `rendered` still
+  // means "a canvas is mounted in this shell" so destroyPage can reliably
+  // tear it down; `stale` says that canvas is not yet crisp.
+  stale: boolean;
   renderedScale: number;
   rendering: Promise<void> | null;
   renderFailed?: boolean;
@@ -124,6 +129,7 @@ export class Viewer {
         annotDiv: null,
         annots: null,
         rendered: false,
+        stale: false,
         renderedScale: 0,
         rendering: null,
         textReady: null,
@@ -361,7 +367,7 @@ export class Viewer {
   }
 
   private ensureRendered(p: PageRec): Promise<void> | null {
-    if ((p.rendered && p.renderedScale === this.scale) || p.rendering) return p.rendering;
+    if ((p.rendered && !p.stale && p.renderedScale === this.scale) || p.rendering) return p.rendering;
     p.renderFailed = false;
     p.rendering = this.render(p)
       .catch((e) => {
@@ -372,8 +378,9 @@ export class Viewer {
         p.rendering = null;
         // A scale/document change can invalidate a render mid-flight (the
         // result is discarded by the guard). Nothing else re-triggers
-        // rendering in that case, so check again.
-        if (!p.rendered && !p.renderFailed) {
+        // rendering in that case, so check again — including a page left
+        // stale (canvas still a placeholder) or rendered at the wrong scale.
+        if (!p.renderFailed && (!p.rendered || p.stale || p.renderedScale !== this.scale)) {
           queueMicrotask(() => this.updateVisible());
         }
       });
@@ -420,6 +427,7 @@ export class Viewer {
     p.textLayerDiv = tld;
     p.annotDiv = ald;
     p.rendered = true;
+    p.stale = false;
     p.renderedScale = scale;
 
     p.textReady = (async () => {
@@ -495,6 +503,7 @@ export class Viewer {
     if (!p.rendered) return;
     p.el.replaceChildren();
     p.rendered = false;
+    p.stale = false;
     p.renderedScale = 0;
     p.canvas = null;
     p.textLayerDiv = null;
@@ -509,8 +518,11 @@ export class Viewer {
    * flashing white. The fresh render replaces it atomically.
    */
   private markStale(p: PageRec): void {
-    if (!p.rendered) return;
-    p.rendered = false;
+    if (!p.canvas) return;
+    // Keep `rendered` true (a canvas is still mounted) so destroyPage can
+    // tear this shell down if the reflow pushes it out of range; `stale`
+    // marks the canvas as a placeholder awaiting a fresh, crisp render.
+    p.stale = true;
     p.renderedScale = 0;
     p.textLayerDiv?.remove(); // absolute px positions don't rescale
     p.annotDiv?.remove();
