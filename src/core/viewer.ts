@@ -399,7 +399,8 @@ export class Viewer {
     canvas.style.display = 'block';
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
-    const ctx = canvas.getContext('2d', { alpha: false })!;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) throw new Error('2d canvas context unavailable');
     await p.page.render({
       canvas,
       canvasContext: ctx,

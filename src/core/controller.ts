@@ -66,7 +66,7 @@ export class Controller {
   viewer!: Viewer;
   hist = new NavStacks(null);
   search!: SearchController;
-  preview: Preview | null = null;
+  preview!: Preview;
   session: Session = { handle: null, path: null, dirty: false, saving: false };
 
   // Set true just before we programmatically re-close a window after an async
@@ -117,7 +117,6 @@ export class Controller {
     this.viewer = new Viewer(container, viewerEl, {
       onLinkClick: (info) => void this.handleLinkClick(info),
       onLinkHover: (info, entering) => {
-        if (!this.preview) return;
         if (entering) this.preview.scheduleShow(info.dest, info.linkEl);
         else this.preview.scheduleHide(); // entering the popup cancels this
       },
@@ -765,7 +764,7 @@ export class Controller {
   }
 
   private onViewerScroll(): void {
-    this.preview?.hide(); // don't leave a stale popup while scrolling
+    this.preview.hide(); // don't leave a stale popup while scrolling
     clearTimeout(this.scrollTimer);
     this.scrollTimer = setTimeout(() => {
       if (!this.docOpen || this.viewer.isTrackingSuppressed()) return;
@@ -881,7 +880,7 @@ export class Controller {
       this.currentPage = 1;
       document.title = `${name} \u2014 Paper Trail`;
 
-      this.preview?.clear();
+      this.preview.clear();
       this.restoring = true;
       try {
         this.search.reset();
@@ -967,9 +966,10 @@ export class Controller {
 
   /** Open a PDF in a fresh window/tab because this one is occupied. */
   private openPdfElsewhere(file: File): void {
-    if (window.ptDesktop?.openInNewWindow) {
+    const openInNewWindow = window.ptDesktop?.openInNewWindow;
+    if (openInNewWindow) {
       void file.arrayBuffer().then((data) => {
-        window.ptDesktop!.openInNewWindow(file.name, data);
+        openInNewWindow(file.name, data);
       });
       return;
     }
@@ -1283,13 +1283,13 @@ export class Controller {
 
   private pickViaInput(): void {
     if (!this.fileInput) {
-      this.fileInput = document.createElement('input');
-      this.fileInput.type = 'file';
-      this.fileInput.accept = 'application/pdf,.pdf';
-      this.fileInput.hidden = true;
-      document.body.appendChild(this.fileInput);
-      this.fileInput.addEventListener('change', () => {
-        const f = this.fileInput!.files?.[0];
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/pdf,.pdf';
+      input.hidden = true;
+      document.body.appendChild(input);
+      input.addEventListener('change', () => {
+        const f = input.files?.[0];
         if (!f) return;
         if (this.replaceNext) {
           this.replaceNext = false;
@@ -1301,6 +1301,7 @@ export class Controller {
         // without a prompt (a PDF has no path and stays unbound, as before).
         void this.openFile(f, null, this.desktopPathFor(f));
       });
+      this.fileInput = input;
     }
     this.fileInput.value = '';
     this.fileInput.click();

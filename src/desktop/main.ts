@@ -929,7 +929,8 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
 // delegates here, and the file is written by the main process.
 ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedName: string }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const { canceled, filePath } = await dialog.showSaveDialog(win!, {
+  if (!win) return null;
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
     defaultPath: req.suggestedName,
     filters: [{ name: 'Reading session', extensions: ['ptl'] }],
   });
@@ -947,7 +948,8 @@ ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedNa
 // Access handle's path. Returns null when the user cancels or the read fails.
 ipcMain.handle('pt-open-session-dialog', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
+  if (!win) return null;
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
     filters: [{ name: 'Reading session', extensions: ['ptl'] }],
   });
