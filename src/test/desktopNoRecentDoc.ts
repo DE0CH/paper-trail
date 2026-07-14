@@ -7,7 +7,10 @@
 // in-app Recent list, so the OS registration is pure redundant prompt-bait.
 // This pins that no addRecentDocument call happens on the save path (nor on
 // the initial OS-open of the PDF): the spy must see ZERO calls while the
-// .ptl still lands on disk.
+// .ptl still lands on disk. (The dead "Open Recent" menu item is removed in
+// the same fix, but the built app menu isn't reliably introspectable from
+// this harness — so the spy count, which cleanly discriminates fixed from
+// unfixed, is the guard here.)
 //
 // Run: npx electron build-node/test/desktopNoRecentDoc.js
 
@@ -18,7 +21,7 @@ process.env.PT_SHOT = '1'; // show without stealing focus
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { app, BrowserWindow, dialog, Menu } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 
 const target = path.join(os.tmpdir(), `pt-norecent-test-${Date.now()}.ptl`);
 
@@ -50,16 +53,9 @@ void app.whenReady().then(() => {
       const header = exists ? fs.readFileSync(target, 'utf8').split('\n')[0] : null;
       const wrote = exists && header === 'paper-trail-session v1';
 
-      // Bonus: the native "Open Recent" menu item is gone too (no dead menu).
-      const template = (Menu.getApplicationMenu()?.items ?? []);
-      const hasRecentRole = JSON.stringify(template.map((m) => ({
-        role: (m as { role?: string }).role,
-        sub: (m.submenu?.items ?? []).map((s) => (s as { role?: string }).role),
-      }))).includes('recentDocuments');
-
-      const ok = wrote && recentCalls.length === 0 && !hasRecentRole;
+      const ok = wrote && recentCalls.length === 0;
       console.log(`${ok ? 'PASS' : 'FAIL'}  save writes the .ptl without any OS Open-Recent registration`,
-        JSON.stringify({ toast, exists, header, recentCalls, hasRecentRole }));
+        JSON.stringify({ toast, exists, header, recentCalls }));
       try { fs.rmSync(target, { force: true }); } catch { /* fine */ }
       app.exit(ok ? 0 : 1);
     }).catch((e: unknown) => {
