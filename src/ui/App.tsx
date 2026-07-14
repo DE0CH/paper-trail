@@ -11,7 +11,10 @@ import Welcome from './Welcome';
 // Each panel owns its width independently: resizing, closing, or opening
 // one panel never changes the others' sizes — neighbors just shift and the
 // viewer absorbs the difference.
-const MIN_W = { nav: 90, stacks: 80, side: 150 } as const;
+// nav min holds the 3 header buttons (expand/collapse/close, ~98px with
+// padding at the intended 28px size) plus room for the two tabs, so the
+// Pages/Outline tabs never slide fully under the buttons on a narrow panel.
+const MIN_W = { nav: 140, stacks: 80, side: 150 } as const;
 const VIEWER_MIN = 260;
 
 const clampW = (v: number, min: number, max: number) =>
@@ -22,7 +25,7 @@ type Widths = { nav: number; stacks: number; side: number };
 function initialWidths(): Widths {
   const ui = loadUI();
   return {
-    nav: clampW(ui.navW ?? 150, MIN_W.nav, 500),
+    nav: clampW(ui.navW ?? 200, MIN_W.nav, 500),
     stacks: clampW(ui.stacksW ?? 150, MIN_W.stacks, 500),
     side: clampW(ui.sideW ?? 290, MIN_W.side, 800),
   };
@@ -445,7 +448,7 @@ export default function App() {
           {snap.mismatch && (
             <div
               id="mismatchBanner"
-              className="flex items-center gap-2 px-3 py-1.5 bg-[#4a3a12] text-[#f0d48a] border-b border-[#6b5518] text-[12.5px]"
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#4a3a12] text-[#f0d48a] border-b border-[#6b5518] text-[12px]"
             >
               <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                 This session was saved with <b>{snap.mismatch.savedName}</b>, but{' '}
@@ -505,7 +508,7 @@ export default function App() {
         <div className="fixed inset-0 z-105 flex items-center justify-center bg-black/50">
           <div id="sessionConfirm" className="bg-panel border border-borderapp rounded-xl p-5 max-w-100 shadow-2xl">
             <div className="text-fgapp font-semibold mb-2">Load this reading session?</div>
-            <div className="text-dim text-[12.5px] leading-relaxed mb-4">
+            <div className="text-dim text-[12px] leading-relaxed mb-4">
               It replaces your current reading history and position for this
               document. (Unsaved history is lost.)
             </div>

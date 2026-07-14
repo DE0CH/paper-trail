@@ -26,7 +26,7 @@ function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
   return (
     <li>
       <div
-        className="outlineItem flex items-center h-[22px] px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp"
+        className="outlineItem flex items-center h-6 px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp text-[12px]"
         title={n.title}
         onClick={(e) => void controller.outlineJump(n, e.metaKey || e.ctrlKey)}
       >
@@ -133,7 +133,7 @@ function Thumbnails({ snap }: { snap: Snapshot }) {
             className="bg-white/90 w-full"
             style={{ aspectRatio: `1 / ${aspect}` }}
           />
-          <div className="text-center text-[10.5px] text-dim mt-0.5">{n}</div>
+          <div className="text-center text-[10px] text-dim mt-0.5">{n}</div>
         </div>
       ))}
     </div>
@@ -151,9 +151,16 @@ export default function NavPanel({
   const [forceAll, setForceAll] = useState<ForceAll>({ v: 0, open: true });
   const hasSections = snap.outline.some((n) => n.children.length > 0);
 
+  // The active-tab underline is an inset box-shadow, NOT a bottom border:
+  // a 2px border (even balanced by a transparent top border) centres the
+  // label inside a 32px content box while the border-less Trails/History
+  // labels centre inside the full 36px, so sub-pixel rounding drifted the
+  // three header labels ~1px apart. A box-shadow draws the same 2px accent
+  // underline without a layout box, so the tab centres in the full 36px —
+  // identical to the other headers — and can't shift on active/inactive.
   const tabBtn = (t: NavTab, label: string) => (
     <button
-      className={`inline-flex items-center h-full px-2 text-[12.5px] cursor-pointer border-b-2 border-t-2 border-t-transparent ${tab === t ? 'text-fgapp border-b-accent' : 'text-dim border-b-transparent'}`}
+      className={`inline-flex items-center h-full px-2 text-[12px] min-w-0 shrink cursor-pointer ${tab === t ? 'text-fgapp shadow-[inset_0_-2px_0_0_var(--color-accent)]' : 'text-dim'}`}
       onClick={() => onTab(t)}
     >
       {label}
@@ -166,7 +173,7 @@ export default function NavPanel({
 
   return (
     <div id="navCol" className="flex flex-col overflow-hidden border-r border-borderapp h-full">
-      <div className="flex items-stretch h-9 border-b border-borderapp pl-1.5 pr-2 flex-none">
+      <div className="flex items-stretch h-8 border-b border-borderapp pl-1.5 pr-2 flex-none">
         {/* The tabs give way on narrow panels; the buttons hold their
             size so the close button stays on the shared right axis. */}
         <div className="flex items-stretch min-w-0 overflow-hidden">
@@ -200,7 +207,7 @@ export default function NavPanel({
           title="Close panel"
           onClick={onClose}
         >
-          <IconClose size={14} />
+          <IconClose />
         </button>
       </div>
       {tab === 'outline' ? (

@@ -1,0 +1,57 @@
+# Dev-iteration only: runs the browser suite on the UI-overhaul branch so
+# the rem/alignment fix can be watched red->green fast, and to prove the
+# global size change didn't regress any size-sensitive layout test.
+# Never fires on main. Delete at merge.
+name: Focus align
+on:
+  push:
+    branches: ['ui-bottomhug', 'ui-align-**']
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: Start the web server
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          node build-node/tools/geometry.js
+      - name: Measured alignment guard (row labels + zoom control)
+        run: node build-node/test/uiAlignment.js
+      - name: Panel rows and headers share one layout system
+        if: ${{ !cancelled() }}
+        run: node build-node/test/trailRowLayout.js
+      - name: No stray focus rings
+        if: ${{ !cancelled() }}
+        run: node build-node/test/focusRing.js
+      - name: Preview popup stays inside the window
+        if: ${{ !cancelled() }}
+        run: node build-node/test/previewClamp.js
+      - name: Preview survives an annotation-layer rebuild
+        if: ${{ !cancelled() }}
+        run: node build-node/test/previewRebuild.js
+      - name: Native dark scrollbars
+        if: ${{ !cancelled() }}
+        run: node build-node/test/darkScrollbars.js
+      - name: Browser e2e suite
+        if: ${{ !cancelled() }}
+        run: node build-node/test/e2e.js
+      - name: Browser edge cases
+        if: ${{ !cancelled() }}
+        run: node build-node/test/e2eEdges.js
+      - name: Search entries commit on the right actions
+        if: ${{ !cancelled() }}
+        run: node build-node/test/searchCommitState.js
+      - name: The rename input never shifts the text
+        if: ${{ !cancelled() }}
+        run: node build-node/test/renameNoShift.js
