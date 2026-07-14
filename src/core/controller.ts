@@ -81,9 +81,11 @@ export class Controller {
   private searchEntry: ReturnType<NavStacks['visit']> | null = null;
   private outline: OutlineNode[] = [];
   private recents: RecentEntry[] = [];
-  // The open PDF's handle — recents are keyed on it; null for desktop
-  // path-only opens, which don't populate the in-app list.
+  // The open PDF's handle and/or on-disk path — recents key on whichever is
+  // present (a handle for browser / drag-drop opens, a path for desktop
+  // OS-open / input-fallback opens, which used to be left out of the list).
   private currentPdfHandle: FileSystemFileHandle | null = null;
+  private currentPdfPath: string | null = null;
   // A fresh (never-saved) session: set when a PDF opens without a bound
   // session, cleared on the first save or when an existing session loads.
   private freshSession = false;
@@ -407,20 +409,29 @@ export class Controller {
     this.notify();
   }
 
+  /** Filename portion of an on-disk path (for a path-bound session's name). */
+  private baseName(p: string | null): string {
+    return p ? (p.split(/[\\/]/).pop() ?? '') : '';
+  }
+
   // Record (or refresh) a recent for the open PDF and its session, keyed on
-  // the PDF handle (so desktop path-only opens, which have no handle, don't
-  // list). Defensive: a handle without isSameEntry (e2e fakes) just no-ops.
+  // the PDF's handle OR its on-disk path (so desktop path-only opens list
+  // too). Defensive: a handle without isSameEntry (e2e fakes) just no-ops.
   private async recordRecent(
     pdfHandle: FileSystemFileHandle | null,
+    pdfPath: string | null,
     sessionHandle: FileSystemFileHandle | null,
+    sessionPath: string | null,
     pdfName: string,
     sessionName: string,
   ): Promise<void> {
-    if (!pdfHandle) return;
+    if (!pdfHandle && !pdfPath) return;
     try {
       await updateRecent(this.recents, {
         pdfHandle,
+        pdfPath,
         sessionFileHandle: sessionHandle,
+        sessionPath,
         pdfName,
         sessionFileName: sessionName,
         timestamp: Date.now(),
@@ -481,18 +492,19 @@ export class Controller {
   async saveProgress({ viaShellDialog = false } = {}): Promise<void> {
     if (!this.docOpen) return;
     this.commitSearch(); // explicit Save commits; auto-save (writeProgress) must NOT
-    // Desktop: a session bound to an on-disk path (an OS-opened .ptl, or
-    // one already saved through the shell) writes straight back to it —
-    // no dialog.
+    // ---- Acquisition: each branch only DECIDES the write target (boundHandle
+    // / boundPath) and whether it already wrote the bytes, then converges on
+    // the one block below — so no branch can silently skip the recent-record.
+    let boundHandle = this.session.handle;
+    let boundPath = this.session.path;
+    let alreadyWritten = false;
+
+    // Desktop: a session already bound to a path writes straight back, no dialog.
     if (this.session.path && window.ptDesktop?.saveSessionToPath) {
       const ok = await window.ptDesktop.saveSessionToPath(
         this.session.path, serializeProgress(this.progressFileObject()));
-      if (ok) {
-        this.session.dirty = false;
-        this.showToast('Session saved');
-        this.notify();
-      }
-      return;
+      if (!ok) return; // write failed — leave the session dirty
+      alreadyWritten = true;
     }
     if (this.session.handle) {
       // User-initiated save: the right moment for a permission prompt if
@@ -508,7 +520,7 @@ export class Controller {
         }
       } catch { /* proceed; writeProgress surfaces real failures */ }
     }
-    if (!this.session.handle) {
+    if (!alreadyWritten && !this.session.handle) {
       const suggestedName = this.currentName.replace(/\.pdf$/i, '') + PROGRESS_EXT;
       // The unsaved-close prompt's Save must not touch the file picker:
       // right after a canceled unload, showSaveFilePicker never settles
@@ -517,57 +529,54 @@ export class Controller {
       if (viaShellDialog && window.ptDesktop?.saveSessionFallback) {
         const saved = await window.ptDesktop.saveSessionFallback(
           serializeProgress(this.progressFileObject()), suggestedName);
-        if (saved) {
-          // Bind the chosen path so auto-save and later saves write back
-          // to it silently (the shell dialog gives no handle).
-          this.session.path = saved;
-          this.session.dirty = false;
-          this.showToast('Session saved');
-          this.notify();
-        }
-        return;
-      }
-      if (!window.showSaveFilePicker) {
+        if (!saved) return; // user canceled — no-op
+        boundPath = saved; // the shell dialog binds a path, not a handle
+        alreadyWritten = true;
+      } else if (!window.showSaveFilePicker) {
         this.showToast('Saving progress files requires a Chromium-based browser');
         return;
-      }
-      let handle: FileSystemFileHandle;
-      try {
-        handle = await window.showSaveFilePicker({
-          suggestedName,
-          types: [{
-            description: 'Reading progress',
-            accept: { 'text/plain': [PROGRESS_EXT] },
-          }],
-        });
-      } catch (e) {
-        if ((e as Error)?.name === 'AbortError') return;
-        // Menu items carry no user activation, so the picker throws in
-        // the desktop shell; let the shell save the file instead — and
-        // bind the chosen path so auto-save arms from here on.
-        if ((e as Error)?.name === 'SecurityError' && window.ptDesktop?.saveSessionFallback) {
+      } else {
+        let picked: FileSystemFileHandle | null = null;
+        try {
+          picked = await window.showSaveFilePicker({
+            suggestedName,
+            types: [{
+              description: 'Reading progress',
+              accept: { 'text/plain': [PROGRESS_EXT] },
+            }],
+          });
+        } catch (e) {
+          const err = e as Error;
+          if (err?.name === 'AbortError') return; // user canceled the picker
+          // Menu items carry no user activation, so the picker throws in the
+          // desktop shell; fall back to the shell save (which binds a path).
+          if (err?.name !== 'SecurityError' || !window.ptDesktop?.saveSessionFallback) throw e;
           const saved = await window.ptDesktop.saveSessionFallback(
             serializeProgress(this.progressFileObject()), suggestedName);
-          if (saved) {
-            this.session.path = saved;
-            this.session.dirty = false;
-            this.showToast('Session saved');
-            this.notify();
-          }
-          return;
+          if (!saved) return; // user canceled the shell dialog — no-op
+          boundPath = saved;
+          alreadyWritten = true;
         }
-        throw e;
-      }
-      this.session.handle = handle;
-      // First save of a fresh session: record the now-bound pair (this
-      // upgrades the PDF's session-less recent in place).
-      if (this.freshSession) {
-        this.freshSession = false;
-        void this.recordRecent(this.currentPdfHandle, handle, this.currentName, handle.name);
+        if (picked) boundHandle = picked;
       }
     }
-    await this.writeProgress();
-    this.showToast('Progress saved');
+
+    // ---- Single convergence point: bind, write if not already, clear dirty,
+    // and record the recent for EVERY first-save path (handle OR path). No
+    // acquisition branch above may skip this — that was the missed-case bug.
+    this.session.handle = boundHandle;
+    this.session.path = boundPath;
+    if (!alreadyWritten) await this.writeProgress();
+    this.session.dirty = false;
+    if (this.freshSession) {
+      this.freshSession = false;
+      void this.recordRecent(
+        this.currentPdfHandle, this.currentPdfPath,
+        boundHandle, boundPath,
+        this.currentName, boundHandle?.name ?? this.baseName(boundPath));
+    }
+    this.showToast('Session saved');
+    this.notify();
   }
 
   saveProgressSafe(opts?: { viaShellDialog?: boolean }): void {
@@ -890,6 +899,8 @@ export class Controller {
     name: string,
     opts: {
       handle?: FileSystemFileHandle | null;
+      /** Desktop shell: the PDF's on-disk path (for path-keyed recents). */
+      pdfPath?: string | null;
       progress?: ProgressFile | null;
       progressHandle?: FileSystemFileHandle | null;
       /** Desktop shell: the bound .ptl's on-disk path (auto-save target). */
@@ -899,7 +910,7 @@ export class Controller {
     } = {},
   ): Promise<void> {
     const {
-      handle = null, progress = null, progressHandle = null,
+      handle = null, pdfPath = null, progress = null, progressHandle = null,
       progressPath = null, source = null,
     } = opts;
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
@@ -937,8 +948,10 @@ export class Controller {
         ? { savedName: progress.pdf.name, openName: name }
         : null;
       this.currentPdfHandle = handle;
+      this.currentPdfPath = pdfPath;
       this.freshSession = !(progressHandle || progressPath);
-      void this.recordRecent(handle, progressHandle, name, progressHandle?.name ?? '');
+      void this.recordRecent(handle, pdfPath, progressHandle, progressPath, name,
+        progressHandle?.name ?? this.baseName(progressPath));
       this.currentPage = this.viewer.currentPosition().page;
       this.notify();
     } catch (e) {
@@ -974,6 +987,7 @@ export class Controller {
       this.pendingProgressPath = null;
       await this.openData(buf, file.name, {
         handle,
+        pdfPath: path,
         source,
         progress: pp.json,
         progressHandle: ph,
@@ -987,7 +1001,7 @@ export class Controller {
       this.openPdfElsewhere(file);
       return;
     }
-    await this.openData(buf, file.name, { handle, source });
+    await this.openData(buf, file.name, { handle, pdfPath: path, source });
   }
 
   /** Open a PDF in a fresh window/tab because this one is occupied. */
@@ -1123,10 +1137,13 @@ export class Controller {
       ? { savedName: cs.json.pdf.name, openName: this.currentName }
       : null;
     this.freshSession = false;
-    if (cs.progressHandle) {
-      void this.recordRecent(
-        this.currentPdfHandle, cs.progressHandle, this.currentName, cs.progressHandle.name);
-    }
+    // ONE record point: the loaded session lists in Recent whether it bound a
+    // handle OR a path. (The old `if (cs.progressHandle)` skipped every
+    // path-only .ptl — an OS-open / <input> fallback onto an already-open PDF.)
+    void this.recordRecent(
+      this.currentPdfHandle, this.currentPdfPath,
+      cs.progressHandle, cs.progressPath,
+      this.currentName, cs.progressHandle?.name ?? this.baseName(cs.progressPath));
     this.notify();
   }
 
@@ -1373,45 +1390,61 @@ export class Controller {
     // name} shape the e2e harness constructs.
     const e = entry as unknown as {
       pdfHandle?: FileSystemFileHandle | null;
+      pdfPath?: string | null;
       sessionFileHandle?: FileSystemFileHandle | null;
+      sessionPath?: string | null;
       handle?: FileSystemFileHandle | null;
       progressHandle?: FileSystemFileHandle | null;
       pdfName?: string; name?: string;
     };
     const pdfHandle = e.pdfHandle ?? e.handle ?? null;
+    const pdfPath = e.pdfPath ?? null;
     const sessionHandle = e.sessionFileHandle ?? e.progressHandle ?? null;
+    const sessionPath = e.sessionPath ?? null;
     const pdfName = e.pdfName ?? e.name ?? 'the PDF';
     const fail = (what: string) =>
       this.showToast(`Couldn\u2019t reopen \u201c${pdfName}\u201d \u2014 ${what}.`, 6000);
 
-    if (!pdfHandle) { fail('the PDF is missing'); return; }
+    if (!pdfHandle && !pdfPath) { fail('the PDF is missing'); return; }
 
     // Read BOTH files completely before touching any state.
-    if (!(await ensureReadPermission(pdfHandle))) {
+    if (pdfHandle && !(await ensureReadPermission(pdfHandle))) {
       // Distinct from "missing": the browser reset the grant and the
       // re-request was declined \u2014 say so instead of blaming the file.
       fail('Paper Trail wasn\u2019t given permission to open it \u2014 try again');
       return;
     }
-    let pdfFile: File;
+    let pdfFile: File | undefined;
     let pdfBytes: Uint8Array;
     try {
-      pdfFile = await pdfHandle.getFile();
-      pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
+      if (pdfHandle) {
+        pdfFile = await pdfHandle.getFile();
+        pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
+      } else {
+        const buf = await window.ptDesktop?.readFileByPath?.(pdfPath!);
+        if (!buf) throw new Error('unreadable');
+        pdfBytes = new Uint8Array(buf);
+      }
     } catch (err) {
       console.warn('openRecent: PDF unreadable', err);
       fail('the PDF is missing');
       return;
     }
     let progress: ProgressFile | null = null;
-    if (sessionHandle) {
-      if (!(await ensureReadPermission(sessionHandle))) {
+    if (sessionHandle || sessionPath) {
+      if (sessionHandle && !(await ensureReadPermission(sessionHandle))) {
         fail('Paper Trail wasn\u2019t given permission to open its session \u2014 try again');
         return;
       }
       let sessionText: string;
       try {
-        sessionText = await (await sessionHandle.getFile()).text();
+        if (sessionHandle) {
+          sessionText = await (await sessionHandle.getFile()).text();
+        } else {
+          const buf = await window.ptDesktop?.readFileByPath?.(sessionPath!);
+          if (!buf) throw new Error('unreadable');
+          sessionText = new TextDecoder().decode(buf);
+        }
       } catch (err) {
         console.warn('openRecent: session unreadable', err);
         fail('its saved session file is missing');
@@ -1423,11 +1456,13 @@ export class Controller {
         return;
       }
     }
-    await this.openData(pdfBytes, pdfFile.name, {
+    await this.openData(pdfBytes, pdfHandle ? pdfFile!.name : (this.baseName(pdfPath) || pdfName), {
       handle: pdfHandle,
+      pdfPath,
       source: pdfHandle,
       progress,
       progressHandle: progress ? sessionHandle : null,
+      progressPath: progress ? sessionPath : null,
     });
   }
 
