@@ -11,7 +11,9 @@ name: Witness shutdown guard
 on:
   workflow_dispatch: {}
   push:
-    branches: [witness-shutdown-guard-red, witness-shutdown-guard-green]
+    # Globs so fresh red/green iterations (…-red2, …-green2) trigger without
+    # editing this list — append-only, never force-push a witness branch.
+    branches: [witness-shutdown-guard-red*, witness-shutdown-guard-green*]
 
 jobs:
   windows:

@@ -47,15 +47,21 @@ function shutdownEvent(): { prevented: boolean; preventDefault(): void } {
   return { prevented: false, preventDefault() { this.prevented = true; } };
 }
 
-// isDocumentEdited() flips together with editedWindows (both set by the same
-// pt-document-edited IPC), so it is a reliable barrier that the renderer's
-// dirty state has reached the main process before we emit the shutdown.
-async function waitEdited(win: BrowserWindow, want: boolean): Promise<boolean> {
+// The renderer's own save state — a cross-platform barrier. (win.isDocumentEdited()
+// is only the macOS close-button flag and never flips on Windows, so it can't be
+// used to observe dirtiness here.) That the main process actually received the
+// change is proven by the veto itself, below.
+async function saveState(win: BrowserWindow): Promise<string> {
+  return win.webContents
+    .executeJavaScript('window.__pt.controller.getSnapshot().save')
+    .catch(() => '') as Promise<string>;
+}
+async function waitSave(win: BrowserWindow, want: string): Promise<boolean> {
   for (let i = 0; i < 40; i += 1) {
-    if (win.isDocumentEdited() === want) return true;
+    if ((await saveState(win)) === want) return true;
     await sleep(200);
   }
-  return win.isDocumentEdited() === want;
+  return (await saveState(win)) === want;
 }
 
 const pdfB64 = fs
@@ -95,7 +101,7 @@ async function run(): Promise<void> {
   const label = isWin ? 'Windows query-session-end' : 'macOS before-quit';
 
   // ---- A) a CLEAN session must not block the shutdown ----------------------
-  await waitEdited(win, false);
+  await waitSave(win, 'idle');
   const clean = shutdownEvent();
   fireShutdown(clean);
   check(`${label}: a saved/clean session does NOT block OS shutdown`,
@@ -110,14 +116,20 @@ async function run(): Promise<void> {
     pt.session.handle = null; pt.session.path = null; pt.session.dirty = false;
     pt.jumpVia({ page: 1, yRatio: 0.5 }, 'shutdown-unsaved'); // -> dirty + notify
   })()`);
-  const edited = await waitEdited(win, true);
-  check('the unsaved change reached the main process (window marked edited)', edited);
+  check('the change is dirty in the renderer', await waitSave(win, 'dirty'));
 
+  // Fire the shutdown until it vetoes: the retry waits out the pt-document-edited
+  // round-trip that populates the main process's editedWindows set, and the veto
+  // itself is proof the change reached the main process.
   const promptsBefore = prompts.length;
-  const dirty = shutdownEvent();
-  fireShutdown(dirty);
-  check(`${label}: an unsaved session VETOES the OS shutdown`,
-    dirty.prevented === true, `vetoed=${dirty.prevented}`);
+  let vetoed = false;
+  for (let i = 0; i < 40 && !vetoed; i += 1) {
+    const ev = shutdownEvent();
+    fireShutdown(ev);
+    vetoed = ev.prevented;
+    if (!vetoed) await sleep(200);
+  }
+  check(`${label}: an unsaved session VETOES the OS shutdown`, vetoed, `vetoed=${vetoed}`);
 
   // The veto then drives the normal per-window save dialog.
   for (let i = 0; i < 20 && prompts.length === promptsBefore; i += 1) await sleep(200);
