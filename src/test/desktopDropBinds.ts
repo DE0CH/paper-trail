@@ -86,10 +86,15 @@ async function run(): Promise<void> {
       const ev = new DragEvent('drop', { bubbles: true, cancelable: true });
       Object.defineProperty(ev, 'dataTransfer', { value: dt }); // not settable via ctor
       window.dispatchEvent(ev);
-      for (let i = 0; i < 160 && !c.session.path && !c.confirmSession; i += 1) {
+      // Poll for the FINAL bound state (session.path), applying the replace
+      // confirmation inline the instant it appears. The drop → openFile →
+      // parse chain is async and can lag under CI load, so waiting on the
+      // end-state (with a generous cap) — not the intermediate confirmSession
+      // then a single apply after the loop — is race-free.
+      for (let i = 0; i < 400 && !c.session.path; i += 1) {
+        if (c.confirmSession) c.applyConfirmedSession();
         await new Promise((r) => setTimeout(r, 25));
       }
-      if (!c.session.path && c.confirmSession) c.applyConfirmedSession();
 
       return {
         getPathForFile: String(gp),
