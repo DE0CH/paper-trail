@@ -1,8 +1,8 @@
 # On-demand DEV build of the desktop apps — does NOT run or require CI.
 # For examining a build during development while the full release CI is
-# red/flaky. Unsigned (mac: right-click > Open, or `xattr -cr` the .app;
-# Windows: SmartScreen "More info > Run anyway"). Artifacts are attached
-# to the run, NOT published as a release and NOT deployed.
+# red/flaky. macOS is SIGNED + NOTARIZED (installs cleanly, no Gatekeeper
+# warning); Windows is unsigned (SmartScreen "More info > Run anyway").
+# Artifacts are attached to the run, NOT published as a release, NOT deployed.
 #
 # Uploads the FIVE artifacts the release publishes, each on its own so it
 # can be grabbed separately:
@@ -43,10 +43,33 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm run build
-      - name: Package mac universal — zip + dmg (unsigned, no notarization)
+      - name: Set up mac signing + notarization key (App Store Connect API)
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder --mac zip dmg --publish never -c.mac.notarize=false -c.mac.identity=null -c.mac.hardenedRuntime=false
+          CERT: ${{ secrets.MAC_CERT_P12 }}
+          CERT_PW: ${{ secrets.MAC_CERT_PASSWORD }}
+          P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          missing=""
+          [ -z "$CERT" ] && missing="$missing MAC_CERT_P12"
+          [ -z "$CERT_PW" ] && missing="$missing MAC_CERT_PASSWORD"
+          [ -z "$P8" ] && missing="$missing APPLE_API_KEY_P8"
+          [ -z "$KEY_ID" ] && missing="$missing APPLE_API_KEY_ID"
+          [ -z "$ISSUER" ] && missing="$missing APPLE_API_ISSUER"
+          if [ -n "$missing" ]; then
+            echo "::error::missing mac signing secrets:$missing"; exit 1
+          fi
+          KEY_DIR="$RUNNER_TEMP/apple-keys"; mkdir -p "$KEY_DIR"
+          printf '%s' "$P8" > "$KEY_DIR/AuthKey.p8"
+          echo "APPLE_API_KEY=$KEY_DIR/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_ID=$KEY_ID" >> "$GITHUB_ENV"
+          echo "APPLE_API_ISSUER=$ISSUER" >> "$GITHUB_ENV"
+      - name: Package mac universal — SIGNED + NOTARIZED (zip + dmg)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: npx electron-builder --mac zip dmg --publish never
       - name: List built mac artifacts
         run: ls -la dist-electron/
       - name: Upload macOS app (.zip)
