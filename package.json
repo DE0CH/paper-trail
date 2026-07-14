@@ -31,6 +31,7 @@
     "test:offline": "electron build-node/test/desktopOffline.js",
     "test:autosave": "electron build-node/test/desktopAutosave.js",
     "test:close-autosave": "electron build-node/test/desktopCloseAutosave.js",
+    "test:close-async": "electron build-node/test/desktopCloseAsync.js",
     "test:write-fail-dirty": "electron build-node/test/desktopWriteFailKeepsDirty.js",
     "test:session-path": "electron build-node/test/desktopSessionPathBind.js",
     "test:install:win": "node build-node/test/installerWin.js",

@@ -69,6 +69,10 @@ export class Controller {
   preview: Preview | null = null;
   session: Session = { handle: null, path: null, dirty: false, saving: false };
 
+  // Set true just before we programmatically re-close a window after an async
+  // save, so the beforeunload handler lets that close through (see closeAndSave).
+  private forceClose = false;
+
   private docOpen = false;
   private currentName = '';
   private currentFp: string | null = null;
@@ -173,24 +177,16 @@ export class Controller {
     }, { passive: false });
 
     window.addEventListener('beforeunload', (e) => {
+      if (this.forceClose) return; // the programmatic re-close after a save
       if (!this.docOpen || !this.session.dirty) return;
-      // Autosave target on disk (a bound .ptl path): don't nag — flush the
-      // change and close AT ONCE. The write is a synchronous round-trip to
-      // the main process (a tiny .ptl writes in well under a millisecond,
-      // so the close still feels instant); on success the window closes, on
-      // a failed write we fall through to the normal save prompt below.
-      // beforeunload can't await, but a path binding is silent-writable
-      // synchronously (canWriteSilently short-circuits on session.path).
-      if (this.session.path && window.ptDesktop?.saveSessionOnClose) {
-        const ok = window.ptDesktop.saveSessionOnClose(
-          this.session.path, serializeProgress(this.progressFileObject()));
-        if (ok) { this.session.dirty = false; return; } // saved silently — close now
-        // The background write FAILED (unexpected — probably a bug). Never
-        // lose the change: fall through to the normal save prompt so the
-        // user resolves it with Save / Don't Save as usual.
-      }
-      // No silent target (or a failed silent write): warn before closing.
+      // Cancel THIS close. beforeunload can't await, so we never try to save
+      // synchronously here. In the browser this simply triggers the browser's
+      // own (generic, unavoidable) unsaved-changes prompt. On the desktop we
+      // hand off to an ASYNC save while the window is held open — which can use
+      // the handle write, not just a path, so handle-bound sessions (Open
+      // Recent) close cleanly too — then close on success or ask on failure.
       e.preventDefault();
+      if (window.ptDesktop) void this.closeAndSave();
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {
@@ -346,6 +342,38 @@ export class Controller {
   private async writeProgressAuto(): Promise<void> {
     if (!(await this.canWriteSilently())) return; // stays dirty; saved on next explicit save
     await this.writeProgress();
+  }
+
+  /**
+   * Desktop close flow. beforeunload has already cancelled the close, so the
+   * window is held open and the event loop is free — now we can save
+   * ASYNCHRONOUSLY (a handle via createWritable, or a path via IPC) and only
+   * then close, or ask. Because it's async, a handle-bound session with no
+   * on-disk path (opened via Open Recent) also closes silently — the write the
+   * old synchronous close-flush couldn't do now runs normally.
+   *
+   * TODO(shutdown): a time-boxed OS shutdown (Windows session-end / mac
+   * before-quit) will NOT wait for this async round-trip and force-kills after
+   * a timeout, losing the change. That case still needs a SYNCHRONOUS fast-path
+   * — the dormant saveSessionOnClose / pt-save-session-on-close sync write is
+   * kept for exactly this. Deferred for now.
+   */
+  private async closeAndSave(): Promise<void> {
+    // Try to save with no prompt (a path is always silent; a desktop handle
+    // auto-grants readwrite). writeProgress clears dirty only on a real write.
+    await this.writeProgressAuto().catch(() => { /* write failed → still dirty → ask below */ });
+    if (!this.session.dirty) { this.forceClose = true; window.close(); return; }
+    // Couldn't save silently — a never-saved session, denied permission, or a
+    // failed write. Ask with a native dialog (same wording as before).
+    const choice = await window.ptDesktop?.confirmCloseSave?.();
+    if (choice === 'save') {
+      await this.saveProgress({ viaShellDialog: true }); // save-as; binds a path
+      if (!this.session.dirty) { this.forceClose = true; window.close(); }
+      // still dirty (user cancelled the save-as picker) → keep the window
+    } else if (choice === 'dont-save') {
+      this.forceClose = true; window.close();
+    }
+    // 'cancel' (or no shell) → keep the window open, change intact
   }
 
   private restoreStateFrom(d: SerializedState | null): boolean {

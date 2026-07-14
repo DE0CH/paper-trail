@@ -176,6 +176,11 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopCloseAutosave.js
 
+      - name: Async close-and-save — a handle-bound session closes silently too
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseAsync.js
+
       - name: A failed auto-save keeps the session dirty (no silent loss)
         if: ${{ !cancelled() }}
         shell: bash
@@ -459,6 +464,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopCloseAutosave.js
+
+      - name: Async close-and-save — a handle-bound session closes silently too
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseAsync.js
 
       - name: A failed auto-save keeps the session dirty (no silent loss)
         if: ${{ !cancelled() }}

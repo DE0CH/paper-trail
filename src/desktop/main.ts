@@ -170,24 +170,13 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
     });
   }
 
-  // The web app's beforeunload fires when there is unsaved reading progress;
-  // surface it as a native dialog instead of silently refusing to close.
-  win.webContents.on('will-prevent-unload', (event) => {
-    if (win.isDestroyed()) return;
-    const choice = dialog.showMessageBoxSync(win, {
-      type: 'warning',
-      buttons: ['Save\u2026', 'Don\u2019t Save', 'Cancel'],
-      defaultId: 0,
-      cancelId: 2,
-      message: 'Do you want to save your reading session?',
-      detail: 'Your changes will be lost if you don\u2019t save them.',
-    });
-    // Not plain 'save': right after a canceled unload the renderer's
-    // file picker never settles, so this save must use the shell dialog.
-    if (choice === 0) win.webContents.send('pt-menu', 'save-from-close'); // window stays open
-    else if (choice === 1) event.preventDefault(); // Don't Save: allow the close
-    // Cancel: keep the window open
-  });
+  // beforeunload now CANCELS a dirty close, and the renderer drives an ASYNC
+  // save-then-close (Controller.closeAndSave) while the window is held open \u2014
+  // showing its OWN native dialog via pt-confirm-close-save only if the save
+  // can't happen silently. So we must NOT pop a dialog here: a no-op honors the
+  // cancel (keeps the window open) so the renderer can take over. (Electron's
+  // default with no listener does the same; this is explicit about why.)
+  win.webContents.on('will-prevent-unload', () => { /* renderer handles it */ });
 
   // Native right-click menus for text fields and selections. On mac
   // they come from electron-context-menu (spell-check suggestions, Look
@@ -925,14 +914,27 @@ ipcMain.handle('pt-save-session-to-path', async (
   }
 });
 
-// Fire-and-forget flush when a window with an autosaved (path-bound)
-// session is closing: the renderer hands us the bytes during beforeunload
-// and closes at once; we write the file here, in the main process, so the
-// change lands even though the window is already gone (no save prompt).
+// The close-save dialog, requested by the renderer's async close flow ONLY
+// when it couldn't write silently (never-saved session, denied permission, or
+// a failed write). Native, so it looks like the platform's. Returns the choice.
+ipcMain.handle('pt-confirm-close-save', (event): 'save' | 'dont-save' | 'cancel' => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const choice = dialog.showMessageBoxSync(win!, {
+    type: 'warning',
+    buttons: ['Save…', 'Don’t Save', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    message: 'Do you want to save your reading session?',
+    detail: 'Your changes will be lost if you don’t save them.',
+  });
+  return choice === 0 ? 'save' : choice === 1 ? 'dont-save' : 'cancel';
+});
+
+// DORMANT — kept for the deferred OS-shutdown fast-path. A time-boxed OS
+// shutdown (Windows session-end / mac before-quit) can't wait for the renderer's
+// async close-save, so it will still need this SYNCHRONOUS write. NOT used by
+// the normal close flow any more (the renderer now saves async via closeAndSave).
 ipcMain.on('pt-save-session-on-close', (event, req: { path: string; text: string }) => {
-  // Synchronous round-trip: the renderer waits for the result during
-  // beforeunload so it can close on success or keep the window (normal
-  // save prompt) on failure. A small .ptl writes in well under a ms.
   try {
     fs.writeFileSync(req.path, req.text, 'utf8');
     event.returnValue = true;
