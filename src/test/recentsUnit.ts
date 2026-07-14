@@ -25,9 +25,29 @@ function entry(
 ): RecentEntry {
   return {
     pdfHandle: pdf,
+    pdfPath: null,
     sessionFileHandle: session,
+    sessionPath: null,
     pdfName: pdf.name,
     sessionFileName: session ? session.name : '',
+    timestamp: ts,
+  };
+}
+
+// A path-identity entry (desktop opens with no handle), keyed on on-disk paths.
+function pentry(
+  pdfPath: string,
+  sessionPath: string | null,
+  ts: number,
+): RecentEntry {
+  const base = (p: string) => p.split(/[\\/]/).pop() ?? p;
+  return {
+    pdfHandle: null,
+    pdfPath,
+    sessionFileHandle: null,
+    sessionPath,
+    pdfName: base(pdfPath),
+    sessionFileName: sessionPath ? base(sessionPath) : '',
     timestamp: ts,
   };
 }
@@ -44,7 +64,7 @@ test('updateRecent: exact pair match refreshes timestamp + names, no new row', a
   const pdf = fh('a.pdf'); const s = fh('a.ptl');
   const list = [entry(pdf, s, 100)];
   await updateRecent(list, {
-    pdfHandle: pdf, sessionFileHandle: s,
+    pdfHandle: pdf, pdfPath: null, sessionFileHandle: s, sessionPath: null,
     pdfName: 'renamed.pdf', sessionFileName: 'renamed.ptl', timestamp: 200,
   });
   assert.equal(list.length, 1);
@@ -83,6 +103,36 @@ test('updateRecent: incoming null session, no match, makes a new (pdf,null) row'
   assert.equal(list.length, 2);
 });
 
+// ---- path identity (desktop opens with no handle) ----------------------
+
+test('updateRecent: path-based first save upgrades the (pdfPath, null) row', async () => {
+  const list = [pentry('/docs/a.pdf', null, 100)];
+  await updateRecent(list, pentry('/docs/a.pdf', '/docs/a.ptl', 200));
+  assert.equal(list.length, 1, 'no duplicate row for the same pdf path');
+  assert.equal(list[0].sessionPath, '/docs/a.ptl', 'null session slot upgraded by path');
+  assert.equal(list[0].sessionFileName, 'a.ptl');
+  assert.equal(list[0].timestamp, 200);
+});
+
+test('updateRecent: path exact-pair match refreshes, no new row', async () => {
+  const list = [pentry('/d/a.pdf', '/d/a.ptl', 100)];
+  await updateRecent(list, pentry('/d/a.pdf', '/d/a.ptl', 200));
+  assert.equal(list.length, 1);
+  assert.equal(list[0].timestamp, 200);
+});
+
+test('updateRecent: a path-only session does NOT upgrade a handle-keyed pdf row', async () => {
+  const list = [entry(fh('a.pdf'), null, 100)]; // pdf keyed by HANDLE
+  await updateRecent(list, pentry('/other/a.pdf', '/other/a.ptl', 200)); // path-keyed
+  assert.equal(list.length, 2, 'handle-keyed and path-keyed pdfs stay distinct rows');
+});
+
+test('updateRecent: different pdf paths make distinct rows', async () => {
+  const list = [pentry('/d/a.pdf', null, 100)];
+  await updateRecent(list, pentry('/d/b.pdf', '/d/b.ptl', 200));
+  assert.equal(list.length, 2);
+});
+
 // ---- buildDisplayList ---------------------------------------------------
 
 test('buildDisplayList: sorts by timestamp descending', () => {
@@ -103,11 +153,11 @@ test('buildDisplayList: distinct pdf names show just the pdf name', () => {
 
 test('buildDisplayList: a shared pdf name appends the session name to both', () => {
   const e1: RecentEntry = {
-    pdfHandle: fh('paper.pdf'), sessionFileHandle: fh('draft.ptl'),
+    pdfHandle: fh('paper.pdf'), pdfPath: null, sessionFileHandle: fh('draft.ptl'), sessionPath: null,
     pdfName: 'paper.pdf', sessionFileName: 'draft.ptl', timestamp: 100,
   };
   const e2: RecentEntry = {
-    pdfHandle: fh('paper.pdf'), sessionFileHandle: fh('final.ptl'),
+    pdfHandle: fh('paper.pdf'), pdfPath: null, sessionFileHandle: fh('final.ptl'), sessionPath: null,
     pdfName: 'paper.pdf', sessionFileName: 'final.ptl', timestamp: 200,
   };
   const disp = buildDisplayList([e1, e2]);
