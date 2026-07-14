@@ -4,6 +4,19 @@
 # Windows: SmartScreen "More info > Run anyway"). Artifacts are attached
 # to the run, NOT published as a release and NOT deployed.
 #
+# Uploads FIVE separate artifacts so each can be grabbed on its own:
+#   pt-win-x64-app     - Windows x64 portable app (.zip)
+#   pt-win-arm64-app   - Windows arm64 portable app (.zip)
+#   pt-win-x64-setup   - Windows x64 NSIS installer (.exe)
+#   pt-win-arm64-setup - Windows arm64 NSIS installer (.exe)
+#   pt-mac-universal   - macOS universal binary (.zip)
+#
+# The two Windows arches are built in separate electron-builder passes with
+# a DEV-ONLY nsis.artifactName override that adds ${arch}, so we get two
+# distinct installers. The shared release config (package.json > build) is
+# left untouched — its nsis.artifactName MUST stay byte-identical because the
+# auto-update feed (latest.yml) matches release asset filenames exactly.
+#
 # Run it:  Actions > "Dev build (no CI)" > Run workflow  (pick a branch),
 # or:      gh workflow run dev-build.yml --ref <branch> [-f ref=<sha>]
 
@@ -32,16 +45,17 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm run build
-      - name: Package mac (unsigned — no CI, no notarization)
+      - name: Package mac universal (unsigned — no CI, no notarization)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder --mac --publish never -c.mac.notarize=false -c.mac.identity=null -c.mac.hardenedRuntime=false
-      - uses: actions/upload-artifact@v4
+        run: npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.identity=null -c.mac.hardenedRuntime=false
+      - name: List built mac artifacts
+        run: ls -la dist-electron/
+      - name: Upload macOS universal binary
+        uses: actions/upload-artifact@v4
         with:
-          name: paper-trail-mac-dev
-          path: |
-            dist-electron/*.dmg
-            dist-electron/*.zip
+          name: pt-mac-universal
+          path: dist-electron/Paper-Trail-*-mac.zip
           if-no-files-found: error
 
   windows:
@@ -55,14 +69,44 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm run build
-      - name: Package windows (unsigned — no CI)
+      # Build each arch in its own pass so NSIS yields a SEPARATE installer per
+      # arch. The dev-only nsis.artifactName override adds ${arch}; the zip
+      # already carries ${arch} via win.artifactName. bash + single quotes so
+      # the electron-builder ${...} templates pass through the shell literally.
+      - name: Package windows x64 (unsigned — no CI)
+        shell: bash
         env:
           ELECTRON_BUILDER_7Z_FILTER: BCJ2
-        run: npx electron-builder --win --publish never
-      - uses: actions/upload-artifact@v4
+        run: npx electron-builder --win --x64 --publish never -c.nsis.artifactName='Paper-Trail-Setup-${version}-${arch}.${ext}'
+      - name: Package windows arm64 (unsigned — no CI)
+        shell: bash
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win --arm64 --publish never -c.nsis.artifactName='Paper-Trail-Setup-${version}-${arch}.${ext}'
+      - name: List built windows artifacts
+        shell: bash
+        run: ls -la dist-electron/
+      - name: Upload Windows x64 app
+        uses: actions/upload-artifact@v4
         with:
-          name: paper-trail-windows-dev
-          path: |
-            dist-electron/*.exe
-            dist-electron/*-win.zip
+          name: pt-win-x64-app
+          path: dist-electron/Paper-Trail-*-x64-win.zip
+          if-no-files-found: error
+      - name: Upload Windows arm64 app
+        uses: actions/upload-artifact@v4
+        with:
+          name: pt-win-arm64-app
+          path: dist-electron/Paper-Trail-*-arm64-win.zip
+          if-no-files-found: error
+      - name: Upload Windows x64 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: pt-win-x64-setup
+          path: dist-electron/Paper-Trail-Setup-*-x64.exe
+          if-no-files-found: error
+      - name: Upload Windows arm64 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: pt-win-arm64-setup
+          path: dist-electron/Paper-Trail-Setup-*-arm64.exe
           if-no-files-found: error
