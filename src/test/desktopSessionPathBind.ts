@@ -72,6 +72,13 @@ async function run(): Promise<void> {
     fs.writeFileSync(ptlPath, sessionText, 'utf8');
     const original = fs.readFileSync(ptlPath, 'utf8');
 
+    // Clear the Phase-1 session's dirty flag before reloading. Reload here is
+    // only a state reset, but it fires beforeunload — and a dirty, never-saved
+    // session would drive the async close-save (confirmCloseSave), whose native
+    // dialog blocks this headless run forever. [owner-authorized harness fix]
+    await win.webContents.executeJavaScript(
+      `(() => { if (window.__pt && window.__pt.session) window.__pt.session.dirty = false; })()`);
+
     // Fresh, empty window state for the OS-open flow.
     win.webContents.reload();
     await waitForPt(win, 30_000);
