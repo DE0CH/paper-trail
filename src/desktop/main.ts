@@ -756,6 +756,18 @@ ipcMain.handle('pt-save-session-to-path', async (
   }
 });
 
+// Read a file's bytes by on-disk path, so the renderer can reopen a
+// path-based recent (a PDF/.ptl bound without a FileSystemFileHandle).
+ipcMain.handle('pt-read-file', async (_event, filePath: string): Promise<ArrayBuffer | null> => {
+  try {
+    const buf = await fs.promises.readFile(filePath);
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  } catch (e) {
+    console.warn('could not read file', filePath, e);
+    return null;
+  }
+});
+
 // The close-save dialog, requested by the renderer's async close flow ONLY
 // when it couldn't write silently (never-saved session, denied permission, or
 // a failed write). Native, so it looks like the platform's. Returns the choice.

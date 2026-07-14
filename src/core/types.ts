@@ -107,6 +107,10 @@ declare global {
       setDocumentEdited: (edited: boolean) => void;
       saveSessionFallback: (text: string, suggestedName: string) => Promise<string | null>;
       saveSessionToPath?: (path: string, text: string) => Promise<boolean>;
+      // Read a file's bytes by on-disk path — reopening a path-based recent
+      // (an OS-opened / input-fallback / shell-saved file with no handle).
+      // null if the file is gone or unreadable.
+      readFileByPath?: (path: string) => Promise<ArrayBuffer | null>;
       // The native "save your reading session?" dialog on close, shown by the
       // renderer only when the async close-save couldn't write silently.
       confirmCloseSave?: () => Promise<'save' | 'dont-save' | 'cancel'>;

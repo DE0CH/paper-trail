@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   // Silent write-back to an already-bound session file path (no dialog).
   saveSessionToPath: (filePath: string, text: string): Promise<boolean> =>
     ipcRenderer.invoke('pt-save-session-to-path', { path: filePath, text }) as Promise<boolean>,
+  // Read a file's bytes by on-disk path — reopening a path-based recent.
+  readFileByPath: (filePath: string): Promise<ArrayBuffer | null> =>
+    ipcRenderer.invoke('pt-read-file', filePath) as Promise<ArrayBuffer | null>,
   // A PDF picked while this window already shows one opens elsewhere.
   openInNewWindow: (name: string, data: ArrayBuffer) => {
     ipcRenderer.send('pt-open-new-window', { name, data });
