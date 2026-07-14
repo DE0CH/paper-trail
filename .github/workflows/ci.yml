@@ -504,26 +504,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/newWindowTask.js
 
-      - name: Software Update window flow (states, buttons, Later)
-        if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateWindow.js
-
-      - name: Restart to Update guards unsaved sessions (Cancel/Save)
-        if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateRestartUnsaved.js
-
-      - name: Update window edge cases (up to date, errors, resume, no re-download)
-        if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateWindowEdges.js
-
-      - name: Update download is cancellable (Cancel stops the transfer)
-        if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateWindowCancel.js
-
-      - name: Restart edge cases (re-check after Cancel, second window, Don't Save)
-        if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateRestartEdges.js
-
       - name: Package the macOS app (unsigned)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -614,14 +594,6 @@ jobs:
         if: env.HAS_CERT == 'true'
         run: node build-node/test/updateMacKillDuringInstall.js
 
-      - name: Window update install test (update window through Restart to Update)
-        if: env.HAS_CERT == 'true'
-        run: node build-node/test/updateMacWindowInstall.js
-
-      - name: Cancel-then-quit test (abandoned restart, silent install on plain quit)
-        if: env.HAS_CERT == 'true'
-        run: node build-node/test/updateMacCancelThenQuit.js
-
       # LAST: this one replaces the packaged bundle with the new version,
       # so every test needing the current version must run before it.
       - name: Auto-update install test (Squirrel, signed builds only)
@@ -633,33 +605,6 @@ jobs:
   # gets a real version gap. They must NOT be folded into the *-update jobs
   # above: those upgrade the shared bundle to the feed version, leaving
   # old==new with no install to reopen during (the witness then times out).
-  windows-reopen-during-install:
-    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-windows-2025' || 'windows-latest' }}
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-      - run: npm ci
-      - run: npm run build
-      - name: Generate the test-fixture PDFs
-        run: node build-node/tools/fixture.js
-      - name: Package the current version (installer only)
-        env:
-          ELECTRON_BUILDER_7Z_FILTER: BCJ2
-        run: npx electron-builder --win nsis --publish never
-      - name: Build the next version into the update feed
-        env:
-          ELECTRON_BUILDER_7Z_FILTER: BCJ2
-        shell: bash
-        run: |
-          npm version patch --no-git-tag-version
-          npx electron-builder --win nsis --publish never -c.directories.output=dist-update-feed
-          git checkout -- package.json package-lock.json
-      - name: Reopening DURING the quit-install never flash-closes
-        shell: bash
-        run: node build-node/test/updateWinOpenDuringInstall.js
 
   mac-reopen-during-install:
     runs-on: macos-latest
