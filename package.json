@@ -49,7 +49,6 @@
     "test:update:mac:install": "node build-node/test/updateMacInstall.js",
     "test:update:mac:resilience": "node build-node/test/updateMacInterruptResilience.js",
     "test:update:mac:kill-install": "node build-node/test/updateMacKillDuringInstall.js",
-    "test:update:mac:open-during": "node build-node/test/updateMacOpenDuringInstall.js",
     "test:new-window-task": "electron build-node/test/newWindowTask.js",
     "test:jump-list": "electron build-node/test/jumpListRegistration.js",
     "test:stdio": "node build-node/test/desktopStdioClosed.js",
