@@ -59,18 +59,42 @@ function idb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-/** The whole recents list as stored (callers sort by timestamp). */
+/** The whole recents list as stored (callers sort by timestamp). Entries
+ *  persisted before the FileRef union (separate pdfHandle/pdfPath/… fields)
+ *  are normalized here; one with no PDF reference is dropped — recents is a
+ *  convenience cache, not durable user data. */
 export async function getRecents(): Promise<RecentEntry[]> {
   try {
     const db = await idb();
-    return await new Promise((resolve, reject) => {
+    const raw = await new Promise<unknown[]>((resolve, reject) => {
       const req = db.transaction(RECENTS).objectStore(RECENTS).get(LIST_KEY);
-      req.onsuccess = () => resolve((req.result as RecentEntry[]) ?? []);
+      req.onsuccess = () => resolve((req.result as unknown[]) ?? []);
       req.onerror = () => reject(req.error);
     });
+    return raw.map(normalizeRecent).filter((e): e is RecentEntry => e !== null);
   } catch {
     return [];
   }
+}
+
+// Bring any pre-union entry (pdfHandle/pdfPath/sessionFileHandle/sessionPath)
+// to the { pdf, session } shape. A path and a handle are never both set for a
+// side, so `handle ?? path` is lossless. New entries pass through unchanged.
+function normalizeRecent(raw: unknown): RecentEntry | null {
+  const e = raw as Partial<RecentEntry> & {
+    pdfHandle?: FileSystemFileHandle | null; pdfPath?: string | null;
+    sessionFileHandle?: FileSystemFileHandle | null; sessionPath?: string | null;
+  };
+  const pdf = e.pdf ?? e.pdfHandle ?? e.pdfPath ?? null;
+  if (pdf == null) return null;
+  const session = e.session ?? e.sessionFileHandle ?? e.sessionPath ?? null;
+  return {
+    pdf,
+    session,
+    pdfName: e.pdfName ?? '',
+    sessionFileName: session ? (e.sessionFileName ?? null) : null,
+    timestamp: e.timestamp ?? 0,
+  };
 }
 
 /** Persist the recents list verbatim (the caller trims/sorts). */

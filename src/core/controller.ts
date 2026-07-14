@@ -11,7 +11,7 @@ import {
   getRecents, saveRecents, ensureReadPermission,
 } from './store';
 import {
-  updateRecent, buildDisplayList, type RecentEntry, type RecentDisplay,
+  updateRecent, buildDisplayList, isHandle, type RecentEntry, type RecentDisplay, type FileRef,
 } from './recents';
 import {
   parseProgress, serializeProgress, progressVersion, PROGRESS_EXT, PROGRESS_VERSION,
@@ -425,15 +425,15 @@ export class Controller {
     pdfName: string,
     sessionName: string,
   ): Promise<void> {
-    if (!pdfHandle && !pdfPath) return;
+    const pdf: FileRef | null = pdfHandle ?? pdfPath;
+    if (!pdf) return;
+    const session: FileRef | null = sessionHandle ?? sessionPath;
     try {
       await updateRecent(this.recents, {
-        pdfHandle,
-        pdfPath,
-        sessionFileHandle: sessionHandle,
-        sessionPath,
+        pdf,
+        session,
         pdfName,
-        sessionFileName: sessionName,
+        sessionFileName: session ? sessionName : null,
         timestamp: Date.now(),
       });
       this.recents.sort((a, b) => b.timestamp - a.timestamp);
@@ -1386,29 +1386,27 @@ export class Controller {
    * a clear message with everything left as it was.
    */
   async openRecent(entry: RecentEntry): Promise<void> {
-    // Accept the new pair-shape and the legacy {handle, progressHandle,
-    // name} shape the e2e harness constructs.
+    // Accept the union {pdf, session} shape plus the legacy shapes older
+    // stored entries and the e2e harness use ({handle, progressHandle, name}
+    // and the pre-union 4-field pdfHandle/pdfPath/...).
     const e = entry as unknown as {
-      pdfHandle?: FileSystemFileHandle | null;
-      pdfPath?: string | null;
-      sessionFileHandle?: FileSystemFileHandle | null;
-      sessionPath?: string | null;
-      handle?: FileSystemFileHandle | null;
-      progressHandle?: FileSystemFileHandle | null;
+      pdf?: FileRef; session?: FileRef | null;
+      pdfHandle?: FileSystemFileHandle | null; pdfPath?: string | null;
+      sessionFileHandle?: FileSystemFileHandle | null; sessionPath?: string | null;
+      handle?: FileSystemFileHandle | null; progressHandle?: FileSystemFileHandle | null;
       pdfName?: string; name?: string;
     };
-    const pdfHandle = e.pdfHandle ?? e.handle ?? null;
-    const pdfPath = e.pdfPath ?? null;
-    const sessionHandle = e.sessionFileHandle ?? e.progressHandle ?? null;
-    const sessionPath = e.sessionPath ?? null;
+    const pdf: FileRef | null = e.pdf ?? e.pdfHandle ?? e.handle ?? e.pdfPath ?? null;
+    const session: FileRef | null =
+      e.session ?? e.sessionFileHandle ?? e.progressHandle ?? e.sessionPath ?? null;
     const pdfName = e.pdfName ?? e.name ?? 'the PDF';
     const fail = (what: string) =>
       this.showToast(`Couldn\u2019t reopen \u201c${pdfName}\u201d \u2014 ${what}.`, 6000);
 
-    if (!pdfHandle && !pdfPath) { fail('the PDF is missing'); return; }
+    if (!pdf) { fail('the PDF is missing'); return; }
 
     // Read BOTH files completely before touching any state.
-    if (pdfHandle && !(await ensureReadPermission(pdfHandle))) {
+    if (isHandle(pdf) && !(await ensureReadPermission(pdf))) {
       // Distinct from "missing": the browser reset the grant and the
       // re-request was declined \u2014 say so instead of blaming the file.
       fail('Paper Trail wasn\u2019t given permission to open it \u2014 try again');
@@ -1417,11 +1415,11 @@ export class Controller {
     let pdfFile: File | undefined;
     let pdfBytes: Uint8Array;
     try {
-      if (pdfHandle) {
-        pdfFile = await pdfHandle.getFile();
+      if (isHandle(pdf)) {
+        pdfFile = await pdf.getFile();
         pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
       } else {
-        const buf = await window.ptDesktop?.readFileByPath?.(pdfPath!);
+        const buf = await window.ptDesktop?.readFileByPath?.(pdf);
         if (!buf) throw new Error('unreadable');
         pdfBytes = new Uint8Array(buf);
       }
@@ -1431,17 +1429,17 @@ export class Controller {
       return;
     }
     let progress: ProgressFile | null = null;
-    if (sessionHandle || sessionPath) {
-      if (sessionHandle && !(await ensureReadPermission(sessionHandle))) {
+    if (session != null) {
+      if (isHandle(session) && !(await ensureReadPermission(session))) {
         fail('Paper Trail wasn\u2019t given permission to open its session \u2014 try again');
         return;
       }
       let sessionText: string;
       try {
-        if (sessionHandle) {
-          sessionText = await (await sessionHandle.getFile()).text();
+        if (isHandle(session)) {
+          sessionText = await (await session.getFile()).text();
         } else {
-          const buf = await window.ptDesktop?.readFileByPath?.(sessionPath!);
+          const buf = await window.ptDesktop?.readFileByPath?.(session);
           if (!buf) throw new Error('unreadable');
           sessionText = new TextDecoder().decode(buf);
         }
@@ -1456,13 +1454,13 @@ export class Controller {
         return;
       }
     }
-    await this.openData(pdfBytes, pdfHandle ? pdfFile!.name : (this.baseName(pdfPath) || pdfName), {
-      handle: pdfHandle,
-      pdfPath,
-      source: pdfHandle,
+    await this.openData(pdfBytes, isHandle(pdf) ? pdfFile!.name : (this.baseName(pdf) || pdfName), {
+      handle: isHandle(pdf) ? pdf : null,
+      pdfPath: isHandle(pdf) ? null : pdf,
+      source: isHandle(pdf) ? pdf : null,
       progress,
-      progressHandle: progress ? sessionHandle : null,
-      progressPath: progress ? sessionPath : null,
+      progressHandle: progress && session != null && isHandle(session) ? session : null,
+      progressPath: progress && session != null && !isHandle(session) ? session : null,
     });
   }
 
