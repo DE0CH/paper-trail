@@ -19,6 +19,43 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm run build
+      - name: Regenerate the Windows icons from the source SVGs
+        # Pure-JS (png2icons + a headless render), so the .ico files are
+        # rebuilt here from docs/icon.svg and icons.ts — the screenshots
+        # below reflect the current source, not the committed binaries.
+        run: node build-node/tools/icons.js
+      - name: Upload the regenerated icons (to commit alongside the source)
+        uses: actions/upload-artifact@v4
+        with:
+          name: regenerated-icos
+          path: build/*.ico
+      - name: Render each .ico directly (the design, independent of any file association)
+        # The shell-icon captures below show whatever handler Windows
+        # resolves each extension to — and .pdf is owned by Edge, so its
+        # capture is Edge's stock icon, not ours. These direct renders
+        # pull the largest and a small frame straight out of our own .ico
+        # files, which is the true picture of the icons we ship.
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          foreach ($n in 'installer','pdf','ptl','icon') {
+            foreach ($sz in 256, 48) {
+              $ico = New-Object System.Drawing.Icon("build/$n.ico", $sz, $sz)
+              $bmp = $ico.ToBitmap()
+              $out = New-Object System.Drawing.Bitmap $sz, $sz
+              $g = [System.Drawing.Graphics]::FromImage($out)
+              $g.Clear([System.Drawing.Color]::White)
+              $g.DrawImage($bmp, 0, 0, $sz, $sz)
+              $out.Save("ico-$n-$sz.png")
+              $ico.Dispose()
+            }
+          }
+          Get-ChildItem ico-*.png
+      - name: Upload the direct .ico renders
+        uses: actions/upload-artifact@v4
+        with:
+          name: ico-renders
+          path: ico-*.png
       - name: Generate the test-fixture PDFs
         run: node build-node/tools/fixture.js
 
