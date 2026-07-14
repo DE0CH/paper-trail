@@ -97,12 +97,39 @@ conditional); Mac keeps the owner-keyed `depot-macos-latest`/`macos-latest`.
 Feature branch on the mirror → Mac/Linux Depot + Windows github-hosted;
 main (de0ch, GitHub) → everything github-hosted.
 
+**Runner policy (owner, 2026-07-14):** DEFAULT = move as much as
+possible to DEPOT. If a job genuinely REQUIRES a GitHub-hosted runner
+and it's **Windows or Linux**, that's fine — use GitHub freely. If a mac
+job would need GitHub, consider ALTERNATIVES FIRST (Depot, or another
+approach): GitHub-hosted **macOS has a LOW CONCURRENCY LIMIT** and is the
+scarce resource, so don't casually fall back to GitHub mac. Corollary:
+the private de0ch-org mirror does NOT provision GitHub-hosted Windows
+(3-second runner-acquisition failure: empty runner_name, 0 steps — a
+billing/settings block, not transient). So a Windows-only leg that needs
+GitHub runs on ORIGIN (public de0ch, free GitHub Windows), not the
+mirror. Pattern for a platform-specific focused witness: gate per job by
+owner — `if: github.repository_owner == 'de0ch'` for a Windows leg that
+must use GitHub (runs on origin), `if: … == 'de0ch-org'` +
+`runs-on: depot-macos-latest` for the mac leg (Depot on the mirror); push
+the witness branch to BOTH remotes, each runs only its leg.
+
 **Codecov**: linked to de0ch/paper-trail (public). The private mirror
 de0ch-org isn't registered → upload returns "Repository not found". The
 step keeps `fail_ci_if_error: true` (owner's choice — do not weaken) but
 is GATED to the canonical repo: `if: … && github.repository ==
 'de0ch/paper-trail'`, so it runs on origin/main and is skipped on the
 mirror (Depot) rather than failing every mirror Windows job.
+
+**ALWAYS verify a Depot run actually landed on Depot** (owner rule,
+2026-07-14): agents frequently intend a Depot run but it ends up on
+GitHub-hosted anyway — wrong repo (origin instead of the mirror), a job
+whose `runs-on` isn't owner-keyed, a Windows leg (always GitHub), a
+`workflow_dispatch` that defaulted to origin, etc. After starting any
+run you meant for Depot, MONITOR the GitHub Actions run, confirm the
+runner label is a `depot-*` one (check the job's runner in the run
+view/logs), and if it landed on GitHub, fix it (push to `mirror`,
+dispatch on `de0ch-org/paper-trail-mirror`, add the owner-keyed
+`runs-on`) and re-run. Don't assume; check every time.
 
 **Browser-only blockers — escalate, don't hack** (owner rule): GitHub
 org settings, the Depot dashboard, Depot App permissions, billing can't

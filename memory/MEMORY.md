@@ -68,6 +68,9 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   what's on main unreleased.
 - [desktop-shell](desktop-shell.md) — Electron shell, IPC, menus,
   platform quirks (Tahoe traffic lights, koffi, NSIS), update seams.
+- [windows-icon-pipeline](windows-icon-pipeline.md) — .ico via png2icons
+  forWinExe (multi-res, fixes blank installer file icon); .pdf is
+  Edge-owned so use the direct ico-renders artifact, not the association.
 - [ui-conventions](ui-conventions.md) — inline-SVG icons, no-jank rows,
   shortcuts, open-routing, error-message precision.
 - [media-pipeline](media-pipeline.md) — media.yml recording,
