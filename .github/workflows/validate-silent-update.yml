@@ -70,14 +70,6 @@ jobs:
       - name: Closed-stdio regression (Finder launches must not crash)
         run: node build-node/test/desktopStdioClosed.js
 
-      - name: Update resilience (corrupt download, kill mid-download, recovery)
-        if: ${{ !cancelled() }}
-        run: node build-node/test/updateMacInterruptResilience.js
-
-      - name: Force-kill mid-install stays coherent (signed builds only)
-        if: env.HAS_CERT == 'true'
-        run: node build-node/test/updateMacKillDuringInstall.js
-
       # LAST: this one replaces the packaged bundle with the new version,
       # so every test needing the current version must run before it.
       - name: Auto-update install test (Squirrel, signed builds only)

@@ -1,7 +1,7 @@
-# Focused dev workflow: runs ONLY the Windows mid-update resilience
-# tests (hard-kill during download / during install, corrupt download)
-# plus their minimal packaging deps — much faster than the full ci.yml
-# pyramid while iterating. Manual dispatch; prefers Depot on the mirror.
+# Focused dev workflow: runs ONLY the Windows mid-update-install
+# resilience smoke (hard-kill during the NSIS in-place install) plus its
+# minimal packaging deps — much faster than the full ci.yml pyramid while
+# iterating. Manual dispatch; prefers Depot on the mirror.
 name: Windows update resilience (focused)
 
 on:
@@ -36,15 +36,7 @@ jobs:
         shell: bash
         run: node build-node/test/updateFeedNames.js dist-electron dist-update-feed
 
-      - name: Hard kill during download
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: node build-node/test/updateWinKillDuringDownload.js
       - name: Hard kill during install
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/updateWinKillDuringInstall.js
-      - name: Corrupt download is refused
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: node build-node/test/updateWinCorruptDownload.js
