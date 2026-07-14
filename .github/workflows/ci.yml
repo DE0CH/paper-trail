@@ -181,6 +181,11 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopCloseAsync.js
 
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopShutdownGuard.js
+
       - name: A failed auto-save keeps the session dirty (no silent loss)
         if: ${{ !cancelled() }}
         shell: bash
@@ -469,6 +474,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopCloseAsync.js
+
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopShutdownGuard.js
 
       - name: A failed auto-save keeps the session dirty (no silent loss)
         if: ${{ !cancelled() }}

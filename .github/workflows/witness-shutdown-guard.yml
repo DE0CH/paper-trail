@@ -1,0 +1,41 @@
+# Focused single-test witness for the OS-shutdown guard. The veto seam is
+# platform-specific (query-session-end on Windows, before-quit on macOS), so
+# both OSes witness it. Watch RED (guard reverted) and GREEN (guard applied)
+# at once via the two witness branches. Windows stays GitHub-hosted — Depot's
+# ephemeral Windows has no interactive desktop for the electron GUI test; the
+# Mac leg takes Depot on the private mirror. Branch-scoped push + dispatch: a
+# brand-new workflow can't be dispatched by name off the default branch, so
+# the witness refs trigger it by push.
+name: Witness shutdown guard
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [witness-shutdown-guard-red, witness-shutdown-guard-green]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/desktopShutdownGuard.js
+
+  mac:
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-macos-latest' || 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/desktopShutdownGuard.js
