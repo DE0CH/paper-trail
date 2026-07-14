@@ -91,18 +91,11 @@ async function run(): Promise<void> {
       }
       if (!c.session.path && c.confirmSession) c.applyConfirmedSession();
 
-      // Full chain: a dirty bound session closes without a prompt —
-      // beforeunload writes silently and does NOT preventDefault.
-      c.session.dirty = true;
-      const bu = new Event('beforeunload', { cancelable: true });
-      window.dispatchEvent(bu);
-
       return {
         getPathForFile: String(gp),
         docOpen: !!c.getSnapshot().docOpen,
         bound: c.session.path as string | null,
         saveBound: !!c.getSnapshot().saveBound,
-        closePrevented: bu.defaultPrevented,
       };
       /* eslint-enable @typescript-eslint/no-explicit-any */
     });
@@ -114,8 +107,6 @@ async function run(): Promise<void> {
     check('dropping a .ptl onto the open PDF binds the real silent-write path',
       out.bound === ptlPath, `session.path=${JSON.stringify(out.bound)}`);
     check('autosave is armed after the drop', out.saveBound === true, `saveBound=${out.saveBound}`);
-    check('the bound session closes without a save prompt (no preventDefault)',
-      out.closePrevented === false, `closePrevented=${out.closePrevented}`);
 
     // ---- PROBE (non-fatal, reported not asserted): does getPathForFile
     // resolve a File from a FileSystemFileHandle.getFile()? That is the

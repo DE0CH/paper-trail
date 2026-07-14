@@ -1,6 +1,8 @@
 // Regression: every way of opening a .ptl in the desktop shell must bind
-// the SAME silent-write target, so auto-save arms AND the window closes
-// with no "Do you want to save?" prompt — no matter how it was opened.
+// the SAME silent-write target (session.path), so auto-save arms no matter
+// how it was opened. (This once also asserted the close-flush contract; that
+// behavior moved to the async close-and-save flow — covered by
+// desktopCloseAsync / desktopCloseAutosave — so the close check was dropped.)
 //
 // The bug: opens that come through a browser handle (Load session…, the
 // file picker, drag-drop) bound session.handle but NOT session.path. The
@@ -47,13 +49,11 @@ async function run(): Promise<void> {
       const pt = (window as any).__pt;
       const c = pt.controller;
       const ptlText: string = pt.progressText(); // a valid .ptl for this doc
-      const closeSaves: string[] = [];
 
       // Stand in for the Electron preload bridge.
       (window as any).ptDesktop = {
         platform: 'darwin',
         getPathForFile: (f: File) => (/\.ptl$/i.test(f.name) ? ptlPath : ''),
-        saveSessionOnClose: (p: string) => { closeSaves.push(p); return true; },
         // The native "Load session…" dialog hands back the real path.
         openSessionDialog: async () => ({ name: 'reading.ptl', text: ptlText, path: ptlPath }),
       };
@@ -67,27 +67,17 @@ async function run(): Promise<void> {
         if (!c.session.path && c.confirmSession) c.applyConfirmedSession();
       };
 
-      // (1) Load session… — the NATIVE desktop open dialog binds the path.
+      // Load session… — the NATIVE desktop open dialog binds the path.
       await c.requestLoadSession();
       applyIfPending();
       const pickerBound: string | null = c.session.path;
 
-      // (2) The close-flush: a dirty, bound session must close SILENTLY —
-      // beforeunload writes and does NOT preventDefault (no native prompt).
-      c.session.dirty = true;
-      const ev = new Event('beforeunload', { cancelable: true });
-      window.dispatchEvent(ev);
-      const closePrevented = ev.defaultPrevented;
-
-      return { pickerBound, closePrevented, closeSaves };
+      return { pickerBound };
       /* eslint-enable @typescript-eslint/no-explicit-any */
     }, PTL_PATH);
 
     check('Load session… binds the desktop silent-write path',
       out.pickerBound === PTL_PATH, `session.path=${JSON.stringify(out.pickerBound)}`);
-    check('a dirty autosaved session closes silently (no preventDefault, no prompt)',
-      out.closePrevented === false && out.closeSaves.length >= 1,
-      `preventDefault=${out.closePrevented} closeWrites=${out.closeSaves.length}`);
   } finally {
     await browser.close();
   }
