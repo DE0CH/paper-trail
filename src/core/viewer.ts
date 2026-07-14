@@ -39,6 +39,11 @@ export interface PageRec {
   annotDiv: HTMLDivElement | null;
   annots: Annot[] | null;
   rendered: boolean;
+  // A rendered page whose canvas is currently a stretched smooth-zoom
+  // placeholder (wrong scale, awaiting a fresh render). `rendered` still
+  // means "a canvas is mounted in this shell" so destroyPage can reliably
+  // tear it down; `stale` says that canvas is not yet crisp.
+  stale: boolean;
   renderedScale: number;
   rendering: Promise<void> | null;
   renderFailed?: boolean;
@@ -124,6 +129,7 @@ export class Viewer {
         annotDiv: null,
         annots: null,
         rendered: false,
+        stale: false,
         renderedScale: 0,
         rendering: null,
         textReady: null,
@@ -209,6 +215,15 @@ export class Viewer {
     const st = this.container.scrollTop;
     const sl = this.container.scrollLeft;
     const pos = anchor ? null : this.currentPosition();
+    // No-anchor zoom (toolbar/keyboard): the horizontal offset is otherwise
+    // left to CSS `margin: 0 auto`, which centers the page only while it is
+    // narrower than the viewport. Crossing the fit-width boundary would then
+    // snap it hard to the left. Capture the viewport-center point as a
+    // fraction of the scrollable width so it can be restored across the
+    // boundary (centered when narrower, same center-point when wider).
+    const cw = this.container.clientWidth;
+    const swBefore = this.container.scrollWidth;
+    const centerFrac = swBefore > 0 ? (sl + cw / 2) / swBefore : 0.5;
 
     // Anchored zoom (pinch commit): capture the exact page-relative point
     // under the cursor BEFORE relayout, so it can be restored exactly after
@@ -252,6 +267,12 @@ export class Viewer {
         el.offsetLeft + anchorRef.fx * el.offsetWidth - anchorRef.ax;
     } else if (pos) {
       this.scrollTo(pos);
+      // Restore the horizontal center-point after relayout (scrollTo only
+      // touches scrollTop). Clamps to 0 when the page is narrower than the
+      // viewport, so `margin: auto` keeps it centered.
+      const swAfter = this.container.scrollWidth;
+      const maxSl = Math.max(0, swAfter - cw);
+      this.container.scrollLeft = Math.min(Math.max(centerFrac * swAfter - cw / 2, 0), maxSl);
     }
     this.updateVisible();
     this.cb.onScaleChange?.(scale);
@@ -361,7 +382,7 @@ export class Viewer {
   }
 
   private ensureRendered(p: PageRec): Promise<void> | null {
-    if ((p.rendered && p.renderedScale === this.scale) || p.rendering) return p.rendering;
+    if ((p.rendered && !p.stale && p.renderedScale === this.scale) || p.rendering) return p.rendering;
     p.renderFailed = false;
     p.rendering = this.render(p)
       .catch((e) => {
@@ -372,8 +393,9 @@ export class Viewer {
         p.rendering = null;
         // A scale/document change can invalidate a render mid-flight (the
         // result is discarded by the guard). Nothing else re-triggers
-        // rendering in that case, so check again.
-        if (!p.rendered && !p.renderFailed) {
+        // rendering in that case, so check again — including a page left
+        // stale (canvas still a placeholder) or rendered at the wrong scale.
+        if (!p.renderFailed && (!p.rendered || p.stale || p.renderedScale !== this.scale)) {
           queueMicrotask(() => this.updateVisible());
         }
       });
@@ -420,6 +442,7 @@ export class Viewer {
     p.textLayerDiv = tld;
     p.annotDiv = ald;
     p.rendered = true;
+    p.stale = false;
     p.renderedScale = scale;
 
     p.textReady = (async () => {
@@ -495,6 +518,7 @@ export class Viewer {
     if (!p.rendered) return;
     p.el.replaceChildren();
     p.rendered = false;
+    p.stale = false;
     p.renderedScale = 0;
     p.canvas = null;
     p.textLayerDiv = null;
@@ -503,13 +527,17 @@ export class Viewer {
   }
 
   /**
-   * Invalidate a page for re-rendering but keep its old canvas stretched to
-   * the new size as a placeholder (temporarily blurry instead of blank), so
-   * zooming never flashes white. The fresh render replaces it atomically.
+   * Part of the smooth-zoom feature: invalidate a page for re-rendering but
+   * keep its old canvas stretched to the new size as a placeholder
+   * (temporarily blurry instead of blank), so a zoom stays smooth instead of
+   * flashing white. The fresh render replaces it atomically.
    */
   private markStale(p: PageRec): void {
-    if (!p.rendered) return;
-    p.rendered = false;
+    if (!p.canvas) return;
+    // Keep `rendered` true (a canvas is still mounted) so destroyPage can
+    // tear this shell down if the reflow pushes it out of range; `stale`
+    // marks the canvas as a placeholder awaiting a fresh, crisp render.
+    p.stale = true;
     p.renderedScale = 0;
     p.textLayerDiv?.remove(); // absolute px positions don't rescale
     p.annotDiv?.remove();
