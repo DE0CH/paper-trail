@@ -251,8 +251,10 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
       if (explicitSet && title !== 'Paper Trail') reveal();
     });
     // Patient enough that a slow cold start (pdf.js on a weak machine)
-    // does not fall through to an empty reveal.
-    setTimeout(reveal, 4000);
+    // does not fall through to an empty reveal. Opt-out lets the
+    // session-reveal test isolate the title-driven reveal, so a slow CI
+    // runner's timer can't fire first and hide the real behavior.
+    if (!process.env.PT_NO_SAFETY_REVEAL) setTimeout(reveal, 4000);
   }
 
   win.on('close', () => saveBounds(win));

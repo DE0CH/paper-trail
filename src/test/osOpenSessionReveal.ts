@@ -16,6 +16,13 @@ const nodePath = require('node:path') as typeof import('node:path');
 const userData = nodeFs.mkdtempSync(
   nodePath.join((require('node:os') as typeof import('node:os')).tmpdir(), 'pt-session-reveal-'));
 process.env.PT_USERDATA = userData;
+// Disable the 4s safety-net reveal so ONLY the title-driven reveal can show
+// the window. Otherwise a slow CI runner's timer fires first (title still the
+// bare app name) and this deterministic witness reads a stale title. With the
+// timer off, a working title-reveal shows the session title; the bug (no
+// title-reveal) never reveals and the wait below times out — deterministic
+// either way, no wall-clock threshold.
+process.env.PT_NO_SAFETY_REVEAL = '1';
 
 import * as path from 'node:path';
 import { app, BrowserWindow } from 'electron';

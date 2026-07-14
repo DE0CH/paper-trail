@@ -57,10 +57,12 @@ async function run(): Promise<void> {
     }, term);
 
     await page.waitForSelector('#searchInput', { timeout: 5000 });
-    // let the mount effect + the search settle
+    // Wait for the search to actually SETTLE with matches — not the transient
+    // "0 / 0" the count shows before the text layer has been searched (that
+    // interim state includes '/', so waiting on '/' raced and read 0 matches).
     await page.waitForFunction(
-      () => (document.getElementById('searchCount')?.textContent ?? '').includes('/'),
-      { timeout: 5000 },
+      () => /[1-9]/.test(document.getElementById('searchCount')?.textContent ?? ''),
+      { timeout: 8000 },
     ).catch(() => { /* assertion below reports the real state */ });
 
     const state = await page.evaluate(() => ({
