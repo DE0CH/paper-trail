@@ -1269,7 +1269,10 @@ export class Controller {
           void this.replaceWithFile(f);
           return;
         }
-        void this.openFile(f); // openFile applies any pending session
+        // Bind the desktop path just like pickFile/openDropped, so a .ptl
+        // opened through the <input type=file> fallback auto-saves + closes
+        // without a prompt (a PDF has no path and stays unbound, as before).
+        void this.openFile(f, null, this.desktopPathFor(f));
       });
     }
     this.fileInput.value = '';

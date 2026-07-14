@@ -116,6 +116,60 @@ async function run(): Promise<void> {
     check('autosave is armed after the drop', out.saveBound === true, `saveBound=${out.saveBound}`);
     check('the bound session closes without a save prompt (no preventDefault)',
       out.closePrevented === false, `closePrevented=${out.closePrevented}`);
+
+    // ---- PROBE (non-fatal, reported not asserted): does getPathForFile
+    // resolve a File from a FileSystemFileHandle.getFile()? That is the
+    // "picker handle" case openRecent uses (entry.handle.getFile()) — the one
+    // the binding fork flagged as unverified. We obtain a real handle by
+    // pointing the native open dialog at the real .ptl and calling
+    // showOpenFilePicker (Electron's FSA routes through it). Timeout-guarded
+    // so a non-routing / unsupported picker can't hang the run.
+    await eApp.evaluate(({ dialog }, p) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [p] })) as typeof dialog.showOpenDialog;
+    }, ptlPath);
+    const handleProbe = await page.evaluate(async (want) => {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      try {
+        const picker = (window as any).showOpenFilePicker;
+        if (!picker) return '(no showOpenFilePicker)';
+        const picked: any = await Promise.race([
+          picker(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
+        ]);
+        const handle = picked && picked[0];
+        if (!handle) return '(no handle returned)';
+        const f = await handle.getFile();
+        const p = (window as any).ptDesktop?.getPathForFile?.(f);
+        return { result: p ? String(p) : '(empty string)', matchesReal: p === want };
+      } catch (e: any) {
+        return '(could not obtain a picker handle: ' + (e?.message ?? String(e)) + ')';
+      }
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+    }, ptlPath);
+    console.log(`\nPROBE  getPathForFile on a FileSystemFileHandle.getFile() File (openRecent's case) = ${JSON.stringify(handleProbe)}`);
+
+    // ---- pickViaInput: opening a .ptl through the <input type=file> fallback
+    // must ALSO bind (the same gap — it omitted the path pickFile passes).
+    // Drive the real fallback via Playwright's filechooser (no native dialog).
+    await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => !!(window as any).__pt?.controller?.getSnapshot().docOpen,
+      undefined, { timeout: 20_000 });
+    page.once('filechooser', (fc) => { void fc.setFiles(ptlPath); });
+    const pickBound = await page.evaluate(async () => {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const c = (window as any).__pt.controller;
+      c.pickViaInput(); // creates the <input> and clicks it -> filechooser fires
+      for (let i = 0; i < 200 && !c.session.path && !c.confirmSession; i += 1) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      if (!c.session.path && c.confirmSession) c.applyConfirmedSession();
+      return c.session.path as string | null;
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+    });
+    check('opening a .ptl via the <input type=file> fallback binds the path',
+      pickBound === ptlPath, `session.path=${JSON.stringify(pickBound)}`);
   } finally {
     await eApp.close();
   }
