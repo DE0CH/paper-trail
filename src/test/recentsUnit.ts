@@ -24,12 +24,10 @@ function entry(
   ts: number,
 ): RecentEntry {
   return {
-    pdfHandle: pdf,
-    pdfPath: null,
-    sessionFileHandle: session,
-    sessionPath: null,
+    pdf,
+    session,
     pdfName: pdf.name,
-    sessionFileName: session ? session.name : '',
+    sessionFileName: session ? session.name : null,
     timestamp: ts,
   };
 }
@@ -42,12 +40,10 @@ function pentry(
 ): RecentEntry {
   const base = (p: string) => p.split(/[\\/]/).pop() ?? p;
   return {
-    pdfHandle: null,
-    pdfPath,
-    sessionFileHandle: null,
-    sessionPath,
+    pdf: pdfPath,
+    session: sessionPath,
     pdfName: base(pdfPath),
-    sessionFileName: sessionPath ? base(sessionPath) : '',
+    sessionFileName: sessionPath ? base(sessionPath) : null,
     timestamp: ts,
   };
 }
@@ -64,7 +60,7 @@ test('updateRecent: exact pair match refreshes timestamp + names, no new row', a
   const pdf = fh('a.pdf'); const s = fh('a.ptl');
   const list = [entry(pdf, s, 100)];
   await updateRecent(list, {
-    pdfHandle: pdf, pdfPath: null, sessionFileHandle: s, sessionPath: null,
+    pdf, session: s,
     pdfName: 'renamed.pdf', sessionFileName: 'renamed.ptl', timestamp: 200,
   });
   assert.equal(list.length, 1);
@@ -78,7 +74,7 @@ test('updateRecent: first save upgrades the (pdf, null) row in place', async () 
   const list = [entry(pdf, null, 100)];
   await updateRecent(list, entry(pdf, s, 200));
   assert.equal(list.length, 1, 'no duplicate row for the same pdf');
-  assert.ok(list[0].sessionFileHandle, 'null session slot was upgraded');
+  assert.ok(list[0].session, 'null session slot was upgraded');
   assert.equal(list[0].sessionFileName, 'a.ptl');
   assert.equal(list[0].timestamp, 200);
 });
@@ -109,7 +105,7 @@ test('updateRecent: path-based first save upgrades the (pdfPath, null) row', asy
   const list = [pentry('/docs/a.pdf', null, 100)];
   await updateRecent(list, pentry('/docs/a.pdf', '/docs/a.ptl', 200));
   assert.equal(list.length, 1, 'no duplicate row for the same pdf path');
-  assert.equal(list[0].sessionPath, '/docs/a.ptl', 'null session slot upgraded by path');
+  assert.equal(list[0].session, '/docs/a.ptl', 'null session slot upgraded by path');
   assert.equal(list[0].sessionFileName, 'a.ptl');
   assert.equal(list[0].timestamp, 200);
 });
@@ -153,11 +149,11 @@ test('buildDisplayList: distinct pdf names show just the pdf name', () => {
 
 test('buildDisplayList: a shared pdf name appends the session name to both', () => {
   const e1: RecentEntry = {
-    pdfHandle: fh('paper.pdf'), pdfPath: null, sessionFileHandle: fh('draft.ptl'), sessionPath: null,
+    pdf: fh('paper.pdf'), session: fh('draft.ptl'),
     pdfName: 'paper.pdf', sessionFileName: 'draft.ptl', timestamp: 100,
   };
   const e2: RecentEntry = {
-    pdfHandle: fh('paper.pdf'), pdfPath: null, sessionFileHandle: fh('final.ptl'), sessionPath: null,
+    pdf: fh('paper.pdf'), session: fh('final.ptl'),
     pdfName: 'paper.pdf', sessionFileName: 'final.ptl', timestamp: 200,
   };
   const disp = buildDisplayList([e1, e2]);
