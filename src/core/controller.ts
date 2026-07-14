@@ -352,11 +352,10 @@ export class Controller {
    * on-disk path (opened via Open Recent) also closes silently — the write the
    * old synchronous close-flush couldn't do now runs normally.
    *
-   * TODO(shutdown): a time-boxed OS shutdown (Windows session-end / mac
-   * before-quit) will NOT wait for this async round-trip and force-kills after
-   * a timeout, losing the change. That case still needs a SYNCHRONOUS fast-path
-   * — the dormant saveSessionOnClose / pt-save-session-on-close sync write is
-   * kept for exactly this. Deferred for now.
+   * A time-boxed OS shutdown/logout can't wait for this async round-trip, so
+   * that case is guarded in the main process instead (before-quit on macOS,
+   * the vetoable query-session-end on Windows): it withholds the shutdown and
+   * drives this same close flow per window. See src/desktop/main.ts.
    */
   private async closeAndSave(): Promise<void> {
     // Try to save with no prompt (a path is always silent; a desktop handle

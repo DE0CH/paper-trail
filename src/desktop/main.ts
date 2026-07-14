@@ -22,6 +22,7 @@ import contextMenu from 'electron-context-menu';
 import { autoUpdater, CancellationToken } from 'electron-updater';
 import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
+import { blockShutdown, unblockShutdown } from './winShutdown';
 import { cancelUpdateOnReopen } from './updateGuard';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
@@ -267,6 +268,19 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
 
   win.on('close', () => saveBounds(win));
   win.on('closed', () => editedWindows.delete(win.id));
+
+  // Windows OS shutdown/logout: the vetoable query-session-end. A window with
+  // an unsaved session returns FALSE to WM_QUERYENDSESSION (preventDefault),
+  // withholding the shutdown; the reason string was already registered via
+  // blockShutdown() when the session went dirty. A clean window allows it —
+  // any one dirty window's veto is enough to hold the whole shutdown.
+  if (!isMac) {
+    win.on('query-session-end', (event) => {
+      if (!editedWindows.has(win.id)) return;
+      event.preventDefault();
+      void promptSaveAfterShutdownVeto();
+    });
+  }
 
   void win.loadURL(`${SCHEME}://app/index.html`);
   return win;
@@ -588,22 +602,22 @@ function setupAutoUpdates(): void {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
-/**
- * Restart into the new version. Document windows close one by one
- * first, so the standard unsaved-session prompt protects every window;
- * if the user keeps any window open (Save… or Cancel), the restart is
- * abandoned and the update window returns to its ready state — the
- * update still installs on the next normal quit.
- */
+// Windows whose reading session has unsaved changes (mirrored from the
+// renderer via pt-document-edited). Drives the unsaved-first close order and
+// tells the OS-shutdown guards whether anything is at risk.
 const editedWindows = new Set<number>();
 
-async function restartToUpdate(): Promise<void> {
+/**
+ * Close every document window one by one, unsaved sessions FIRST so each
+ * one's save prompt (the renderer's normal close flow) is answered before any
+ * clean window goes — without the ordering a Cancel could leave a half-closed
+ * workspace. Returns true only if every window actually closed; false the
+ * moment one stays open (the user chose Save… or Cancel), leaving the rest
+ * untouched. Shared by the update restart and the OS-shutdown guards.
+ */
+async function promptCloseAllWindows(): Promise<boolean> {
   const all = [...BrowserWindow.getAllWindows()]
     .filter((w) => !w.isDestroyed() && w !== updateWin);
-  // Windows with unsaved sessions hold the veto, so they are asked
-  // FIRST; clean windows only close once every unsaved session has
-  // agreed. (getAllWindows has no useful order — without this, a
-  // Cancel could leave a half-closed workspace.)
   const ordered = [
     ...all.filter((w) => editedWindows.has(w.id)),
     ...all.filter((w) => !editedWindows.has(w.id)),
@@ -617,16 +631,65 @@ async function restartToUpdate(): Promise<void> {
       setTimeout(() => resolve(false), 1500);
     });
     w.close();
-    if (!(await closed)) {
-      // A window stayed open (Save or Cancel): the restart is
-      // abandoned; the update window returns to its ready state.
-      if (downloadedVersion) {
-        setUpdateUi({ state: 'downloaded', version: downloadedVersion });
-      }
-      return;
+    if (!(await closed)) return false;
+  }
+  return true;
+}
+
+/**
+ * Restart into the new version. Document windows close one by one first, so
+ * the standard unsaved-session prompt protects every window; if the user keeps
+ * any window open (Save… or Cancel), the restart is abandoned and the update
+ * window returns to its ready state — the update still installs on the next
+ * normal quit.
+ */
+async function restartToUpdate(): Promise<void> {
+  if (!(await promptCloseAllWindows())) {
+    // A window stayed open (Save or Cancel): the restart is abandoned;
+    // the update window returns to its ready state.
+    if (downloadedVersion) {
+      setUpdateUi({ state: 'downloaded', version: downloadedVersion });
     }
+    return;
   }
   autoUpdater.quitAndInstall();
+}
+
+// ---- OS shutdown / logout protection --------------------------------------
+// A dirty reading session must survive an OS shutdown/logout, not just a
+// window close (the renderer's async close-save can't finish inside a
+// time-boxed shutdown). macOS routes shutdown/logout — and Cmd+Q — through
+// before-quit, where preventDefault() returns NSTerminateCancel and cancels
+// the whole action. Windows fires the vetoable query-session-end per window,
+// where preventDefault() returns FALSE to WM_QUERYENDSESSION and withholds the
+// shutdown while the OS shows the reason string registered via blockShutdown().
+// Both then drive the SAME per-window save dialog as a normal close.
+
+const SHUTDOWN_BLOCK_REASON = 'Paper Trail has an unsaved reading session.';
+
+// Set while our own app.quit() below re-enters before-quit, so the second pass
+// is allowed straight through.
+let quitApproved = false;
+// One query-session-end fires per window; the save flow must run only once.
+let handlingShutdownVeto = false;
+
+/**
+ * Shutdown was vetoed (Windows). Bring the unsaved window(s) forward so the
+ * save prompt is in view, then run the normal per-window close/save flow.
+ * Windows that close release their block automatically; any left dirty keep
+ * theirs, so a re-attempted shutdown is blocked again.
+ */
+async function promptSaveAfterShutdownVeto(): Promise<void> {
+  if (handlingShutdownVeto) return;
+  handlingShutdownVeto = true;
+  try {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (editedWindows.has(w.id) && !w.isDestroyed()) { w.show(); w.focus(); }
+    }
+    await promptCloseAllWindows();
+  } finally {
+    handlingShutdownVeto = false;
+  }
 }
 
 async function checkForUpdatesInteractive(): Promise<void> {
@@ -949,9 +1012,18 @@ ipcMain.on('pt-document-edited', (event, edited: boolean) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
   win.setDocumentEdited(!!edited);
-  // restartToUpdate asks windows with unsaved sessions first.
-  if (edited) editedWindows.add(win.id);
-  else editedWindows.delete(win.id);
+  // restartToUpdate and the OS-shutdown guards ask windows with unsaved
+  // sessions first.
+  if (edited) {
+    editedWindows.add(win.id);
+    // Windows: register the reason NOW (no-op elsewhere) so it is already in
+    // place when the OS composes its shutdown screen; the query-session-end
+    // veto is what actually withholds the shutdown.
+    blockShutdown(win, SHUTDOWN_BLOCK_REASON);
+  } else {
+    editedWindows.delete(win.id);
+    unblockShutdown(win);
+  }
 });
 
 // A PDF picked in an occupied window opens in a window of its own.
@@ -1083,6 +1155,19 @@ void app.whenReady().then(() => {
       probe();
     });
   }
+});
+
+// macOS: OS shutdown/logout AND Cmd+Q both arrive here. Hold the quit while
+// any session is unsaved and drive the normal save dialog; only quit once
+// every window has agreed. (Windows uses per-window query-session-end.)
+app.on('before-quit', (event) => {
+  if (!isMac || quitApproved) return;
+  if (editedWindows.size === 0) return; // nothing unsaved → quit normally
+  event.preventDefault();               // NSTerminateCancel until the user decides
+  void (async () => {
+    if (await promptCloseAllWindows()) { quitApproved = true; app.quit(); }
+    // else a window stayed open (Save…/Cancel) → quit abandoned
+  })();
 });
 
 app.on('activate', () => {
