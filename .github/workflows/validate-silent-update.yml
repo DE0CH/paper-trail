@@ -1,0 +1,77 @@
+# Focused validation for the updater-simplification branch. After the
+# win32 flash-close guard and the mac Software Update window/interactive
+# flow were removed, this proves the branch still builds AND that the
+# SILENT auto-update path (autoDownload + install-on-quit, driven by
+# PT_UPDATE_TEST/PT_UPDATE_URL) still works end to end.
+#
+# Runs on the de0ch-org mirror's Depot mac runner: the mirror's
+# GitHub-hosted minutes are unavailable, and Depot can't run the Windows
+# GUI silent-update suite (no interactive desktop) — so the Windows
+# silent-update RUNTIME tests must be validated on the public de0ch
+# origin. On mac the kept silent-update tests run for real when the
+# signing cert is present (Squirrel.Mac refuses unsigned updates); they
+# mirror the ci.yml mac-update job, minus the deleted window tests.
+name: Validate silent update (focused)
+
+on:
+  push: {}
+  workflow_dispatch: {}
+
+jobs:
+  mac-silent-update:
+    if: ${{ github.repository_owner == 'de0ch-org' }}
+    runs-on: depot-macos-latest
+    env:
+      HAS_CERT: ${{ secrets.MAC_CERT_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - name: Build (tsc renderer + vite bundle + tsc node/desktop)
+        run: npm run build
+
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Package the current version (zip only)
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          if [ "$HAS_CERT" != "true" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none
+
+      - name: Build the next version into the update feed
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          if [ "$HAS_CERT" != "true" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npm version patch --no-git-tag-version
+          npx electron-builder --mac zip --publish never -c.mac.notarize=false -c.mac.timestamp=none -c.directories.output=dist-update-feed
+          git checkout -- package.json package-lock.json
+
+      - name: Update-feed names match the packaged artifacts
+        run: node build-node/test/updateFeedNames.js dist-electron dist-update-feed
+
+      - name: Closed-stdio regression (Finder launches must not crash)
+        run: node build-node/test/desktopStdioClosed.js
+
+      # LAST: this one replaces the packaged bundle with the new version,
+      # so every test needing the current version must run before it.
+      - name: Auto-update install test (Squirrel, signed builds only)
+        if: env.HAS_CERT == 'true'
+        run: node build-node/test/updateMacInstall.js

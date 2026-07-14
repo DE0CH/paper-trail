@@ -19,11 +19,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
-import { autoUpdater, CancellationToken } from 'electron-updater';
+import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
 import { blockShutdown, unblockShutdown } from './winShutdown';
-import { cancelUpdateOnReopen } from './updateGuard';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
 // other end is already closed; a console write (electron-updater logs
@@ -33,16 +32,6 @@ process.stdout.on('error', () => { /* swallow EPIPE */ });
 process.stderr.on('error', () => { /* swallow EPIPE */ });
 
 const SMOKE = process.argv.includes('--smoke');
-
-// A reopen while a quit-install is replacing our files must not run from
-// the half-replaced install (it flashes closed and looks corrupt). Owner
-// decision: such a reopen CANCELS the update and brings up the OLD
-// version silently — stop the installer before it replaces our files,
-// then fall through to a normal start (which opens the file args). The
-// downloaded update stays cached and re-applies on the next clean quit.
-if (process.platform === 'win32' && !SMOKE) {
-  cancelUpdateOnReopen(process.execPath);
-}
 
 // build-node/desktop -> project root
 const WEB_ROOT = path.resolve(__dirname, '..', '..', 'dist-web');
@@ -267,7 +256,6 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
   }
 
   win.on('close', () => saveBounds(win));
-  win.on('closed', () => editedWindows.delete(win.id));
 
   // Windows OS shutdown/logout: the vetoable query-session-end. A window with
   // an unsaved session returns FALSE to WM_QUERYENDSESSION (preventDefault),
@@ -341,7 +329,7 @@ function openPath(filePath: string, target?: BrowserWindow): void {
     return;
   }
   const empty = (w: BrowserWindow | null): boolean => {
-    if (!w || w.isDestroyed() || w === updateWin) return false;
+    if (!w || w.isDestroyed()) return false;
     const t = w.getTitle();
     return w.webContents.isLoading() || t === 'Paper Trail' || t === '';
   };
@@ -409,135 +397,13 @@ function loadSessionDialog(): void {
 
 // ---- automatic updates (GitHub Releases feed) ----
 
-let downloadedVersion: string | null = null;
-
-// ---- the Software Update window ----
-// The standard fixed-size update window: checking → available →
-// downloading (progress bar) → "Restart to Update", driven entirely by
-// the main process. The window is a passive view: it renders the last
-// pushed state and sends back button actions.
-
-type UpdateUiState =
-  | { state: 'checking' }
-  | { state: 'none' }
-  | { state: 'available'; version: string }
-  | { state: 'downloading'; version: string; percent: number }
-  | { state: 'downloaded'; version: string }
-  | { state: 'error'; detail: string };
-
-let updateWin: BrowserWindow | null = null;
-let updateUi: UpdateUiState = { state: 'checking' };
-let availableVersion: string | null = null;
-// The token for the download currently in flight (background or the one
-// the user asked for), so a Cancel can actually STOP it rather than just
-// hide the window. Cleared when the download finishes or is cancelled.
-let currentDownload: CancellationToken | null = null;
-
-function setUpdateUi(s: UpdateUiState): void {
-  updateUi = s;
-  if (updateWin && !updateWin.isDestroyed()) {
-    updateWin.webContents.send('pt-update-state',
-      { ...s, appVersion: app.getVersion() });
-  }
-}
-
-function openUpdateWindow(): void {
-  if (updateWin && !updateWin.isDestroyed()) {
-    updateWin.focus();
-    return;
-  }
-  updateWin = new BrowserWindow({
-    width: 540,
-    height: 190,
-    useContentSize: true,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    title: 'Software Update',
-    // A light system window (the Sparkle-style updater look), not the
-    // app's dark chrome; the page adapts to the system appearance.
-    backgroundColor: '#ececec',
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'updatePreload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  updateWin.once('ready-to-show', () => {
-    if (!updateWin || updateWin.isDestroyed()) return;
-    if (process.env.PT_SHOT) updateWin.showInactive();
-    else updateWin.show();
-  });
-  updateWin.on('closed', () => { updateWin = null; });
-  void updateWin.loadURL(`${SCHEME}://app/update.html`);
-}
-
-ipcMain.on('pt-update-ready', (event) => {
-  if (updateWin && !updateWin.isDestroyed()
-    && event.sender === updateWin.webContents) {
-    event.sender.send('pt-update-state',
-      { ...updateUi, appVersion: app.getVersion() });
-  }
-});
-
-ipcMain.on('pt-update-action', (event, action: string) => {
-  if (!updateWin || updateWin.isDestroyed()
-    || event.sender !== updateWin.webContents) return;
-  // 'later' and 'cancel' are both a plain DISMISS: close the window and
-  // leave the background download running (autoDownload). Closing the
-  // window never stops the transfer — the download completes in the
-  // background and the next check shows "Ready to update".
-  if (action === 'later' || action === 'cancel') updateWin.close();
-  else if (action === 'download') startInteractiveDownload();
-  else if (action === 'restart') void restartToUpdate();
-});
-
-function startInteractiveDownload(): void {
-  const version = availableVersion;
-  if (!version) return;
-  if (downloadedVersion === version) {
-    setUpdateUi({ state: 'downloaded', version });
-    return;
-  }
-  setUpdateUi({ state: 'downloading', version, percent: 0 });
-  // autoDownload is on, so the check that found this update already has
-  // the transfer in flight and currentDownload holds ITS token — reuse
-  // it (Cancel must cancel that exact download, not a token from a fresh
-  // checkForUpdates, which does not control the one already running).
-  // Only (re)start a check when nothing is downloading, e.g. after a
-  // Cancel. We avoid an explicit downloadUpdate() on purpose: it makes
-  // the mac updater verify the running app's code signature, which an
-  // unsigned dev Electron on Intel lacks (real signed apps are fine, but
-  // it broke the dev update-window tests on macos-15-intel).
-  if (!currentDownload) {
-    autoUpdater.checkForUpdates()
-      .then(rememberDownloadToken)
-      .catch(() => { /* the event reports it */ });
-  }
-}
-
-// The cancellation token belongs to the check that STARTED the download;
-// a later check returns a token that does not control it. Keep the first
-// one until the download finishes or is cancelled.
-function rememberDownloadToken(r: { cancellationToken?: CancellationToken } | null): void {
-  if (r?.cancellationToken && !currentDownload) currentDownload = r.cancellationToken;
-}
-
 /**
- * Updates download in the background and install when the app quits.
- * A toast in the renderer announces a downloaded update; the macOS menu
- * also offers an explicit check with a full download-and-restart flow.
- * Dev/test builds never update; the update tests point the updater at
- * a local feed with PT_UPDATE_URL and observe it via PT_UPDATE_TEST.
+ * Downloads updates in the background and installs them on the next
+ * quit — a fully silent path with no UI. Dev/test builds never update;
+ * the update tests point the updater at a local feed with PT_UPDATE_URL
+ * and observe it via PT_UPDATE_TEST.
  */
 function setupAutoUpdates(): void {
-  // autoDownload on: a found update downloads in the background and
-  // installs on the next quit (the silent path). The check result hands
-  // back a cancellation token so the window's Cancel can stop the very
-  // same transfer, without the explicit downloadUpdate() that trips the
-  // mac updater's code-signature check on unsigned dev builds.
   autoUpdater.autoDownload = true;
   if (process.env.PT_UPDATE_URL) {
     autoUpdater.forceDevUpdateConfig = true;
@@ -546,28 +412,7 @@ function setupAutoUpdates(): void {
     return;
   }
   autoUpdater.autoInstallOnAppQuit = true;
-  // Background downloads are completely silent: no Dock/taskbar
-  // progress, no toast nagging to restart — the update installs on the
-  // next normal quit and the next start announces it (see
-  // announceUpdateOnFirstRun). Only a download the user asked for in
-  // the update window shows progress on the app icon.
-  autoUpdater.on('download-progress', (p) => {
-    if (updateUi.state === 'downloading') {
-      for (const w of BrowserWindow.getAllWindows()) {
-        if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(p.percent / 100);
-      }
-      setUpdateUi({ ...updateUi, percent: p.percent });
-    }
-  });
   autoUpdater.on('update-downloaded', (info) => {
-    downloadedVersion = info.version;
-    currentDownload = null;
-    for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(-1);
-    }
-    if (updateUi.state === 'downloading') {
-      setUpdateUi({ state: 'downloaded', version: info.version });
-    }
     if (process.env.PT_UPDATE_TEST === 'download') {
       console.log(`PT_UPDATE_DOWNLOADED ${info.version}`);
       app.exit(0);
@@ -576,27 +421,15 @@ function setupAutoUpdates(): void {
     }
   });
   autoUpdater.on('error', (e) => {
-    // A cancellation error (rare now the UI never cancels — the window's
-    // Cancel is a dismiss and the transfer keeps running) is not a failure
-    // to surface: just clear the token and stay quiet.
-    if (/cancell?ed/i.test(String(e))) { currentDownload = null; dbg('download cancelled'); return; }
+    if (/cancell?ed/i.test(String(e))) { dbg('download cancelled'); return; }
     dbg('auto-update error', e);
-    // Only states the window is actively waiting on turn into an error
-    // view; a failed background re-check never hijacks a settled one.
-    if (updateUi.state === 'checking' || updateUi.state === 'downloading') {
-      setUpdateUi({ state: 'error', detail: String(e) });
-    }
     if (process.env.PT_UPDATE_TEST) {
       console.error('PT_UPDATE_ERROR', String(e));
       app.exit(1);
     }
   });
   const check = () => {
-    // autoDownload starts the background transfer; keep its token so a
-    // Cancel can stop even a download that began before the window opened.
-    autoUpdater.checkForUpdates()
-      .then(rememberDownloadToken)
-      .catch((e) => dbg('update check failed', e));
+    autoUpdater.checkForUpdates().catch((e) => dbg('update check failed', e));
   };
   check();
   setInterval(check, 6 * 60 * 60 * 1000);
@@ -613,11 +446,11 @@ const editedWindows = new Set<number>();
  * clean window goes — without the ordering a Cancel could leave a half-closed
  * workspace. Returns true only if every window actually closed; false the
  * moment one stays open (the user chose Save… or Cancel), leaving the rest
- * untouched. Shared by the update restart and the OS-shutdown guards.
+ * untouched. Shared by the OS-shutdown guards.
  */
 async function promptCloseAllWindows(): Promise<boolean> {
   const all = [...BrowserWindow.getAllWindows()]
-    .filter((w) => !w.isDestroyed() && w !== updateWin);
+    .filter((w) => !w.isDestroyed());
   const ordered = [
     ...all.filter((w) => editedWindows.has(w.id)),
     ...all.filter((w) => !editedWindows.has(w.id)),
@@ -634,25 +467,6 @@ async function promptCloseAllWindows(): Promise<boolean> {
     if (!(await closed)) return false;
   }
   return true;
-}
-
-/**
- * Restart into the new version. Document windows close one by one first, so
- * the standard unsaved-session prompt protects every window; if the user keeps
- * any window open (Save… or Cancel), the restart is abandoned and the update
- * window returns to its ready state — the update still installs on the next
- * normal quit.
- */
-async function restartToUpdate(): Promise<void> {
-  if (!(await promptCloseAllWindows())) {
-    // A window stayed open (Save or Cancel): the restart is abandoned;
-    // the update window returns to its ready state.
-    if (downloadedVersion) {
-      setUpdateUi({ state: 'downloaded', version: downloadedVersion });
-    }
-    return;
-  }
-  autoUpdater.quitAndInstall();
 }
 
 // ---- OS shutdown / logout protection --------------------------------------
@@ -692,40 +506,6 @@ async function promptSaveAfterShutdownVeto(): Promise<void> {
   }
 }
 
-async function checkForUpdatesInteractive(): Promise<void> {
-  if (!app.isPackaged && !process.env.PT_UPDATE_URL) {
-    await dialog.showMessageBox({ message: 'Updates apply to the installed app only.' });
-    return;
-  }
-  openUpdateWindow();
-  const before = updateUi;
-  setUpdateUi({ state: 'checking' });
-  try {
-    const r = await autoUpdater.checkForUpdates();
-    // autoDownload started the transfer here; hold its token so Cancel
-    // can stop it even before the user pressed Update Now.
-    rememberDownloadToken(r);
-    const latest = r?.updateInfo.version;
-    if (!latest || latest === app.getVersion()) {
-      setUpdateUi({ state: 'none' });
-      return;
-    }
-    availableVersion = latest;
-    if (downloadedVersion === latest) {
-      setUpdateUi({ state: 'downloaded', version: latest });
-    } else if (before.state === 'downloading' && before.version === latest) {
-      // Checking again mid-download (the window was closed and
-      // reopened) resumes the progress view instead of re-offering
-      // the update; the next progress event refreshes the percent.
-      setUpdateUi(before);
-    } else {
-      setUpdateUi({ state: 'available', version: latest });
-    }
-  } catch (e) {
-    setUpdateUi({ state: 'error', detail: String(e) });
-  }
-}
-
 // ---- menu ----
 
 function buildMenu(): void {
@@ -734,11 +514,6 @@ function buildMenu(): void {
       label: app.name,
       submenu: [
         { role: 'about' },
-        {
-          id: 'check-updates',
-          label: 'Check for Updates\u2026',
-          click: () => void checkForUpdatesInteractive(),
-        },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -1014,8 +789,7 @@ ipcMain.on('pt-document-edited', (event, edited: boolean) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
   win.setDocumentEdited(!!edited);
-  // restartToUpdate and the OS-shutdown guards ask windows with unsaved
-  // sessions first.
+  // The OS-shutdown guards ask windows with unsaved sessions first.
   if (edited) {
     editedWindows.add(win.id);
     // Windows: register the reason NOW (no-op elsewhere) so it is already in
