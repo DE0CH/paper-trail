@@ -201,6 +201,11 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopWriteFailKeepsDirty.js
 
+      - name: Cancel on the unsaved-close dialog keeps the window open
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseCancelKeepsWindow.js
+
       - name: OS-opened session binds to its file path (auto-save + Save)
         if: ${{ !cancelled() }}
         shell: bash
@@ -494,6 +499,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopWriteFailKeepsDirty.js
+
+      - name: Cancel on the unsaved-close dialog keeps the window open
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseCancelKeepsWindow.js
 
       - name: OS-opened session binds to its file path (auto-save + Save)
         if: ${{ !cancelled() }}
