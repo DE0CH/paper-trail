@@ -126,6 +126,16 @@ jobs:
         shell: bash
         run: node build-node/test/previewRebuild.js
 
+      - name: A large scale jump leaves no ghost page (destroyed canvas removed)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/ghostPageAfterFit.js
+
+      - name: A no-anchor zoom stays horizontally centered across the fit boundary
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/offCenterZoom.js
+
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}
         shell: bash
@@ -424,6 +434,16 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/previewRebuild.js
+
+      - name: A large scale jump leaves no ghost page (destroyed canvas removed)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/ghostPageAfterFit.js
+
+      - name: A no-anchor zoom stays horizontally centered across the fit boundary
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/offCenterZoom.js
 
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}

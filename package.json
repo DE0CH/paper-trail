@@ -20,6 +20,8 @@
     "test:e2e:scrollbars": "node build-node/test/darkScrollbars.js",
     "test:e2e:preview-clamp": "node build-node/test/previewClamp.js",
     "test:e2e:preview-rebuild": "node build-node/test/previewRebuild.js",
+    "test:e2e:ghost-page": "node build-node/test/ghostPageAfterFit.js",
+    "test:e2e:zoom-center": "node build-node/test/offCenterZoom.js",
     "test:e2e:search-commit": "node build-node/test/searchCommitState.js",
     "test:e2e:rename-shift": "node build-node/test/renameNoShift.js",
     "test:e2e:race": "node build-node/test/raceConditions.js",
