@@ -503,9 +503,10 @@ export class Viewer {
   }
 
   /**
-   * Invalidate a page for re-rendering but keep its old canvas stretched to
-   * the new size as a placeholder (temporarily blurry instead of blank), so
-   * zooming never flashes white. The fresh render replaces it atomically.
+   * Part of the smooth-zoom feature: invalidate a page for re-rendering but
+   * keep its old canvas stretched to the new size as a placeholder
+   * (temporarily blurry instead of blank), so a zoom stays smooth instead of
+   * flashing white. The fresh render replaces it atomically.
    */
   private markStale(p: PageRec): void {
     if (!p.rendered) return;
