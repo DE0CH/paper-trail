@@ -3,6 +3,27 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.20
+
+- Opening a reading session now works the same however you open it —
+  dragging a session onto an already-open PDF, the file picker, Recent,
+  or a double-click all bind it identically, so it auto-saves and closes
+  without asking where to save.
+- Closing a window with unsaved changes saves quietly in the background
+  and only prompts if the save actually fails; this now applies to
+  sessions opened from Recent too.
+- Your unsaved reading sessions are now protected when you shut down or
+  log out — the app holds the shutdown and lets you save first.
+- Recent now remembers each PDF together with its reading session,
+  most-recently-used first.
+- Right-clicking selected text and choosing "Search for this" now fills
+  the find box.
+- Refreshed the interface: crisper icons, and controls and list rows
+  that line up on a consistent grid.
+- New Windows document and installer icons.
+- Updates now install quietly in the background and apply the next time
+  you quit; there is no separate update window.
+
 ## 0.5.18
 
 - Opening a reading session now behaves the same however you open it.
