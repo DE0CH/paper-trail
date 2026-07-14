@@ -25,3 +25,7 @@ jobs:
         run: node build-node/tools/fixture.js
       - name: Async close-and-save (real handle via OPFS)
         run: npx electron build-node/test/desktopCloseAsync.js
+      - name: Existing close-autosave still green under the new flow
+        run: npx electron build-node/test/desktopCloseAutosave.js
+      - name: Existing write-fail-keeps-dirty still green under the new flow
+        run: npx electron build-node/test/desktopWriteFailKeepsDirty.js
