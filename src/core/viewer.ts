@@ -215,6 +215,15 @@ export class Viewer {
     const st = this.container.scrollTop;
     const sl = this.container.scrollLeft;
     const pos = anchor ? null : this.currentPosition();
+    // No-anchor zoom (toolbar/keyboard): the horizontal offset is otherwise
+    // left to CSS `margin: 0 auto`, which centers the page only while it is
+    // narrower than the viewport. Crossing the fit-width boundary would then
+    // snap it hard to the left. Capture the viewport-center point as a
+    // fraction of the scrollable width so it can be restored across the
+    // boundary (centered when narrower, same center-point when wider).
+    const cw = this.container.clientWidth;
+    const swBefore = this.container.scrollWidth;
+    const centerFrac = swBefore > 0 ? (sl + cw / 2) / swBefore : 0.5;
 
     // Anchored zoom (pinch commit): capture the exact page-relative point
     // under the cursor BEFORE relayout, so it can be restored exactly after
@@ -258,6 +267,12 @@ export class Viewer {
         el.offsetLeft + anchorRef.fx * el.offsetWidth - anchorRef.ax;
     } else if (pos) {
       this.scrollTo(pos);
+      // Restore the horizontal center-point after relayout (scrollTo only
+      // touches scrollTop). Clamps to 0 when the page is narrower than the
+      // viewport, so `margin: auto` keeps it centered.
+      const swAfter = this.container.scrollWidth;
+      const maxSl = Math.max(0, swAfter - cw);
+      this.container.scrollLeft = Math.min(Math.max(centerFrac * swAfter - cw / 2, 0), maxSl);
     }
     this.updateVisible();
     this.cb.onScaleChange?.(scale);
