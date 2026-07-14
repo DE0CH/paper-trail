@@ -115,10 +115,12 @@ declare global {
       setDocumentEdited: (edited: boolean) => void;
       saveSessionFallback: (text: string, suggestedName: string) => Promise<string | null>;
       saveSessionToPath?: (path: string, text: string) => Promise<boolean>;
-      // Flush on window close: the main process writes the bound path so an
-      // autosaved session closes instantly with no prompt. Returns whether
-      // the write succeeded; a failed write (unexpected — likely a bug)
-      // falls back to the normal "save?" prompt so nothing is lost.
+      // The native "save your reading session?" dialog on close, shown by the
+      // renderer only when the async close-save couldn't write silently.
+      confirmCloseSave?: () => Promise<'save' | 'dont-save' | 'cancel'>;
+      // DORMANT: a SYNCHRONOUS flush kept for the deferred OS-shutdown fast-path
+      // (a time-boxed shutdown can't wait for the async close-save). Not used by
+      // the normal close flow any more — see Controller.closeAndSave.
       saveSessionOnClose?: (path: string, text: string) => boolean;
       openInNewWindow: (name: string, data: ArrayBuffer) => void;
     };

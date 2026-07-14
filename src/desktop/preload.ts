@@ -48,10 +48,13 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   openInNewWindow: (name: string, data: ArrayBuffer) => {
     ipcRenderer.send('pt-open-new-window', { name, data });
   },
-  // Flush as the window closes: a synchronous round-trip so the renderer
-  // learns whether the write succeeded before it decides whether to close.
-  // A tiny .ptl write is sub-millisecond, so the close still feels instant;
-  // on failure beforeunload falls back to the normal save prompt.
+  // The native "save your reading session?" dialog, shown by the renderer's
+  // async close flow only when it couldn't save silently. Returns the choice.
+  confirmCloseSave: (): Promise<'save' | 'dont-save' | 'cancel'> =>
+    ipcRenderer.invoke('pt-confirm-close-save') as Promise<'save' | 'dont-save' | 'cancel'>,
+  // DORMANT — kept for the deferred OS-shutdown fast-path (a time-boxed
+  // shutdown can't await the async close-save). No longer used by the normal
+  // close flow, which now saves asynchronously; see Controller.closeAndSave.
   saveSessionOnClose: (filePath: string, text: string): boolean =>
     ipcRenderer.sendSync('pt-save-session-on-close', { path: filePath, text }) as boolean,
 });
