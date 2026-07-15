@@ -89,60 +89,69 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 $auto = [System.Windows.Automation.AutomationElement]
 $root = $auto::RootElement
-$boxCond = New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::CheckBox)
-$radCond = New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::RadioButton)
-$btnCond = New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+$any = [System.Windows.Automation.Condition]::TrueCondition
 $children = [System.Windows.Automation.TreeScope]::Children
 $descend = [System.Windows.Automation.TreeScope]::Descendants
+$invokeP = [System.Windows.Automation.InvokePattern]::Pattern
+$toggleP = [System.Windows.Automation.TogglePattern]::Pattern
+$selectP = [System.Windows.Automation.SelectionItemPattern]::Pattern
 $seen = @{}
+function Note([string]$line) {
+  if (-not $script:seen.ContainsKey($line)) { $script:seen[$line] = $true; Write-Output $line }
+}
 for ($i = 0; $i -lt 400; $i++) {
   if (-not (Get-Process -Id $InstallerPid -ErrorAction SilentlyContinue)) { Write-Output 'installer-exited'; exit 0 }
   try {
-    $all = $root.FindAll($children, [System.Windows.Automation.Condition]::TrueCondition)
+    $all = $root.FindAll($children, $any)
     $wins = @()
     foreach ($w in $all) {
       if ($w.Current.ProcessId -eq $InstallerPid) { $wins += $w; continue }
       if ($w.Current.ClassName -eq '#32770' -and $w.Current.Name -like 'Paper Trail*') { $wins += $w }
     }
-    if ($wins.Count -eq 0 -and $i % 15 -eq 14) {
+    # unconditional probe: what UIA can see must always reach the log,
+    # so a blind run is distinguishable from a click that missed
+    if ($i % 15 -eq 4) {
       $desc = @()
-      foreach ($w in $all) { $desc += ('' + $w.Current.ProcessId + ':' + $w.Current.ClassName + ':' + $w.Current.Name) }
-      Write-Output ('probe #' + $i + ' setup window not found; top-level=' + $all.Count + ' [' + (($desc | Select-Object -First 15) -join '; ') + ']')
+      foreach ($w in $all) {
+        $wn = [string]$w.Current.Name
+        $desc += ('' + $w.Current.ProcessId + ':' + $w.Current.ClassName + ':' + $wn.Substring(0, [Math]::Min(30, $wn.Length)))
+      }
+      Write-Output ('probe #' + $i + ' wins=' + $wins.Count + ' top-level=' + $all.Count + ' [' + (($desc | Select-Object -First 12) -join '; ') + ']')
     }
     foreach ($w in $wins) {
-      # keep the default per-user install on the install-mode page
-      foreach ($r in $w.FindAll($descend, $radCond)) {
-        if ($r.Current.Name -match 'Only for me') {
-          $sel = $r.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
-          if (-not $sel.Current.IsSelected) { $sel.Select(); Write-Output ('selected: ' + $r.Current.Name) }
+      # controls are matched by NAME + supported pattern, never by
+      # control type: NSIS/MSAA type mapping is not worth trusting
+      $controls = $w.FindAll($descend, $any)
+      if ($i % 15 -eq 4) { Write-Output ('  win "' + $w.Current.Name + '" descendants=' + $controls.Count) }
+      $clickables = @{}
+      foreach ($c in $controls) {
+        $n = [string]$c.Current.Name
+        if (-not $n) { continue }
+        $short = $n.Substring(0, [Math]::Min(40, $n.Length))
+        Note ('control: ' + $c.Current.ControlType.ProgrammaticName + ':' + $short)
+        if ($n -match 'desktop shortcut' -or $n -match 'start menu shortcut' -or $n -match '^Run ') {
+          Note ('checkbox: ' + $short)
         }
-      }
-      foreach ($b in $w.FindAll($descend, $boxCond)) {
-        $n = $b.Current.Name
-        if ($n -and -not $seen.ContainsKey($n)) { $seen[$n] = $true; Write-Output ('checkbox: ' + $n) }
         # untick the desktop shortcut (the scenario) and Run-after-finish
         # (so the installed app does not launch and block the uninstall)
-        if (($n -match 'desktop shortcut') -or ($n -match '^Run ')) {
-          $t = $b.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
-          if ($t.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On) {
-            $t.Toggle(); Write-Output ('unticked: ' + $n)
+        $tp = $null
+        if (($n -match 'desktop shortcut' -or $n -match '^Run ') -and $c.TryGetCurrentPattern($toggleP, [ref]$tp)) {
+          if ($tp.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On) {
+            $tp.Toggle(); Write-Output ('unticked: ' + $short)
           }
         }
-      }
-      $byName = @{}
-      foreach ($b in $w.FindAll($descend, $btnCond)) {
-        $bn = $b.Current.Name
-        $byName[$bn] = $b
-        # log each distinct button once: a page whose forward button we
-        # do not know must show up in the output, never stall silently
-        if ($bn -and -not $seen.ContainsKey('btn:' + $bn)) { $seen['btn:' + $bn] = $true; Write-Output ('button: ' + $bn) }
+        # keep the default per-user install on the install-mode page
+        $sp = $null
+        if ($n -match 'Only for me' -and $c.TryGetCurrentPattern($selectP, [ref]$sp)) {
+          if (-not $sp.Current.IsSelected) { $sp.Select(); Write-Output ('selected: ' + $short) }
+        }
+        $ip = $null
+        if ($c.Current.IsEnabled -and $c.TryGetCurrentPattern($invokeP, [ref]$ip)) { $clickables[$n] = $ip }
       }
       foreach ($name in @('I Agree', 'Install', 'Next >', 'Finish', 'Close')) {
-        if ($byName.ContainsKey($name) -and $byName[$name].Current.IsEnabled) {
-          try {
-            $byName[$name].GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-            Write-Output ('clicked: ' + $name)
-          } catch { Write-Output ('click-error: ' + $name + ' ' + $_.Exception.Message) }
+        if ($clickables.ContainsKey($name)) {
+          try { $clickables[$name].Invoke(); Write-Output ('clicked: ' + $name) }
+          catch { Write-Output ('click-error: ' + $name + ' ' + $_.Exception.Message) }
           break
         }
       }
