@@ -1,0 +1,32 @@
+# TEMP focused runner for the worker-streaming search test (fast).
+# Delete before merging.
+name: Focus search-stream
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['optimize-search-worker']
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: node build-node/tools/fixture.js
+      - name: Start the web server
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+      - name: Search streams partial results from the worker while indexing
+        run: node build-node/test/searchWorkerStream.js

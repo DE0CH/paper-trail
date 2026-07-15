@@ -13,7 +13,13 @@
 // own text at [start, end) yields the query), highlights are drawn for
 // the jumped-to match, counts only grow (no dropped matches), a query
 // superseded mid-index converges to the new query's complete results, and
-// clearing the query mid-index leaves no stale matches behind.
+// clearing the query mid-index leaves no stale matches behind. Three
+// further regressions ride along: a document swap mid-index discards the
+// old document's index chunks and batches (doc-epoch guard), a page whose
+// text extraction fails degrades to an empty page instead of poisoning
+// the whole search, and dismissing the find bar (or pressing Enter)
+// within the debounce window cancels/flushes the pending search instead
+// of letting a stale timer fire it after the bar is gone.
 //
 // Run (CI): node build-node/test/searchWorkerStream.js   (server on 8377 first)
 
@@ -36,11 +42,14 @@ interface Hooks {
     runSearch(q: string, o?: { jump?: boolean }): Promise<void>;
     subscribe(fn: () => void): () => void;
     getSnapshot(): { searchCount: string };
+    openData(data: Uint8Array, name: string): Promise<void>;
   };
   search: {
     query: string;
     matches: Array<{ page: number; start: number; end: number }>;
   };
+  viewer: { doc: { getPage(n: number): Promise<unknown> } };
+  hist: { active: { entries: Array<{ label: string }> } };
 }
 type W = { __pt: Hooks };
 
@@ -167,6 +176,101 @@ async function run(): Promise<void> {
     check('clearing mid-index leaves no stale matches (now or later)',
       cleared.atClear === 0 && cleared.later === 0 && cleared.count === '',
       JSON.stringify(cleared));
+
+    // ---- 6. Document swap mid-index: index chunks and match batches
+    // from the SUPERSEDED document must be discarded on both sides of the
+    // worker boundary (doc-epoch guard) — the old buildText closure used
+    // to survive a swap and could assign the previous document's text.
+    await load();
+    const swap = await page.evaluate(async () => {
+      const w = window as unknown as W;
+      const buf = new Uint8Array(await (await fetch('sample/cjk.pdf')).arrayBuffer());
+      void w.__pt.controller.runSearch('the', { jump: false }); // indexing doc A…
+      await w.__pt.controller.openData(buf, 'cjk.pdf'); // …swapped mid-flight
+      await new Promise((r) => setTimeout(r, 600)); // let any stale batches land
+      const afterSwap = { q: w.__pt.search.query, n: w.__pt.search.matches.length };
+      await w.__pt.controller.runSearch('你好', { jump: false });
+      return {
+        afterSwap,
+        n: w.__pt.search.matches.length,
+        pages: w.__pt.search.matches.map((m) => m.page),
+        count: w.__pt.controller.getSnapshot().searchCount,
+      };
+    });
+    check('a document swap mid-index discards the old document\'s search state',
+      swap.afterSwap.q === '' && swap.afterSwap.n === 0, JSON.stringify(swap.afterSwap));
+    check('searching the swapped-in document finds only its own matches',
+      swap.n === 2 && swap.pages.every((p) => p === 1) && swap.count === '0 / 2',
+      JSON.stringify({ n: swap.n, pages: swap.pages, count: swap.count }));
+
+    // ---- 7. A page whose text extraction FAILS must not poison the
+    // search: it contributes no text, indexing continues past it, and the
+    // query still completes. (The old buildText cached a rejected promise
+    // forever — one corrupt page killed search until reopen.)
+    await load();
+    const poisoned = await page.evaluate(async () => {
+      const w = window as unknown as W;
+      const doc = w.__pt.viewer.doc;
+      const orig = doc.getPage.bind(doc);
+      doc.getPage = (n: number) => (n === 3
+        ? Promise.reject(new Error('corrupt page (test)'))
+        : orig(n));
+      const result = await Promise.race([
+        w.__pt.controller.runSearch('the', { jump: false }).then(() => 'completed'),
+        new Promise((r) => setTimeout(() => r('wedged'), 15_000)),
+      ]);
+      doc.getPage = orig;
+      return {
+        result,
+        n: w.__pt.search.matches.length,
+        pages: [...new Set(w.__pt.search.matches.map((m) => m.page))],
+        count: w.__pt.controller.getSnapshot().searchCount,
+      };
+    });
+    check('a failing page does not wedge the search (the query completes)',
+      poisoned.result === 'completed', String(poisoned.result));
+    check('indexing continues past the failing page (matches beyond it, none on it)',
+      poisoned.n > 0 && !poisoned.pages.includes(3) && poisoned.pages.some((p) => p > 3),
+      `pages ${poisoned.pages.slice(0, 8).join(',')}…`);
+    check('the count settles despite the failing page',
+      new RegExp(`^0 / ${poisoned.n}$`).test(poisoned.count), `"${poisoned.count}"`);
+
+    // ---- 8. Dismissing the find bar within the 350 ms debounce window
+    // must cancel the pending search: no phantom search or jump, and no
+    // spurious history entry after commitSearch already ran.
+    await load();
+    const modk = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.keyboard.press(`${modk}+f`);
+    await page.waitForSelector('#searchInput', { timeout: 5000 });
+    await page.fill('#searchInput', 'equivariant'); // arms the debounce…
+    await page.keyboard.press('Escape'); // …and closes before it fires
+    await page.waitForTimeout(700); // well past the stale timer
+    const ghost = await page.evaluate(() => {
+      const w = window as unknown as W;
+      return {
+        q: w.__pt.search.query,
+        count: w.__pt.controller.getSnapshot().searchCount,
+        ghostEntries: w.__pt.hist.active.entries
+          .map((e) => e.label).filter((l) => l.includes('equivariant')).length,
+        barOpen: !!document.getElementById('searchBar'),
+      };
+    });
+    check('dismissing the bar within the debounce window cancels the pending search',
+      !ghost.barOpen && ghost.q === '' && ghost.count === '' && ghost.ghostEntries === 0,
+      JSON.stringify(ghost));
+
+    // Enter inside the debounce window flushes the typed query at once
+    // (it must never step the previous query's matches instead).
+    await page.keyboard.press(`${modk}+f`);
+    await page.waitForSelector('#searchInput', { timeout: 5000 });
+    await page.fill('#searchInput', 'equivariant');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() =>
+      (document.getElementById('searchCount')?.textContent ?? '').trim() === '1 / 4',
+    undefined, { timeout: 8000 }).catch(() => { /* reported below */ });
+    const flushed = await page.evaluate(() =>
+      (window as unknown as W).__pt.controller.getSnapshot().searchCount);
+    check('Enter within the debounce window runs the typed query', flushed === '1 / 4', `"${flushed}"`);
   } finally {
     await browser.close();
   }
