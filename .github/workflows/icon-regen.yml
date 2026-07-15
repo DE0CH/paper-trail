@@ -1,0 +1,60 @@
+# Regenerates every icon binary from docs/icon.svg on a macOS runner
+# (the .icns steps need sips + iconutil; the .ico steps are pure JS and
+# run anywhere), verifies the app-icon plate geometry programmatically
+# — the macOS master must sit on Apple's HIG grid (824x824 centered on
+# the 1024 canvas, a 100px gutter all round) and the Windows master on
+# its fuller 896x896 bleed — and uploads two artifacts: the regenerated
+# binaries (to commit alongside the source, as the committed icons are
+# never rebuilt at package time) and 1024/128/64/32/16px renders for
+# human review.
+#
+# Run it:  gh workflow run icon-regen.yml --ref <branch>
+# (also fires on pushes to icon-work branches, since workflow_dispatch
+# only finds workflows that exist on the default branch)
+
+name: Icon regeneration
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['fix-icon-squircle-hig', 'icon-regen-**']
+
+permissions:
+  contents: read
+
+jobs:
+  icons:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - name: Regenerate all icons from docs/icon.svg
+        run: PT_ICON_RENDERS="$PWD/renders" node build-node/tools/icons.js
+      - run: pip install pillow
+      - name: Verify the plate geometry and write the review renders
+        run: python src/tools/check_icon_geometry.py renders
+      - name: Upload the review renders
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: icon-renders
+          path: renders/*.png
+      - name: Upload the regenerated icon binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: icon-binaries
+          path: |
+            build/icon.icns
+            build/ptl.icns
+            build/pdf.icns
+            build/icon.ico
+            build/ptl.ico
+            build/pdf.ico
+            build/installer.ico

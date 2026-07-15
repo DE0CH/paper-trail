@@ -2,6 +2,12 @@
 //   build/icon.icns  (macOS, via sips + iconutil — run on a Mac)
 //   build/*.ico      (Windows, multi-resolution via png2icons)
 //   public/icon.svg  (favicon, copied into dist-web by Vite)
+// The macOS/web app icon uses docs/icon.svg verbatim: the plate sits on
+// Apple's HIG grid (824×824 centered on 1024, a 100px gutter all round).
+// The Windows app icon is the same plate + art redrawn at the fuller
+// bleed Windows icons conventionally use (896×896, 64px margins — the
+// gutter is a mac-only convention and would leave the Explorer icon
+// noticeably smaller than its neighbors); see winSvg.
 //   build/ptl.ico / build/pdf.ico  (document icons; Windows only —
 //     macOS composes its own, see afterPackMac). The .ptl icon is a
 //     page wearing the plated logo; the .pdf icon is the recognisable
@@ -32,6 +38,16 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const SVG = path.join(ROOT, 'docs', 'icon.svg');
 const BUILD = path.join(ROOT, 'build');
 
+// The Windows-bleed plate: the app-icon squircle scaled from the HIG
+// grid (824×824, corner radius 185.4) up to 896×896 (radius 201.6 =
+// 185.4 × 896/824), same continuous-curvature corners. Generated with
+// figma-squircle@1.1.0 getSvgPath({width:896, height:896,
+// cornerRadius:201.6, cornerSmoothing:0.6}) — the same 60% ("iOS")
+// smoothing as the plate in docs/icon.svg. Drawn at translate(64 64),
+// it matches the bare #art's historical coordinates, so the Windows
+// composition is unchanged.
+const WIN_PLATE = 'M 573.44 0 c 112.91 0 169.36 0 212.48 21.97 a 201.6 201.6 0 0 1 88.1 88.1 c 21.97 43.12 21.97 99.58 21.97 212.48 L 896 573.44 c 0 112.91 0 169.36 -21.97 212.48 a 201.6 201.6 0 0 1 -88.1 88.1 c -43.12 21.97 -99.58 21.97 -212.48 21.97 L 322.56 896 c -112.91 0 -169.36 0 -212.48 -21.97 a 201.6 201.6 0 0 1 -88.1 -88.1 c -21.97 -43.12 -21.97 -99.58 -21.97 -212.48 L 0 322.56 c 0 -112.91 0 -169.36 21.97 -212.48 a 201.6 201.6 0 0 1 88.1 -88.1 c 43.12 -21.97 99.58 -21.97 212.48 -21.97 Z';
+
 // Document icons follow the OS convention (what macOS auto-generates
 // for types without an icon, drawn ourselves because electron-builder
 // otherwise substitutes the app icon and Windows has no equivalent):
@@ -56,6 +72,26 @@ function docSvg(label: string): string {
         font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
         font-size="130" font-weight="600" fill="#8b909b"
         letter-spacing="10">${label}</text>
+</svg>
+`;
+}
+
+// The Windows app-icon master: the same plate + art as docs/icon.svg,
+// drawn at the Windows bleed (see WIN_PLATE). The bare #art keeps its
+// historical coordinates, which were composed for a plate at this exact
+// position, so no art transform is needed.
+function winSvg(): string {
+  const art = /<g id="art">([\s\S]*?)<\/g>/.exec(fs.readFileSync(SVG, 'utf8'))?.[1];
+  if (!art) throw new Error('docs/icon.svg no longer matches the art marker');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#33363d"/>
+      <stop offset="1" stop-color="#1b1c20"/>
+    </linearGradient>
+  </defs>
+  <path d="${WIN_PLATE}" transform="translate(64 64)" fill="url(#bg)"/>
+  <g id="art">${art}</g>
 </svg>
 `;
 }
@@ -94,7 +130,7 @@ function installerSvg(): string {
   </g>
   <rect x="150" y="327" width="500" height="500" rx="130" fill="#f4efe3" filter="url(#sh)"/>
   <svg x="175" y="352" width="450" height="450" viewBox="0 0 1024 1024">
-    <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+    <path d="${WIN_PLATE}" transform="translate(64 64)" fill="url(#bg)"/>
     ${art}
   </svg>
 </svg>
@@ -164,19 +200,22 @@ async function run(): Promise<void> {
   fs.mkdirSync(BUILD, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-icons-'));
   const master = path.join(tmp, 'icon-1024.png');
+  const winFile = path.join(tmp, 'icon-win.svg');
+  const winPng = path.join(tmp, 'icon-win-1024.png');
   const docFile = path.join(tmp, 'icon-doc.svg');
   const docPng = path.join(tmp, 'icon-doc-1024.png');
   const pdfFile = path.join(tmp, 'icon-pdf.svg');
   const pdfPng = path.join(tmp, 'icon-pdf-1024.png');
   const installerFile = path.join(tmp, 'icon-installer.svg');
   const installerPng = path.join(tmp, 'icon-installer-1024.png');
+  fs.writeFileSync(winFile, winSvg());
   fs.writeFileSync(docFile, docSvg('PTL'));
   fs.writeFileSync(pdfFile, pdfSvg());
   fs.writeFileSync(installerFile, installerSvg());
 
   const browser = await chromium.launch({ executablePath: findBrowser(), headless: true });
   const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
-  for (const [svg, png] of [[SVG, master], [docFile, docPng], [pdfFile, pdfPng], [installerFile, installerPng]] as const) {
+  for (const [svg, png] of [[SVG, master], [winFile, winPng], [docFile, docPng], [pdfFile, pdfPng], [installerFile, installerPng]] as const) {
     await page.goto('file://' + svg);
     await page.evaluate(() => {
       document.documentElement.style.background = 'transparent';
@@ -193,7 +232,7 @@ async function run(): Promise<void> {
     if (!ico) throw new Error(`png2icons failed to build an ICO from ${png}`);
     return ico;
   };
-  fs.writeFileSync(path.join(BUILD, 'icon.ico'), toIco(master));
+  fs.writeFileSync(path.join(BUILD, 'icon.ico'), toIco(winPng));
   fs.writeFileSync(path.join(BUILD, 'ptl.ico'), toIco(docPng));
   fs.writeFileSync(path.join(BUILD, 'pdf.ico'), toIco(pdfPng));
   fs.writeFileSync(path.join(BUILD, 'installer.ico'), toIco(installerPng));
@@ -215,6 +254,21 @@ async function run(): Promise<void> {
     written.unshift('build/icon.icns', 'build/ptl.icns', 'build/pdf.icns');
   } else {
     console.log('skipping .icns (macOS only — run `npm run icons` on a Mac to refresh them)');
+  }
+
+  // CI review + verification: with PT_ICON_RENDERS set, keep the 1024
+  // master renders so the workflow can measure the plate geometry and
+  // publish them (with downscales) as a human-checkable artifact.
+  const renders = process.env.PT_ICON_RENDERS;
+  if (renders) {
+    fs.mkdirSync(renders, { recursive: true });
+    for (const [png, name] of [
+      [master, 'icon-mac-1024.png'], [winPng, 'icon-win-1024.png'],
+      [docPng, 'icon-ptl-1024.png'], [pdfPng, 'icon-pdf-1024.png'],
+      [installerPng, 'icon-installer-1024.png'],
+    ] as const) {
+      fs.copyFileSync(png, path.join(renders, name));
+    }
   }
 
   fs.rmSync(tmp, { recursive: true, force: true });
