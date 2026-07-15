@@ -16,6 +16,7 @@
     "test:unit:edges": "node --test build-node/test/unitEdges.js",
     "test:recents:unit": "node --test build-node/test/recentsUnit.js",
     "test:recents:merge": "node --test build-node/test/recentsMergeUnit.js",
+    "test:format:bom": "node --test build-node/test/progressBomUnit.js",
     "coverage": "c8 --include \"build-node/core/**\" --include \"src/core/**\" --reporter text --reporter lcov node --test build-node/test/unit.js build-node/test/unitEdges.js",
     "test:e2e:edges": "node build-node/test/e2eEdges.js",
     "test:e2e:scrollbars": "node build-node/test/darkScrollbars.js",
