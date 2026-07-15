@@ -65,6 +65,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/boundFileUnit.js
 
+      - name: Recents merge logic (interleaved windows lose nothing)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/recentsMergeUnit.js
+
+      - name: BOM-prefixed session files parse
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/progressBomUnit.js
+
       - name: Unit test coverage (src/core)
         if: ${{ !cancelled() }}
         shell: bash
@@ -193,6 +201,41 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/dropBindsSilentTarget.js
+
+      - name: A dropped PDF+session pair binds the session as the save target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropPairSessionTarget.js
+
+      - name: An edit during an in-flight save is never marked saved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/writeGenerationDirty.js
+
+      - name: Replacing with a corrupt PDF leaves the session untouched
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceCorruptPdf.js
+
+      - name: A corrupt PDF pick keeps the waiting session
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pendingSessionCorruptPdf.js
+
+      - name: Two windows' recent lists merge (no lost entries)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/recentsTwoWindows.js
+
+      - name: An explicit save queues behind an in-flight auto-save
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/explicitSaveDuringAutosave.js
+
+      - name: Replace undo/redo keeps navigation done since the replace
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceUndoRecapture.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
@@ -475,6 +518,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/boundFileUnit.js
 
+      - name: Recents merge logic (interleaved windows lose nothing)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/recentsMergeUnit.js
+
+      - name: BOM-prefixed session files parse
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/progressBomUnit.js
+
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
       # pass/fail row while sharing one server.
@@ -583,6 +634,41 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/dropBindsSilentTarget.js
+
+      - name: A dropped PDF+session pair binds the session as the save target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropPairSessionTarget.js
+
+      - name: An edit during an in-flight save is never marked saved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/writeGenerationDirty.js
+
+      - name: Replacing with a corrupt PDF leaves the session untouched
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceCorruptPdf.js
+
+      - name: A corrupt PDF pick keeps the waiting session
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pendingSessionCorruptPdf.js
+
+      - name: Two windows' recent lists merge (no lost entries)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/recentsTwoWindows.js
+
+      - name: An explicit save queues behind an in-flight auto-save
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/explicitSaveDuringAutosave.js
+
+      - name: Replace undo/redo keeps navigation done since the replace
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceUndoRecapture.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}

@@ -8,10 +8,10 @@ import { NavStacks } from './history';
 import { SearchController } from './search';
 import { Preview } from './preview';
 import {
-  getRecents, saveRecents, ensureReadPermission,
+  getRecents, recordRecentMerged, removeRecentMerged, ensureReadPermission,
 } from './store';
 import {
-  updateRecent, buildDisplayList, isHandle, type RecentEntry, type RecentDisplay, type FileRef,
+  buildDisplayList, isHandle, type RecentEntry, type RecentDisplay, type FileRef,
 } from './recents';
 import {
   parseProgress, serializeProgress, progressVersion, PROGRESS_EXT, PROGRESS_VERSION,
@@ -313,8 +313,13 @@ export class Controller {
   }
 
 
+  // Bumped on every edit; a finished write may only clear `dirty` when no
+  // edit arrived after its text was serialized (see writeProgress).
+  private dirtyGen = 0;
+
   private markDirty(): void {
     if (this.restoring || !this.docOpen) return;
+    this.dirtyGen += 1;
     if (!this.session.dirty) {
       this.session.dirty = true;
       this.notify();
@@ -412,8 +417,9 @@ export class Controller {
 
   /** Remove one entry from the welcome screen's Recent list. */
   async removeRecent(entry: RecentEntry): Promise<void> {
-    this.recents = this.recents.filter((e) => e !== entry);
-    await saveRecents(this.recents);
+    // Read-merge-write against the CURRENT store (see store.ts): another
+    // window may have saved since this one last read the list.
+    this.recents = await removeRecentMerged(entry);
     this.notify();
   }
 
@@ -437,16 +443,16 @@ export class Controller {
     if (!pdf) return;
     const session: FileRef | null = sessionHandle ?? sessionPath;
     try {
-      await updateRecent(this.recents, {
+      // Read-merge-write against the CURRENT store (see store.ts): merging
+      // into this window's snapshot and saving that back blind erased the
+      // entries other windows recorded since this one attached.
+      this.recents = await recordRecentMerged({
         pdf,
         session,
         pdfName,
         sessionFileName: session ? sessionName : null,
         timestamp: Date.now(),
       });
-      this.recents.sort((a, b) => b.timestamp - a.timestamp);
-      if (this.recents.length > 12) this.recents.length = 12;
-      await saveRecents(this.recents);
       this.notify();
     } catch (e) {
       console.warn('recordRecent failed', e);
@@ -467,12 +473,35 @@ export class Controller {
     };
   }
 
-  async writeProgress(): Promise<void> {
-    if (this.session.saving || !this.docOpen) return;
-    if (!this.session.handle && !this.session.path) return;
+  // Tail of the write queue (see writeProgress). Failures are swallowed
+  // HERE only so the chain survives; each caller still sees its own result.
+  private saveChain: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Write the session to its bound target. Concurrent calls QUEUE behind
+   * the in-flight write instead of being dropped (an explicit Save during
+   * an auto-save was silently skipped, and the desktop path branch even
+   * ran two whole-file writes at once) — each queued write serializes the
+   * state as of ITS turn. Returns true only when this call's write ran
+   * and succeeded; a thrown handle write propagates to the caller.
+   */
+  async writeProgress(): Promise<boolean> {
+    const task = this.saveChain.then(() => this.writeProgressNow());
+    this.saveChain = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  private async writeProgressNow(): Promise<boolean> {
+    if (!this.docOpen) return false;
+    if (!this.session.handle && !this.session.path) return false;
     this.session.saving = true;
     this.notify();
     try {
+      // Snapshot the edit generation WITH the serialized text: an edit that
+      // lands while the (async) write is in flight is NOT in these bytes, so
+      // it must stay dirty — clearing unconditionally treated it as saved,
+      // and a close could then silently discard it.
+      const gen = this.dirtyGen;
       // Line-oriented plain-text format: small, clear git diffs.
       const text = serializeProgress(this.progressFileObject());
       let ok = false;
@@ -486,11 +515,13 @@ export class Controller {
         await w.close();
         ok = true;
       }
-      // Only a SUCCESSFUL write clears dirty. A failed write — the path
-      // handler returned false, or a handle write threw (skips this line) —
-      // leaves the change dirty so it's never silently lost; the next
-      // auto-save / manual save / close-flush retries it.
-      if (ok) this.session.dirty = false;
+      // Only a SUCCESSFUL write of the NEWEST state clears dirty. A failed
+      // write — the path handler returned false, or a handle write threw
+      // (skips this line) — leaves the change dirty so it's never silently
+      // lost; the next auto-save / manual save / close-flush retries it.
+      // Likewise an edit that arrived mid-write (generation moved on).
+      if (ok && this.dirtyGen === gen) this.session.dirty = false;
+      return ok;
     } finally {
       this.session.saving = false;
       this.notify();
@@ -506,13 +537,20 @@ export class Controller {
     let boundHandle = this.session.handle;
     let boundPath = this.session.path;
     let alreadyWritten = false;
+    let savedViaQueue = false; // the queued writer manages `dirty` itself
 
-    // Desktop: a session already bound to a path writes straight back, no dialog.
+    // Desktop: a session already bound to a path writes straight back, no
+    // dialog — through the QUEUED writer, so it can never overlap an
+    // in-flight auto-save (two concurrent whole-file IPC writes), and a
+    // failed write says so instead of silently leaving the change unsaved.
     if (this.session.path && window.ptDesktop?.saveSessionToPath) {
-      const ok = await window.ptDesktop.saveSessionToPath(
-        this.session.path, serializeProgress(this.progressFileObject()));
-      if (!ok) return; // write failed — leave the session dirty
+      const ok = await this.writeProgress();
+      if (!ok) {
+        this.showToast(`Couldn’t write to ${this.session.path}`);
+        return; // write failed — leave the session dirty
+      }
       alreadyWritten = true;
+      savedViaQueue = true;
     }
     if (this.session.handle) {
       // User-initiated save: the right moment for a permission prompt if
@@ -569,13 +607,26 @@ export class Controller {
       }
     }
 
-    // ---- Single convergence point: bind, write if not already, clear dirty,
-    // and record the recent for EVERY first-save path (handle OR path). No
-    // acquisition branch above may skip this — that was the missed-case bug.
+    // ---- Single convergence point: bind, write if not already, and record
+    // the recent for EVERY first-save path (handle OR path). No acquisition
+    // branch above may skip this — that was the missed-case bug.
     this.session.handle = boundHandle;
     this.session.path = boundPath;
-    if (!alreadyWritten) await this.writeProgress();
-    this.session.dirty = false;
+    if (!alreadyWritten) {
+      // The queued writer clears dirty itself (generation-aware: an edit
+      // arriving mid-write must stay dirty), so no blanket clear here.
+      const ok = await this.writeProgress();
+      if (!ok) {
+        this.showToast(boundPath
+          ? `Couldn’t write to ${boundPath}`
+          : 'Session not saved — the write failed');
+        return;
+      }
+    } else if (!savedViaQueue) {
+      // The shell save dialog wrote the bytes itself (outside the queued
+      // writer, which otherwise manages dirty).
+      this.session.dirty = false;
+    }
     if (this.freshSession) {
       this.freshSession = false;
       void this.recordRecent(
@@ -746,6 +797,12 @@ export class Controller {
     if (!this.docOpen) return;
     this.commitSearch(); // undo replaces the history snapshot the entry lives in
     if (this.lastReplaceAction === 'undoable' && this.replaceUndoSlot) {
+      // Re-capture the LIVE state into the redo slot first: the one taken
+      // at replace time is stale — restoring it would silently discard the
+      // reading done since (back/forward, scrolling, zoom).
+      if (this.currentSource) {
+        this.replaceRedoSlot = { source: this.currentSource, state: this.serializeState() };
+      }
       void this.applyReplaceSlot(this.replaceUndoSlot, 'redoable');
       return;
     }
@@ -757,6 +814,10 @@ export class Controller {
     if (!this.docOpen) return;
     this.commitSearch();
     if (this.lastReplaceAction === 'redoable' && this.replaceRedoSlot) {
+      // Mirror of undoHist: keep what the user did since the undo.
+      if (this.currentSource) {
+        this.replaceUndoSlot = { source: this.currentSource, state: this.serializeState() };
+      }
       void this.applyReplaceSlot(this.replaceRedoSlot, 'undoable');
       return;
     }
@@ -800,13 +861,21 @@ export class Controller {
       return;
     }
     const progress: ProgressFile = { ...this.progressFileObject(), state: slot.state };
-    await this.openData(got.bytes, got.name, {
+    const ok = await this.openData(got.bytes, got.name, {
       handle: got.handle,
       source: slot.source,
       progress,
       progressHandle: this.session.handle,
       progressPath: this.session.path,
     });
+    if (!ok) {
+      // openData already toasted the failure; without this gate the slot
+      // bookkeeping below adopted a PDF that never opened and wrote the
+      // session over a blank window.
+      this.lastReplaceAction = 'none';
+      this.notify();
+      return;
+    }
     this.adoptCurrentPdf();
     this.lastReplaceAction = next;
     this.showToast(next === 'redoable'
@@ -917,6 +986,15 @@ export class Controller {
 
   // ---------- opening documents ----------
 
+  /**
+   * Open PDF bytes into the viewer and (re)bind session state. Returns
+   * true only when the document actually opened; false when the open was
+   * superseded by a newer one or the bytes failed to parse (the failure
+   * is toasted here, but callers with follow-up bookkeeping — adopting
+   * the PDF, writing the session, arming undo slots — must gate on it:
+   * the old document is already torn down by then, and pressing on once
+   * overwrote the on-disk reading position with page 1).
+   */
   async openData(
     data: Uint8Array,
     name: string,
@@ -931,7 +1009,7 @@ export class Controller {
       /** Re-readable reference to where the bytes came from (for undoable replace). */
       source?: PdfSource | null;
     } = {},
-  ): Promise<void> {
+  ): Promise<boolean> {
     const {
       handle = null, pdfPath = null, progress = null, progressHandle = null,
       progressPath = null, source = null,
@@ -939,7 +1017,7 @@ export class Controller {
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
     try {
       const doc = await this.viewer.open({ data });
-      if (!doc) return;
+      if (!doc) return false; // superseded by a newer open
       this.resetPinch(); // the new document must not inherit a mid-flight gesture
       this.docOpen = true;
       this.currentName = name;
@@ -978,9 +1056,11 @@ export class Controller {
         progressHandle?.name ?? this.baseName(progressPath));
       this.currentPage = this.viewer.currentPosition().page;
       this.notify();
+      return true;
     } catch (e) {
       console.error(e);
       this.showToast('Failed to open PDF: ' + ((e as Error)?.message ?? String(e)));
+      return false;
     }
   }
 
@@ -1006,10 +1086,7 @@ export class Controller {
       const pp = this.pendingProgress;
       const ph = this.pendingProgressHandle;
       const ppath = this.pendingProgressPath;
-      this.pendingProgress = null;
-      this.pendingProgressHandle = null;
-      this.pendingProgressPath = null;
-      await this.openData(buf, file.name, {
+      const ok = await this.openData(buf, file.name, {
         handle,
         pdfPath: path,
         source,
@@ -1017,6 +1094,16 @@ export class Controller {
         progressHandle: ph,
         progressPath: ppath,
       });
+      // Consume the waiting session only once its PDF actually opened.
+      // Consuming it up front meant a corrupt pick silently discarded the
+      // session: the prompt vanished, and re-picking the right PDF opened
+      // it fresh. On failure everything stays in place for another pick.
+      if (ok) {
+        this.pendingProgress = null;
+        this.pendingProgressHandle = null;
+        this.pendingProgressPath = null;
+        this.notify();
+      }
       return;
     }
     if (this.docOpen) {
@@ -1271,7 +1358,20 @@ export class Controller {
     const progressPath = this.session.path; // keep the desktop file binding
     const buf = new Uint8Array(await file.arrayBuffer());
     const source: PdfSource = handle ?? file;
-    await this.openData(buf, file.name, { handle, source, progress, progressHandle, progressPath });
+    const ok = await this.openData(buf, file.name, { handle, source, progress, progressHandle, progressPath });
+    if (!ok) {
+      // The failed open already tore the old document down (viewer.open
+      // closes it before parsing). Leave the on-disk session untouched —
+      // no adopt, no dirty, no "replaced" toast — and arm undo so the
+      // previous PDF is one step away.
+      if (prevSlot) {
+        this.replaceUndoSlot = prevSlot;
+        this.replaceRedoSlot = null;
+        this.lastReplaceAction = 'undoable';
+        this.notify();
+      }
+      return;
+    }
     // Deliberate swap: adopt the new PDF into the session, no banner.
     this.adoptCurrentPdf();
     if (prevSlot) {
@@ -1390,9 +1490,15 @@ export class Controller {
     // loads; with nothing open, the first dropped file opens.
     const f = this.docOpen ? files.find((x) => /\.ptl$/i.test(x.name)) : files[0];
     if (!f) return;
-    const item = dt.items?.[0];
+    // The handle must come from the DataTransfer item AT THE SAME INDEX as
+    // the chosen file (the spec keeps kind==='file' items in dt.files order).
+    // Taking items[0] blindly bound the WRONG file's handle when a PDF+.ptl
+    // pair was dropped with the PDF first — a later save then wrote session
+    // text over the PDF itself.
     let handle: FileSystemFileHandle | null = null;
     try {
+      const fileItems = [...(dt.items ?? [])].filter((it) => it.kind === 'file');
+      const item = fileItems[files.indexOf(f)];
       if (item?.getAsFileSystemHandle) {
         handle = (await item.getAsFileSystemHandle()) as FileSystemFileHandle | null;
       }

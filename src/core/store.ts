@@ -4,7 +4,7 @@
 // Reading state lives ONLY in explicit session files: opening a plain PDF
 // always starts fresh.
 
-import type { RecentEntry } from './recents';
+import { updateRecent, sameRecentEntry, type RecentEntry } from './recents';
 
 const UI_KEY = 'pt:ui';
 
@@ -110,6 +110,56 @@ export async function saveRecents(list: RecentEntry[]): Promise<void> {
   } catch (e) {
     console.warn('saveRecents failed', e);
   }
+}
+
+// ---------- read-merge-write on the shared list ----------
+
+// Several windows share the ONE stored list, and each window's in-memory
+// copy goes stale the moment another window saves. Mutations therefore
+// re-read the store and apply themselves to THAT — writing a window's
+// stale snapshot back blind erased every entry other windows had recorded
+// since it attached (and a fast open at startup could overwrite the whole
+// store with a one-entry list). A single IDB transaction can't cover the
+// merge — comparing handles (isSameEntry) is async and IDB transactions
+// auto-commit at the event loop — so read and write are separate
+// transactions; the race window shrinks from the window's whole lifetime
+// to the merge itself.
+
+/** Soft cap on stored recents (the welcome list shows fewer anyway). */
+const MAX_RECENTS = 12;
+
+/** Injectable store I/O so the merge logic is unit-testable. */
+export interface RecentsIO {
+  load(): Promise<RecentEntry[]>;
+  save(list: RecentEntry[]): Promise<void>;
+}
+const idbIO: RecentsIO = { load: getRecents, save: saveRecents };
+
+/** Merge one (re)opened pair into the stored list; returns the new list. */
+export async function recordRecentMerged(
+  incoming: RecentEntry,
+  io: RecentsIO = idbIO,
+): Promise<RecentEntry[]> {
+  const list = await io.load();
+  await updateRecent(list, incoming);
+  list.sort((a, b) => b.timestamp - a.timestamp);
+  if (list.length > MAX_RECENTS) list.length = MAX_RECENTS;
+  await io.save(list);
+  return list;
+}
+
+/** Remove one pair from the stored list; returns the new list. */
+export async function removeRecentMerged(
+  target: RecentEntry,
+  io: RecentsIO = idbIO,
+): Promise<RecentEntry[]> {
+  const list = await io.load();
+  const kept: RecentEntry[] = [];
+  for (const e of list) {
+    if (!(await sameRecentEntry(e, target))) kept.push(e);
+  }
+  await io.save(kept);
+  return kept;
 }
 
 /**
