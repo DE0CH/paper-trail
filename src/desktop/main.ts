@@ -24,6 +24,7 @@ import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
 import { blockShutdown, unblockShutdown } from './winShutdown';
 import { placeWindow } from './windowPlacement';
+import { resolveFileArgs } from './openArgs';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
 // other end is already closed; a console write (electron-updater logs
@@ -387,11 +388,13 @@ app.on('open-file', (event, filePath) => {
   openPath(filePath);
 });
 
-// Windows: the file path arrives in a second process's argv. The
-// taskbar Jump List's "New Window" task arrives the same way, as a
-// second process launched with --new-window.
-app.on('second-instance', (_event, argv) => {
-  const files = argv.filter((a) => /\.(pdf|ptl)$/i.test(a) && fs.existsSync(a));
+// Windows: the file path arrives in a second process's argv, together
+// with THAT process's working directory — relative CLI paths must
+// resolve against it, not our own cwd (resolveFileArgs). The taskbar
+// Jump List's "New Window" task arrives the same way, as a second
+// process launched with --new-window.
+app.on('second-instance', (_event, argv, workingDirectory) => {
+  const files = resolveFileArgs(argv, workingDirectory);
   if (files.length) files.forEach((f) => openPath(f));
   else if (argv.includes('--new-window')) createWindow();
   else {
