@@ -35,6 +35,13 @@ const unwritablePath = path.join(os.tmpdir(), 'pt-close-NO-SUCH-DIR', 'nested', 
 const prompts: string[] = [];
 (dialog as unknown as { showMessageBoxSync: unknown }).showMessageBoxSync =
   (_win: unknown, opts: { message: string }) => { prompts.push(opts.message); return 2; };
+// Async twin of the stub above (the close prompt is an async dialog): same
+// recording, same Cancel answer.
+(dialog as unknown as { showMessageBox: unknown }).showMessageBox =
+  async (_win: unknown, opts: { message: string }) => {
+    prompts.push(opts.message);
+    return { response: 2, checkboxChecked: false };
+  };
 
 // Keep the process alive after the last window closes so the assertions
 // finish (the background flush is synchronous, so it has already landed).

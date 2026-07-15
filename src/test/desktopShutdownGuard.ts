@@ -33,6 +33,13 @@ const SAVE_PROMPT = 'Do you want to save your reading session?';
 const prompts: string[] = [];
 (dialog as unknown as { showMessageBoxSync: unknown }).showMessageBoxSync =
   (_win: unknown, opts: { message: string }) => { prompts.push(opts.message); return 2; };
+// Async twin of the stub above (the close prompt is an async dialog): same
+// recording, same Cancel answer.
+(dialog as unknown as { showMessageBox: unknown }).showMessageBox =
+  async (_win: unknown, opts: { message: string }) => {
+    prompts.push(opts.message);
+    return { response: 2, checkboxChecked: false };
+  };
 
 interface Result { name: string; ok: boolean; detail: string }
 const results: Result[] = [];
