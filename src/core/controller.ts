@@ -8,7 +8,7 @@ import { NavStacks } from './history';
 import { SearchController } from './search';
 import { Preview } from './preview';
 import {
-  getRecents, recordRecentMerged, removeRecentMerged, ensureReadPermission,
+  getRecents, recordRecentMerged, removeRecentMerged,
 } from './store';
 import {
   buildDisplayList, isHandle, type RecentEntry, type RecentDisplay, type FileRef,
@@ -17,7 +17,7 @@ import {
   parseProgress, serializeProgress, progressVersion, PROGRESS_EXT, PROGRESS_VERSION,
 } from './progressFormat';
 import {
-  HandleFile, PathFile, fromPickerHandle, fromShellDialog, type BoundFile,
+  HandleFile, PathFile, fromPickerHandle, fromShellDialog, fromRecentRef, type BoundFile,
 } from './boundFile';
 import type {
   HistStack, OutlineNode, Pos, ProgressFile, SerializedState,
@@ -465,11 +465,6 @@ export class Controller {
     this.notify();
   }
 
-  /** Filename portion of an on-disk path (for a path-bound session's name). */
-  private baseName(p: string | null): string {
-    return p ? (p.split(/[\\/]/).pop() ?? '') : '';
-  }
-
   // Record (or refresh) a recent for the open PDF and its session, keyed on
   // their FileRefs (a handle or an on-disk path — so desktop path-only opens
   // list too). Defensive: a handle without isSameEntry (e2e fakes) no-ops.
@@ -561,9 +556,9 @@ export class Controller {
   async saveProgress({ viaShellDialog = false } = {}): Promise<void> {
     if (!this.docOpen) return;
     this.commitSearch(); // explicit Save commits; auto-save (writeProgress) must NOT
-    // ---- Acquisition: each branch only DECIDES the write target (boundHandle
-    // / boundPath) and whether it already wrote the bytes, then converges on
-    // the one block below — so no branch can silently skip the recent-record.
+    // ---- Acquisition: each branch only DECIDES the write target (`bound`)
+    // and whether it already wrote the bytes, then converges on the one
+    // block below — so no branch can silently skip the recent-record.
     let bound = this.session.file;
     let alreadyWritten = false;
     let savedViaQueue = false; // the queued writer manages `dirty` itself
@@ -1548,44 +1543,50 @@ export class Controller {
 
     if (!pdf) { fail('the PDF is missing'); return; }
 
+    // Rewrap the stored identities. A path ref can't be materialized
+    // outside the desktop shell (no bridge to read it through) \u2014 the same
+    // "missing" failure as an unreadable file, never a crash.
+    let pdfFile: BoundFile;
+    try {
+      pdfFile = fromRecentRef(pdf);
+    } catch {
+      fail('the PDF is missing');
+      return;
+    }
+
     // Read BOTH files completely before touching any state.
-    if (isHandle(pdf) && !(await ensureReadPermission(pdf))) {
+    if (!(await pdfFile.requestRead())) {
       // Distinct from "missing": the browser reset the grant and the
       // re-request was declined \u2014 say so instead of blaming the file.
       fail('Paper Trail wasn\u2019t given permission to open it \u2014 try again');
       return;
     }
-    let pdfFile: File | undefined;
     let pdfBytes: Uint8Array;
     try {
-      if (isHandle(pdf)) {
-        pdfFile = await pdf.getFile();
-        pdfBytes = new Uint8Array(await pdfFile.arrayBuffer());
-      } else {
-        const buf = await window.ptDesktop?.readFileByPath?.(pdf);
-        if (!buf) throw new Error('unreadable');
-        pdfBytes = new Uint8Array(buf);
-      }
+      pdfBytes = new Uint8Array(await pdfFile.read());
     } catch (err) {
       console.warn('openRecent: PDF unreadable', err);
       fail('the PDF is missing');
       return;
     }
     let progress: ProgressFile | null = null;
+    let sessionFile: BoundFile | null = null;
     if (session != null) {
-      if (isHandle(session) && !(await ensureReadPermission(session))) {
+      let sf: BoundFile;
+      try {
+        sf = fromRecentRef(session);
+      } catch {
+        fail('its saved session file is missing');
+        return;
+      }
+      sessionFile = sf;
+      if (!(await sf.requestRead())) {
         fail('Paper Trail wasn\u2019t given permission to open its session \u2014 try again');
         return;
       }
       let sessionText: string;
       try {
-        if (isHandle(session)) {
-          sessionText = await (await session.getFile()).text();
-        } else {
-          const buf = await window.ptDesktop?.readFileByPath?.(session);
-          if (!buf) throw new Error('unreadable');
-          sessionText = new TextDecoder().decode(buf);
-        }
+        sessionText = await sf.readText();
       } catch (err) {
         console.warn('openRecent: session unreadable', err);
         fail('its saved session file is missing');
@@ -1597,13 +1598,11 @@ export class Controller {
         return;
       }
     }
-    await this.openData(pdfBytes, isHandle(pdf) ? pdfFile!.name : (this.baseName(pdf) || pdfName), {
+    await this.openData(pdfBytes, pdfFile.name || pdfName, {
       pdfRef: pdf,
       source: isHandle(pdf) ? pdf : null,
       progress,
-      sessionFile: progress && session != null
-        ? (isHandle(session) ? new HandleFile(session) : new PathFile(session))
-        : null,
+      sessionFile,
     });
   }
 
