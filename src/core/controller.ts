@@ -125,11 +125,11 @@ export class Controller {
   private currentPage = 1;
   private restoring = false;
   private pendingProgress: { json: ProgressFile } | null = null;
-  private pendingProgressPath: string | null = null;
+  /** The waiting session's own .ptl binding (bound once its PDF opens). */
+  private pendingProgressFile: BoundFile | null = null;
   private confirmSession: {
     json: ProgressFile;
-    progressHandle: FileSystemFileHandle | null;
-    progressPath: string | null;
+    file: BoundFile | null;
   } | null = null;
   private mismatch_: { savedName: string; openName: string } | null = null;
 
@@ -1092,23 +1092,30 @@ export class Controller {
     path: string | null = null,
   ): Promise<void> {
     if (!file) return;
+    // THE acquisition funnel. The (handle, path) parameter pair is this
+    // method's pinned public shape (App.tsx and the __pt test surface call
+    // it positionally); a .ptl's pair becomes ONE binding right here — the
+    // path preferred on the desktop, being the silent-write target — and
+    // twin fields never travel further. A PDF's pair becomes its recents
+    // ref (handle preferred, the historical recents key).
     if (this.isProgressName(file.name)) {
-      await this.openProgressFile(file, handle, path);
+      await this.openProgressFile(file,
+        path ? new PathFile(path, file.name) : handle ? new HandleFile(handle) : null);
       return;
     }
+    const pdfRef: FileRef | null = handle ?? path;
     const buf = new Uint8Array(await file.arrayBuffer());
     const source: PdfSource = handle ?? file;
     if (this.pendingProgress) {
       // A session file was opened first; the user is now supplying its
       // PDF — restore that session (and bind its file for auto-save).
       const pp = this.pendingProgress;
-      const ph = this.pendingProgressHandle;
-      const ppath = this.pendingProgressPath;
+      const pf = this.pendingProgressFile;
       const ok = await this.openData(buf, file.name, {
-        pdfRef: handle ?? path,
+        pdfRef,
         source,
         progress: pp.json,
-        sessionFile: ppath ? new PathFile(ppath) : ph ? new HandleFile(ph) : null,
+        sessionFile: pf,
       });
       // Consume the waiting session only once its PDF actually opened.
       // Consuming it up front meant a corrupt pick silently discarded the
@@ -1116,8 +1123,7 @@ export class Controller {
       // it fresh. On failure everything stays in place for another pick.
       if (ok) {
         this.pendingProgress = null;
-        this.pendingProgressHandle = null;
-        this.pendingProgressPath = null;
+        this.pendingProgressFile = null;
         this.notify();
       }
       return;
@@ -1128,7 +1134,7 @@ export class Controller {
       this.openPdfElsewhere(file);
       return;
     }
-    await this.openData(buf, file.name, { pdfRef: handle ?? path, source });
+    await this.openData(buf, file.name, { pdfRef, source });
   }
 
   /** Open a PDF in a fresh window/tab because this one is occupied. */
@@ -1172,13 +1178,10 @@ export class Controller {
   /** Discard a session that is waiting for its PDF. */
   discardPendingSession(): void {
     this.pendingProgress = null;
-    this.pendingProgressHandle = null;
-    this.pendingProgressPath = null;
+    this.pendingProgressFile = null;
     this.hist.reset(); // clear the sidebar preview
     this.notify();
   }
-
-  private pendingProgressHandle: FileSystemFileHandle | null = null;
 
   /**
    * Open a reading-session file. If a PDF is already open, the session is
@@ -1189,8 +1192,7 @@ export class Controller {
    */
   private async openProgressFile(
     file: File,
-    progressHandle: FileSystemFileHandle | null = null,
-    progressPath: string | null = null,
+    sessionFile: BoundFile | null = null,
   ): Promise<void> {
     const text = await file.text();
     const json = parseProgress(text);
@@ -1207,7 +1209,7 @@ export class Controller {
       const trivial = this.hist.stacks.length === 1
         && this.hist.stacks[0].entries.length <= 1
         && !this.session.dirty;
-      this.confirmSession = { json, progressHandle, progressPath };
+      this.confirmSession = { json, file: sessionFile };
       if (trivial) {
         this.applyConfirmedSession();
       } else {
@@ -1217,7 +1219,7 @@ export class Controller {
     }
 
     // Session first: show the preview and ask the user for the PDF.
-    this.enterPendingState(json, progressHandle, progressPath);
+    this.enterPendingState(json, sessionFile);
   }
 
   /**
@@ -1227,12 +1229,10 @@ export class Controller {
    */
   private enterPendingState(
     json: ProgressFile,
-    progressHandle: FileSystemFileHandle | null,
-    progressPath: string | null = null,
+    sessionFile: BoundFile | null,
   ): void {
     this.pendingProgress = { json };
-    this.pendingProgressHandle = progressHandle;
-    this.pendingProgressPath = progressPath;
+    this.pendingProgressFile = sessionFile;
     this.hist.load(json.state.hist);
     // Set an explicit, non-bare title so the desktop shell reveals this
     // window right away. A document-opening window stays hidden until its
@@ -1255,8 +1255,7 @@ export class Controller {
     } finally {
       this.restoring = false;
     }
-    this.session.file = cs.progressPath ? new PathFile(cs.progressPath)
-      : cs.progressHandle ? new HandleFile(cs.progressHandle) : null;
+    this.session.file = cs.file;
     this.session.dirty = false;
     this.session.saving = false;
     clearTimeout(this.fileSaveTimer);
@@ -1409,7 +1408,7 @@ export class Controller {
       if (picked) {
         const file = new File([picked.text], picked.name, { type: 'text/plain' });
         // An empty path is treated as unbound — never write to a bad target.
-        await this.openProgressFile(file, null, picked.path || null);
+        await this.openProgressFile(file, fromShellDialog(picked.path, picked.name));
       }
       return;
     }
@@ -1421,7 +1420,7 @@ export class Controller {
             accept: { 'text/plain': [PROGRESS_EXT] },
           }],
         });
-        if (handle) await this.openProgressFile(await handle.getFile(), handle);
+        if (handle) await this.openProgressFile(await handle.getFile(), fromPickerHandle(handle));
         return;
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return;
