@@ -171,6 +171,11 @@ jobs:
         shell: bash
         run: node build-node/test/replaceCorruptPdf.js
 
+      - name: A corrupt PDF pick keeps the waiting session
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pendingSessionCorruptPdf.js
+
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
         shell: bash
@@ -499,6 +504,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/replaceCorruptPdf.js
+
+      - name: A corrupt PDF pick keeps the waiting session
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pendingSessionCorruptPdf.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}

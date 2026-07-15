@@ -1012,10 +1012,7 @@ export class Controller {
       const pp = this.pendingProgress;
       const ph = this.pendingProgressHandle;
       const ppath = this.pendingProgressPath;
-      this.pendingProgress = null;
-      this.pendingProgressHandle = null;
-      this.pendingProgressPath = null;
-      await this.openData(buf, file.name, {
+      const ok = await this.openData(buf, file.name, {
         handle,
         pdfPath: path,
         source,
@@ -1023,6 +1020,16 @@ export class Controller {
         progressHandle: ph,
         progressPath: ppath,
       });
+      // Consume the waiting session only once its PDF actually opened.
+      // Consuming it up front meant a corrupt pick silently discarded the
+      // session: the prompt vanished, and re-picking the right PDF opened
+      // it fresh. On failure everything stays in place for another pick.
+      if (ok) {
+        this.pendingProgress = null;
+        this.pendingProgressHandle = null;
+        this.pendingProgressPath = null;
+        this.notify();
+      }
       return;
     }
     if (this.docOpen) {

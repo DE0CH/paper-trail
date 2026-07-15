@@ -29,6 +29,7 @@
     "test:e2e:drop-pair": "node build-node/test/dropPairSessionTarget.js",
     "test:e2e:write-gen": "node build-node/test/writeGenerationDirty.js",
     "test:e2e:replace-corrupt": "node build-node/test/replaceCorruptPdf.js",
+    "test:e2e:pending-corrupt": "node build-node/test/pendingSessionCorruptPdf.js",
     "test:e2e:ui-align": "node build-node/test/uiAlignment.js",
     "test:desktop:edges": "electron build-node/test/desktopEdges.js",
     "test:os-open-flash": "electron build-node/test/osOpenFlash.js",
