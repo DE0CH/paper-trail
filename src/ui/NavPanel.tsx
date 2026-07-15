@@ -52,9 +52,14 @@ function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
   );
 }
 
-function OutlineTree({ nodes, forceAll }: { nodes: OutlineNode[]; forceAll: ForceAll }) {
+// The ROOT tree carries no indent: top-level rows sit on the same panel
+// gutter as trail/history rows (the one-list left metric, symmetric with
+// the right gutter). Only NESTED trees indent, 12px per level.
+function OutlineTree({ nodes, forceAll, root = false }: {
+  nodes: OutlineNode[]; forceAll: ForceAll; root?: boolean;
+}) {
   return (
-    <ul className="outlineTree list-none m-0 pl-3">
+    <ul className={`outlineTree list-none m-0 ${root ? '' : 'pl-3'}`}>
       {nodes.map((n, i) => <OutlineItem key={i} n={n} forceAll={forceAll} />)}
     </ul>
   );
@@ -225,7 +230,7 @@ export default function NavPanel({
       {tab === 'outline' ? (
         <div id="outlinePanel" className="flex-1 overflow-auto p-1.5">
           {snap.outline.length
-            ? <OutlineTree nodes={snap.outline} forceAll={forceAll} />
+            ? <OutlineTree nodes={snap.outline} forceAll={forceAll} root />
             : <div className="text-dim text-center p-3">No outline in this document</div>}
         </div>
       ) : (
