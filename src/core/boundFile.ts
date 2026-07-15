@@ -57,85 +57,146 @@ export interface BoundFile {
   requestRead(): Promise<boolean>;
 }
 
+/** The desktop shell's preload bridge, or null in a plain browser / node. */
+function desktopBridge(): NonNullable<Window['ptDesktop']> | null {
+  return typeof window === 'undefined' ? null : window.ptDesktop ?? null;
+}
+
+/** Filename portion of an on-disk path (either separator). */
+function baseName(p: string): string {
+  return p.split(/[\\/]/).pop() ?? '';
+}
+
 /** A file identified by a File System Access handle (browser mechanisms). */
 export class HandleFile implements BoundFile {
   readonly kind = 'handle' as const;
 
-  constructor(private readonly handle: FileSystemFileHandle) { void this.handle; }
+  constructor(private readonly handle: FileSystemFileHandle) {}
 
   get name(): string {
-    throw new Error('not implemented');
+    return this.handle.name;
   }
 
   get ref(): FileRef {
-    throw new Error('not implemented');
+    return this.handle;
   }
 
   async read(): Promise<ArrayBuffer> {
-    throw new Error('not implemented');
+    return (await this.handle.getFile()).arrayBuffer();
   }
 
   async readText(): Promise<string> {
-    throw new Error('not implemented');
+    return (await this.handle.getFile()).text();
   }
 
-  async write(_text: string): Promise<boolean> {
-    throw new Error('not implemented');
+  async write(text: string): Promise<boolean> {
+    try {
+      const w = await this.handle.createWritable();
+      await w.write(text);
+      await w.close();
+      return true;
+    } catch (e) {
+      console.warn('BoundFile: handle write failed', e);
+      return false;
+    }
   }
 
+  /**
+   * The permission API is Chromium-only and absent on test fakes — no API
+   * means nothing can prompt, so the write counts as silent. The desktop
+   * shell has no permission UI at all — requests are granted invisibly
+   * (handles restored from the recents store always come back in the
+   * 'prompt' state) — so there this simply asks. A throwing query is
+   * treated as writable: write() surfaces the real failure.
+   */
   async canWriteSilently(): Promise<boolean> {
-    throw new Error('not implemented');
+    const h = this.handle;
+    if (!h.queryPermission) return true;
+    try {
+      if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+      if (desktopBridge() && h.requestPermission) {
+        return (await h.requestPermission({ mode: 'readwrite' })) === 'granted';
+      }
+      return false;
+    } catch {
+      return true;
+    }
   }
 
   async requestWrite(): Promise<boolean> {
-    throw new Error('not implemented');
+    const h = this.handle;
+    if (!h.queryPermission) return true;
+    try {
+      if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+      return (await h.requestPermission?.({ mode: 'readwrite' })) === 'granted';
+    } catch {
+      return true; // proceed: write() surfaces real failures
+    }
   }
 
   async requestRead(): Promise<boolean> {
-    throw new Error('not implemented');
+    return ensureReadPermission(this.handle);
   }
 }
 
 /**
  * A file identified by its on-disk path, reached through the desktop
  * shell's window.ptDesktop bridge — a PathFile cannot exist in a plain
- * browser (the constructor throws there).
+ * browser (the constructor throws there). Paths never involve permission
+ * UI: the shell reads and writes straight to disk over IPC.
  */
 export class PathFile implements BoundFile {
   readonly kind = 'path' as const;
-  readonly name: string = '';
+  readonly name: string;
 
   constructor(readonly path: string, name?: string) {
-    void name;
-    throw new Error('not implemented');
+    if (!path) {
+      // An empty path is treated as unbound by every factory — reaching
+      // here is a caller bug, never write to a made-up target.
+      throw new Error('PathFile: an empty path is not a file');
+    }
+    if (!desktopBridge()) {
+      throw new Error(
+        'PathFile needs the desktop shell (window.ptDesktop): '
+        + 'a browser cannot reach a file by on-disk path',
+      );
+    }
+    this.name = name || baseName(path);
   }
 
   get ref(): FileRef {
-    throw new Error('not implemented');
+    return this.path;
   }
 
   async read(): Promise<ArrayBuffer> {
-    throw new Error('not implemented');
+    const buf = await desktopBridge()?.readFileByPath?.(this.path);
+    if (!buf) throw new Error(`unreadable: ${this.path}`);
+    return buf;
   }
 
   async readText(): Promise<string> {
-    throw new Error('not implemented');
+    return new TextDecoder().decode(await this.read());
   }
 
-  async write(_text: string): Promise<boolean> {
-    throw new Error('not implemented');
+  async write(text: string): Promise<boolean> {
+    try {
+      return (await desktopBridge()?.saveSessionToPath?.(this.path, text)) === true;
+    } catch (e) {
+      console.warn('BoundFile: path write failed', e);
+      return false;
+    }
   }
 
   async canWriteSilently(): Promise<boolean> {
-    throw new Error('not implemented');
+    return true;
   }
 
   async requestWrite(): Promise<boolean> {
-    throw new Error('not implemented');
+    return true;
   }
 
   async requestRead(): Promise<boolean> {
-    throw new Error('not implemented');
+    return true;
   }
 }
 
@@ -151,8 +212,8 @@ export class PathFile implements BoundFile {
  * the path is preferred; without one (the save picker) the handle binds.
  */
 export function fromPickerHandle(handle: FileSystemFileHandle, file?: File): BoundFile {
-  void handle; void file;
-  throw new Error('not implemented');
+  const path = file ? desktopBridge()?.getPathForFile?.(file) : undefined;
+  return path ? new PathFile(path, file?.name) : new HandleFile(handle);
 }
 
 /**
@@ -163,8 +224,15 @@ export function fromPickerHandle(handle: FileSystemFileHandle, file?: File): Bou
  * target).
  */
 export async function fromDrop(file: File, item?: DataTransferItem): Promise<BoundFile | null> {
-  void file; void item;
-  throw new Error('not implemented');
+  const path = desktopBridge()?.getPathForFile?.(file);
+  if (path) return new PathFile(path, file.name);
+  try {
+    if (item?.getAsFileSystemHandle) {
+      const h = await item.getAsFileSystemHandle();
+      if (h?.kind === 'file') return new HandleFile(h as FileSystemFileHandle);
+    }
+  } catch { /* no usable handle — fall through to unbound */ }
+  return null;
 }
 
 /**
@@ -173,8 +241,7 @@ export async function fromDrop(file: File, item?: DataTransferItem): Promise<Bou
  * missing path stays unbound (null) — never write to a made-up target.
  */
 export function fromOsOpen(path: string | null | undefined, name: string): PathFile | null {
-  void path; void name;
-  throw new Error('not implemented');
+  return path ? new PathFile(path, name) : null;
 }
 
 /**
@@ -182,12 +249,10 @@ export function fromOsOpen(path: string | null | undefined, name: string): PathF
  * binds the dialog's real path. Cancel or an empty path → null.
  */
 export function fromShellDialog(path: string | null | undefined, name?: string): PathFile | null {
-  void path; void name;
-  throw new Error('not implemented');
+  return path ? new PathFile(path, name) : null;
 }
 
 /** A recents-store identity coming back: rewrap whichever kind it is. */
 export function fromRecentRef(ref: FileRef, name?: string): BoundFile {
-  void ref; void name; void isHandle; void ensureReadPermission;
-  throw new Error('not implemented');
+  return isHandle(ref) ? new HandleFile(ref) : new PathFile(ref, name);
 }
