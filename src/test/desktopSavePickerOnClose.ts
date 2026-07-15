@@ -101,14 +101,78 @@ function spawnClicker(): void {
       end run`;
     spawn('osascript', ['-e', script, answeredFlag], { stdio: 'inherit' });
   } else {
+    // The dialog is Electron's native TaskDialog. A foreground ENTER
+    // (AppActivate + SendKeys) needs the dialog to actually HOLD the
+    // foreground, which the windows-11-arm runner's session never grants
+    // to the showInactive()-launched test app — 100 ENTERs landed nowhere
+    // and the prompt sat unanswered. UI Automation invokes the "Save…"
+    // button directly, no foreground required; the ENTER stays as a
+    // fallback and the loop logs what it can see, so a run where the
+    // dialog never materializes is distinguishable from a click that
+    // cannot land.
     const ps = `
       Start-Sleep -Milliseconds 2500
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
       $ws = New-Object -ComObject WScript.Shell
+      $root = [System.Windows.Automation.AutomationElement]::RootElement
+      $pidCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, ${process.pid})
+      $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button)
       for ($i = 0; $i -lt 100; $i++) {
         if (Test-Path '${answeredFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'clicked'; exit 0 }
-        $null = $ws.AppActivate(${process.pid})
+        $seen = @()
+        try {
+          # Any window class (TaskDialog is #32770, but never assume): the
+          # confirm prompt is identified by its BUTTON SET — it is the only
+          # window holding both a "Save…" and a "Don't Save" button. That
+          # also keeps the renderer's own toolbar "Save" button (reachable
+          # through the app window's accessibility tree) untouchable.
+          $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
+          foreach ($w in $wins) {
+            $btns = $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
+            $names = @(); foreach ($b in $btns) { $names += $b.Current.Name }
+            $seen += $names
+            $isConfirm = ($names -like 'Save*').Count -ge 1 -and ($names -like 'Don*').Count -ge 1
+            if ($isConfirm) {
+              foreach ($b in $btns) {
+                if ($b.Current.Name -like 'Save*') {
+                  $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                  Write-Output ('uia-invoked: ' + $b.Current.Name + ' in ' + $w.Current.ClassName)
+                  Start-Sleep -Milliseconds 500
+                  break
+                }
+              }
+            }
+          }
+        } catch { Write-Output ('uia-error: ' + $_.Exception.Message) }
+        if (Test-Path '${answeredFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'clicked'; exit 0 }
+        # Fallbacks: activate the DIALOG by its bare title ('Paper Trail';
+        # the app window is '<file> - Paper Trail'), else the process, then
+        # ENTER (the default button is "Save…").
+        $act = $ws.AppActivate('Paper Trail')
+        if (-not $act) { $act = $ws.AppActivate(${process.pid}) }
         Start-Sleep -Milliseconds 150
-        $ws.SendKeys('{ENTER}')
+        try { $ws.SendKeys('{ENTER}') } catch {}
+        if ($i % 10 -eq 9) {
+          $head = @($seen | Select-Object -First 12)
+          Write-Output ('clicker probe #' + $i + ' appActivate=' + $act + ' buttons(' + $seen.Count + ')=[' + ($head -join '; ') + ']')
+          # Diagnosis: what top-level windows does this PROCESS have (any
+          # class), and can UIA see the desktop at all? Distinguishes a
+          # dialog under another class / a dialog never created / a blind
+          # UIA session.
+          try {
+            $mine = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
+            $desc = @()
+            foreach ($w in $mine) { $desc += ($w.Current.ClassName + ':' + $w.Current.Name) }
+            Write-Output ('  process windows=[' + ($desc -join '; ') + ']')
+            $all = $root.FindAll([System.Windows.Automation.TreeScope]::Children,
+              [System.Windows.Automation.Condition]::TrueCondition)
+            Write-Output ('  desktop top-level windows=' + $all.Count)
+          } catch { Write-Output ('  diag-error: ' + $_.Exception.Message) }
+        }
         Start-Sleep -Milliseconds 350
       }
       Write-Output 'gave-up'`;
@@ -170,6 +234,92 @@ Promise<{ canceled: boolean; filePath: string }> => {
   if (!delivered) return { canceled: true, filePath: '' };
   return { canceled: false, filePath: savePath };
 };
+
+// ---- environment canary ----------------------------------------------
+// On the windows-11-arm runner Electron's native message box comes up
+// INERT: the #32770 window exists but its UIA subtree is empty, a
+// foreground ENTER (AppActivate=True) does nothing, and the
+// showMessageBox promise never settles — even for a parentless,
+// app-agnostic dialog (probe runs 29411888604 / 29412677536 /
+// 29413858685), so no clicker of any kind can answer it and no
+// product-side call shape could dodge it. Before judging the save flow,
+// prove the environment can display AND answer a native dialog: show a
+// parentless canary and auto-answer it. Unanswered in 10s ⇒ native
+// dialogs don't work here (the Depot-mac assistive-access analog) and
+// the mode SELF-SKIPS with an explicit reason. If the canary works, a
+// later unanswered real dialog is a genuine defect and the assertions
+// stand.
+const canaryFlag = path.join(outDir, 'canary.flg');
+function spawnCanaryClicker(): void {
+  if (isMac) return;
+  const ps = `
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $pidCond = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ProcessIdProperty, ${process.pid})
+    $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Button)
+    $ws = New-Object -ComObject WScript.Shell
+    for ($i = 0; $i -lt 25; $i++) {
+      if (Test-Path '${canaryFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'canary-clicked'; exit 0 }
+      try {
+        $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
+        foreach ($w in $wins) {
+          # The canary is the process's only native (#32770) window; any
+          # button inside it is the canary button — invoke whatever is there
+          # and LOG the names, so a mismatch is visible in the transcript.
+          if ($w.Current.ClassName -ne '#32770') { continue }
+          $btns = $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
+          $names = @(); foreach ($b in $btns) { $names += $b.Current.Name }
+          Write-Output ('canary dialog buttons=[' + ($names -join '; ') + ']')
+          foreach ($b in $btns) {
+            try {
+              $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+              Write-Output ('canary-invoked: ' + $b.Current.Name)
+            } catch { Write-Output ('canary-invoke-error: ' + $_.Exception.Message) }
+          }
+          # Foreground fallback aimed at the DIALOG title (the main window
+          # is 'cjk.pdf - Paper Trail'; the dialog is plain 'Paper Trail').
+          if ($btns.Count -eq 0) {
+            $null = $ws.AppActivate('Paper Trail')
+            Start-Sleep -Milliseconds 100
+            try { $ws.SendKeys('{ENTER}') } catch {}
+          }
+        }
+      } catch { Write-Output ('canary-uia-error: ' + $_.Exception.Message) }
+      if ($i -eq 12) {
+        $desc = @()
+        try {
+          $mine = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
+          foreach ($w in $mine) { $desc += ($w.Current.ClassName + ':' + $w.Current.Name) }
+        } catch {}
+        Write-Output ('canary probe: process windows=[' + ($desc -join '; ') + ']')
+      }
+      Start-Sleep -Milliseconds 400
+    }
+    Write-Output 'canary-gave-up'`;
+  const psFile = path.join(outDir, 'canary.ps1');
+  fs.writeFileSync(psFile, ps, 'utf8');
+  spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psFile],
+    { stdio: 'inherit' });
+}
+async function dialogEnvCanary(): Promise<boolean> {
+  if (isMac) return true; // mac legs answer real dialogs via System Events
+  fs.rmSync(canaryFlag, { force: true });
+  spawnCanaryClicker();
+  const shown = (realMsgAsync as unknown as
+    (o: Electron.MessageBoxOptions) => Promise<Electron.MessageBoxReturnValue>)({
+      type: 'info', buttons: ['CanaryOK'], message: 'Paper Trail dialog canary',
+    }).then(() => true as const, () => true as const);
+  const ok = await Promise.race([shown, sleep(10_000).then(() => false as const)]);
+  fs.writeFileSync(canaryFlag, '1');
+  log(`dialog canary: ${ok
+    ? 'answered — this environment displays working native dialogs'
+    : 'unanswered after 10s — native dialogs are inert or missing here'}`);
+  return ok;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require(path.resolve(__dirname, '..', 'desktop', 'main.js'));
@@ -289,6 +439,18 @@ async function run(): Promise<void> {
   theWin.webContents.on('will-prevent-unload', () => log('webContents: will-prevent-unload'));
   theWin.webContents.on('destroyed', () => log('webContents: destroyed'));
   app.on('window-all-closed', () => log('app event: window-all-closed'));
+
+  // close / quit / save-fails all hinge on answering the REAL confirm
+  // dialog; prove the environment can show one first (see dialogEnvCanary).
+  // PT_SPC_NO_SKIP: diagnostic override — log the canary verdict but run
+  // the real flow anyway (used to probe the parented-dialog behavior).
+  if (MODE !== 'stale-edited' && !(await dialogEnvCanary())
+      && !process.env.PT_SPC_NO_SKIP) {
+    check('SKIPPED: native dialogs do not work on this runner '
+      + '(a parentless canary dialog was never answerable)', true);
+    finish();
+    return;
+  }
 
   if (MODE === 'save-fails') { await runSaveFails(theWin); return; }
   if (MODE === 'stale-edited') { await runStaleEdited(theWin); return; }
