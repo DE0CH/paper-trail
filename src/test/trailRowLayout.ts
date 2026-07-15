@@ -2,7 +2,8 @@
 //   - an unhovered row's text runs up to the close button's slot: the
 //     slot itself stays reserved (alignment never shifts), but the
 //     edit/duplicate tools must not reserve invisible space;
-//   - hovering reveals those tools WITHOUT moving the text (overlay);
+//   - hovering reveals those tools in the same layout row: truncated
+//     text reflows left by exactly the tools' width, never right;
 //   - a trail's close button shows only on hover or on the active
 //     trail, never on idle rows;
 //   - the Trails header "+" is centered on the trail close buttons,
@@ -62,7 +63,11 @@ async function run(): Promise<void> {
       unhovered.xLeft - unhovered.nameRight <= 8,
       `gap ${(unhovered.xLeft - unhovered.nameRight).toFixed(1)}px`);
 
-    // 2 — hovering reveals the tools without moving the text.
+    // 2 — hovering reveals the tools in the same layout row: the
+    // truncated text reflows LEFT by exactly the two extra buttons'
+    // width (2 × 20px + 2 × 6px gaps = 52px) and never to the right
+    // (owner ruling 2026-07-15: one layout system, row may reflow on
+    // hover).
     await page.hover('.stackRow');
     await page.waitForTimeout(150);
     const hovered = await page.evaluate(() => {
@@ -74,9 +79,9 @@ async function run(): Promise<void> {
       return { nameRight: name.right, toolsVisible: visible };
     });
     check('hover reveals the row tools', hovered.toolsVisible);
-    check('...without moving the text (no jank)',
-      Math.abs(hovered.nameRight - unhovered.nameRight) <= 1,
-      `moved ${(hovered.nameRight - unhovered.nameRight).toFixed(1)}px`);
+    check('...and the text reflows left by exactly the tools\' width',
+      Math.abs((unhovered.nameRight - hovered.nameRight) - 52) <= 2,
+      `reflowed ${(unhovered.nameRight - hovered.nameRight).toFixed(1)}px (expected 52)`);
 
     // 2b — the close button shows only on hover or on the active
     // trail; idle rows keep the slot but not the button.
