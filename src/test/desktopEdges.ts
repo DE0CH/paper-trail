@@ -18,6 +18,9 @@ import { app, BrowserWindow, dialog, shell } from 'electron';
 
 // No native prompts, no real browser launches.
 (dialog as { showMessageBoxSync: unknown }).showMessageBoxSync = () => 1; // Don't Save
+// Async twin (the close prompt is an async dialog): same Don't Save answer.
+(dialog as { showMessageBox: unknown }).showMessageBox =
+  async () => ({ response: 1, checkboxChecked: false });
 const externals: string[] = [];
 (shell as { openExternal: unknown }).openExternal =
   async (url: string) => { externals.push(url); };

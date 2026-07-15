@@ -98,6 +98,14 @@ async function launchDirty(exe: string, answer: number): Promise<ElectronApplica
         seen.push(opts.message);
         return ans;
       };
+    // Async twin of the stub above (the close prompt is an async dialog):
+    // same recording, same answer.
+    (dialog as { showMessageBox: unknown }).showMessageBox =
+      async (...args: unknown[]) => {
+        const opts = (args.length > 1 ? args[1] : args[0]) as { message: string };
+        seen.push(opts.message);
+        return { response: ans, checkboxChecked: false };
+      };
   }, answer);
   const page = await eApp.firstWindow();
   // With a listener registered, playwright leaves dialogs alone. The
@@ -161,6 +169,9 @@ async function run(): Promise<void> {
   if (alive) {
     await cancelApp.evaluate(({ dialog }) => {
       (dialog as { showMessageBoxSync: unknown }).showMessageBoxSync = () => 1;
+      // Async twin (the close prompt is an async dialog): same answer.
+      (dialog as { showMessageBox: unknown }).showMessageBox =
+        async () => ({ response: 1, checkboxChecked: false });
     });
     const page1 = await cancelApp.firstWindow().catch(() => null);
     if (page1) {

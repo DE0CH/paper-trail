@@ -45,6 +45,10 @@ async function run(): Promise<void> {
     // never reaches the picker.
     await eApp.evaluate(({ dialog }) => {
       dialog.showMessageBoxSync = (() => 1) as typeof dialog.showMessageBoxSync;
+      // Async twin (the close prompt is an async dialog): same answer.
+      dialog.showMessageBox = (async () => ({
+        response: 1, checkboxChecked: false,
+      })) as typeof dialog.showMessageBox;
       dialog.showSaveDialog = (async () => ({ canceled: true, filePath: '' })) as typeof dialog.showSaveDialog;
       dialog.showOpenDialog = (async () => ({ canceled: true, filePaths: [] })) as typeof dialog.showOpenDialog;
     });

@@ -55,6 +55,12 @@ contextBridge.exposeInMainWorld('ptDesktop', {
   // async close flow only when it couldn't save silently. Returns the choice.
   confirmCloseSave: (): Promise<'save' | 'dont-save' | 'cancel'> =>
     ipcRenderer.invoke('pt-confirm-close-save') as Promise<'save' | 'dont-save' | 'cancel'>,
+  // The close flow decided to KEEP the window open (Cancel at the prompt, a
+  // canceled picker, or a failed save): tell the shell, so a pending
+  // quit/close-all stops waiting for this window instead of timing out.
+  closeFlowKeptWindow: () => {
+    ipcRenderer.send('pt-close-kept-open');
+  },
   // DORMANT — kept for the deferred OS-shutdown fast-path (a time-boxed
   // shutdown can't await the async close-save). No longer used by the normal
   // close flow, which now saves asynchronously; see Controller.closeAndSave.

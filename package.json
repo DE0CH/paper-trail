@@ -59,6 +59,7 @@
     "test:close-async": "electron build-node/test/desktopCloseAsync.js",
     "test:write-fail-dirty": "electron build-node/test/desktopWriteFailKeepsDirty.js",
     "test:close-cancel": "electron build-node/test/desktopCloseCancelKeepsWindow.js",
+    "test:save-picker": "electron build-node/test/desktopSavePickerOnClose.js",
     "test:session-path": "electron build-node/test/desktopSessionPathBind.js",
     "test:install:win": "node build-node/test/installerWin.js",
     "test:install:win:dpi": "node build-node/test/installerDpiAware.js",

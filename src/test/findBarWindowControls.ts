@@ -41,6 +41,10 @@ async function run(): Promise<void> {
   try {
     await eApp.evaluate(({ dialog }) => {
       dialog.showMessageBoxSync = (() => 1) as typeof dialog.showMessageBoxSync;
+      // Async twin (the close prompt is an async dialog): same answer.
+      dialog.showMessageBox = (async () => ({
+        response: 1, checkboxChecked: false,
+      })) as typeof dialog.showMessageBox;
     });
     const page: Page = await eApp.firstWindow();
     await page.setViewportSize({ width: 1400, height: 900 });

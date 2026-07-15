@@ -202,7 +202,10 @@ export class Controller {
       // the handle write, not just a path, so handle-bound sessions (Open
       // Recent) close cleanly too — then close on success or ask on failure.
       e.preventDefault();
-      if (window.ptDesktop) void this.closeAndSave();
+      // A close while a close flow is already running (the user clicking X
+      // again with the save prompt up) must not stack a second prompt: the
+      // close is still cancelled, the running flow finishes the job.
+      if (window.ptDesktop && !this.closeInProgress) void this.closeAndSave();
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {
@@ -379,22 +382,44 @@ export class Controller {
    * the vetoable query-session-end on Windows): it withholds the shutdown and
    * drives this same close flow per window. See src/desktop/main.ts.
    */
+  /** A close flow is already running — a second close must not stack a
+   * second confirm prompt (see the beforeunload handler). */
+  private closeInProgress = false;
+
   private async closeAndSave(): Promise<void> {
-    // Try to save with no prompt (a path is always silent; a desktop handle
-    // auto-grants readwrite). writeProgress clears dirty only on a real write.
-    await this.writeProgressAuto().catch(() => { /* write failed → still dirty → ask below */ });
-    if (!this.session.dirty) { this.forceClose = true; window.close(); return; }
-    // Couldn't save silently — a never-saved session, denied permission, or a
-    // failed write. Ask with a native dialog (same wording as before).
-    const choice = await window.ptDesktop?.confirmCloseSave?.();
-    if (choice === 'save') {
-      await this.saveProgress({ viaShellDialog: true }); // save-as; binds a path
-      if (!this.session.dirty) { this.forceClose = true; window.close(); }
-      // still dirty (user cancelled the save-as picker) → keep the window
-    } else if (choice === 'dont-save') {
-      this.forceClose = true; window.close();
+    if (this.closeInProgress) return;
+    this.closeInProgress = true;
+    try {
+      // Try to save with no prompt (a path is always silent; a desktop handle
+      // auto-grants readwrite). writeProgress clears dirty only on a real write.
+      await this.writeProgressAuto().catch(() => { /* write failed → still dirty → ask below */ });
+      if (!this.session.dirty) { this.forceClose = true; window.close(); return; }
+      // Couldn't save silently — a never-saved session, denied permission, or a
+      // failed write. Ask with a native dialog (same wording as before).
+      const choice = await window.ptDesktop?.confirmCloseSave?.();
+      if (choice === 'save') {
+        // The save can fail for the very reason the prompt appeared (e.g. the
+        // bound handle's write throwing). closeAndSave runs un-awaited from
+        // beforeunload, so an uncaught throw would vanish as an unhandled
+        // rejection and the user's "Save…" would do nothing visible — catch
+        // it and say so instead.
+        try {
+          await this.saveProgress({ viaShellDialog: true }); // save-as; binds a path
+        } catch (e) {
+          this.showToast('Save failed: ' + ((e as Error)?.message ?? String(e)));
+        }
+        if (!this.session.dirty) { this.forceClose = true; window.close(); return; }
+        // still dirty (canceled picker or failed save) → keep the window
+      } else if (choice === 'dont-save') {
+        this.forceClose = true; window.close(); return;
+      }
+      // The window stays open with the change intact ('cancel', no shell, a
+      // canceled picker, or a failed save). Tell the shell, so a pending
+      // quit/close-all stops waiting for this window instead of timing out.
+      window.ptDesktop?.closeFlowKeptWindow?.();
+    } finally {
+      this.closeInProgress = false;
     }
-    // 'cancel' (or no shell) → keep the window open, change intact
   }
 
   private restoreStateFrom(d: SerializedState | null): boolean {
