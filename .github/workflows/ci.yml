@@ -247,6 +247,11 @@ jobs:
         shell: bash
         run: node build-node/test/editRowActions.js
 
+      - name: Hover tools never bleed into the close/remove button
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hoverIconSpacing.js
+
       - name: Alt+Arrow shortcuts stay out of text fields
         if: ${{ !cancelled() }}
         shell: bash
@@ -731,6 +736,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/editRowActions.js
+
+      - name: Hover tools never bleed into the close/remove button
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hoverIconSpacing.js
 
       - name: Alt+Arrow shortcuts stay out of text fields
         if: ${{ !cancelled() }}
