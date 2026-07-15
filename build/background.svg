@@ -7,10 +7,10 @@
        HiDPI tiff the Finder window shows.
        The decoration is the app's own trail motif from docs/icon.svg —
        a faint dotted trail that emerges from behind the app icon, arcs
-       toward Applications with one small branch, and lands on the
-       target ring — so the brand mark itself is the drag hint. Colors
-       stay in the app palette (trail #4f8cff, branch #8fb3ff) at low
-       opacity on a light neutral, and the instruction line uses the
+       toward Applications, and lands on the target ring — so the brand
+       mark itself is the drag hint. Colors stay in the app palette
+       (trail #4f8cff) at low opacity on a light neutral, and the
+       instruction line uses the
        system font, so the window reads native and quiet. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
@@ -26,11 +26,6 @@
     <path d="M 135 165 C 185 95, 350 88, 405 152"
           fill="none" stroke="#4f8cff" stroke-width="9"
           stroke-linecap="round" stroke-dasharray="0.1 21"/>
-    <!-- one small branch forking off near the apex -->
-    <path d="M 272 104 C 300 106, 322 114, 338 126"
-          fill="none" stroke="#8fb3ff" stroke-width="6"
-          stroke-linecap="round" stroke-dasharray="0.1 15"/>
-    <circle cx="342" cy="129" r="5" fill="#8fb3ff"/>
     <!-- the target ring where the trail arrives -->
     <circle cx="405" cy="152" r="12.5" fill="#4f8cff"/>
     <circle cx="405" cy="152" r="6" fill="none" stroke="#eef0f4" stroke-width="3.5"/>

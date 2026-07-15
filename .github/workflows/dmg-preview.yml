@@ -77,7 +77,10 @@ jobs:
           try:
               check('app is in the dmg', os.path.exists(os.path.join(mnt, 'Paper Trail.app')))
               check('Applications is a symlink', os.path.islink(os.path.join(mnt, 'Applications')))
-              bgs = glob.glob(os.path.join(mnt, '.background', '*'))
+              # dmgbuild (electron-builder 26's dmg engine) stores the
+              # image as a hidden .background.tiff at the volume root
+              bgs = glob.glob(os.path.join(mnt, '.background*'))
+              bgs = [b for b in bgs if os.path.isfile(b)]
               check('one background file present', len(bgs) == 1, bgs)
               if bgs:
                   im = Image.open(bgs[0])
@@ -88,7 +91,7 @@ jobs:
                   check('background is the 1x+2x HiDPI pair',
                         sorted(sizes) == [(540, 380), (1080, 760)], sizes)
               entries = {}
-              with DSStore.open(os.path.join(mnt, '.DS_Store')) as d:
+              with DSStore.open(os.path.join(mnt, '.DS_Store'), 'rb') as d:
                   for e in d:
                       entries.setdefault(e.filename, {})[e.code] = e.value
               check('app icon centered at (135, 205)',
