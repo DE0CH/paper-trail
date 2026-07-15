@@ -148,10 +148,25 @@ function spawnClicker(): void {
         } catch { Write-Output ('uia-error: ' + $_.Exception.Message) }
         if (Test-Path '${answeredFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'clicked'; exit 0 }
         # Fallback: the old foreground ENTER (default button = "Save…").
-        $null = $ws.AppActivate(${process.pid})
+        $act = $ws.AppActivate(${process.pid})
         Start-Sleep -Milliseconds 150
         try { $ws.SendKeys('{ENTER}') } catch {}
-        if ($i % 10 -eq 9) { Write-Output ('clicker probe #' + $i + ' buttons=[' + ($seen -join '; ') + ']') }
+        if ($i % 10 -eq 9) {
+          Write-Output ('clicker probe #' + $i + ' appActivate=' + $act + ' buttons=[' + ($seen -join '; ') + ']')
+          # Diagnosis: what top-level windows does this PROCESS have (any
+          # class), and can UIA see the desktop at all? Distinguishes a
+          # dialog under another class / a dialog never created / a blind
+          # UIA session.
+          try {
+            $mine = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
+            $desc = @()
+            foreach ($w in $mine) { $desc += ($w.Current.ClassName + ':' + $w.Current.Name) }
+            Write-Output ('  process windows=[' + ($desc -join '; ') + ']')
+            $all = $root.FindAll([System.Windows.Automation.TreeScope]::Children,
+              [System.Windows.Automation.Condition]::TrueCondition)
+            Write-Output ('  desktop top-level windows=' + $all.Count)
+          } catch { Write-Output ('  diag-error: ' + $_.Exception.Message) }
+        }
         Start-Sleep -Milliseconds 350
       }
       Write-Output 'gave-up'`;
