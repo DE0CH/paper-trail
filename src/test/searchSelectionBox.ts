@@ -38,6 +38,14 @@ async function run(): Promise<void> {
   try {
     await eApp.evaluate(({ dialog }) => {
       dialog.showMessageBoxSync = (() => 1) as typeof dialog.showMessageBoxSync;
+      // The close-save prompt (pt-confirm-close-save) is the ASYNC
+      // dialog.showMessageBox; without this stub a session left dirty by
+      // the in-flight search (the jump records a history entry) pops a
+      // REAL prompt at teardown that nobody on a headless runner can
+      // answer, and the app never exits (the CI wedge).
+      dialog.showMessageBox = (async () => ({
+        response: 1, checkboxChecked: false,
+      })) as typeof dialog.showMessageBox;
     });
     const page: Page = await eApp.firstWindow();
     await page.setViewportSize({ width: 1400, height: 900 });
