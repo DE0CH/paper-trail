@@ -1,8 +1,14 @@
 // Hot-path profiler — measures the paths the history profiler (perf.ts)
-// does NOT: pdf.js page render, text extraction, the full-document search
-// index build + query, zoom re-layout, and outline parse. Every number is
-// measured in the real app on a large document (sample/perf-big.pdf), plus
-// heap (GC-fenced via CDP) and a CPU profile of a render loop.
+// does NOT: pdf.js page render, text extraction, full-document search
+// (cold streaming pass and warm re-query through the search worker), zoom
+// re-layout, and outline parse. Every number is measured in the real app
+// on a large document (sample/perf-big.pdf), plus heap (GC-fenced via CDP)
+// and a CPU profile of a render loop.
+//
+// Search is measured strictly through the public SearchController surface
+// (__pt.search.setQuery / .matches / .onUpdate): the compute half lives in
+// a Web Worker (src/core/searchWorker.ts) and its internals are not
+// reachable — nor stable — from here.
 //
 // Prereq: npm run build && node build-node/tools/perfBigPdf.js && npm start.
 // Usage: node build-node/tools/perfHot.js [baseUrl]
@@ -90,7 +96,7 @@ async function run(): Promise<void> {
       }
       interface Pt {
         viewer: { doc: { numPages: number; getPage(n: number): Promise<PdfPage>; getOutline(): Promise<unknown[]> }; scale: number; setScale(s: number, o?: unknown): void };
-        search: { setQuery(q: string): Promise<void>; matches: unknown[] };
+        search: { setQuery(q: string): Promise<void>; matches: unknown[]; onUpdate: (() => void) | null };
       }
       const pt = (window as never as { __pt: Pt }).__pt;
       const doc = pt.viewer.doc;
@@ -106,7 +112,10 @@ async function run(): Promise<void> {
       const sample: number[] = [];
       for (let k = 0; k < 12; k++) sample.push(1 + Math.floor((k * (N - 1)) / 11));
 
-      // (1) per-page canvas render at fit-ish scale, and (2) at high zoom (DPI cost)
+      // (1) per-page canvas render at fit-ish scale, and (2) at high zoom
+      // (DPI cost). Raw pdf.js cost on an uncapped canvas — the app's own
+      // backing stores are capped by renderGeometry.ts, so in-app renders
+      // can only be cheaper than the renderHi numbers.
       const renderMs: number[] = []; const renderHiMs: number[] = []; const textMs: number[] = [];
       const renderAt = async (pg: PdfPage, scale: number): Promise<number> => {
         const vp = pg.getViewport({ scale });
@@ -127,18 +136,36 @@ async function run(): Promise<void> {
         textMs.push(performance.now() - t1);
       }
 
-      // (3) full-document search index build (first query builds pageTexts across ALL pages)
+      // (3) cold search: the first query starts streaming every page's text
+      // to the search worker, which scans and streams matches back. Measure
+      // time-to-first-batch (first onUpdate that delivers matches — what the
+      // user perceives as search latency) and time-to-complete (setQuery
+      // resolves once the result set is complete, extraction included).
+      let searchFirstBatchMs = -1;
+      const prevOnUpdate = pt.search.onUpdate;
       const tb = performance.now();
+      pt.search.onUpdate = () => {
+        if (searchFirstBatchMs < 0 && pt.search.matches.length) {
+          searchFirstBatchMs = performance.now() - tb;
+        }
+        prevOnUpdate?.();
+      };
       await pt.search.setQuery('category');
-      const searchBuildMs = performance.now() - tb;
-      const matchesBuild = pt.search.matches.length;
-      // (4) query on the already-built index (pure indexOf scan)
+      const searchColdMs = performance.now() - tb;
+      pt.search.onUpdate = prevOnUpdate;
+      const matchesCold = pt.search.matches.length;
+      // (4) warm search: the worker already holds every page's text, so this
+      // is a pure re-scan round-trip through the worker message protocol.
       const tq = performance.now();
       await pt.search.setQuery('morphism');
-      const searchQueryMs = performance.now() - tq;
-      const matchesQuery = pt.search.matches.length;
+      const searchWarmMs = performance.now() - tq;
+      const matchesWarm = pt.search.matches.length;
+      // clear highlights so they don't tax the zoom probe below
+      await pt.search.setQuery('');
 
-      // (5) zoom re-layout (synchronous relayout of the whole page list)
+      // (5) zoom re-layout: setScale() itself is the synchronous cost —
+      // it re-sizes every page shell and marks rendered pages stale (the
+      // stale canvases re-render asynchronously afterwards, off this clock)
       const cur = pt.viewer.scale;
       const tz = performance.now();
       pt.viewer.setScale(cur * 1.5);
@@ -150,10 +177,13 @@ async function run(): Promise<void> {
       return {
         numPages: N, dpr,
         renderFit: stat(renderMs), renderHi: stat(renderHiMs), textContent: stat(textMs),
-        searchBuildMs, matchesBuild, searchQueryMs, matchesQuery, zoomRelayoutMs,
+        searchFirstBatchMs, searchColdMs, matchesCold, searchWarmMs, matchesWarm, zoomRelayoutMs,
       };
     });
 
+    // Main-thread heap only: the search index lives in the search worker's
+    // own isolate, so this shows what the search workload leaves behind on
+    // the page (match arrays, text layers), not the worker's text store.
     const heapAfterSearch = await heapMB(page);
     const cpu = await cpuProfileRenderLoop(page);
 

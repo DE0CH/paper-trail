@@ -1,10 +1,17 @@
-# Dev-iteration hot-path profiler on Depot runners. Fires only on perf-**
-# branches, and only on the private mirror (where Depot runners live) — a
-# no-op on the public repo. Delete/ignore for main; this is a measurement tool.
+# Hot-path profiler — a lasting dev-loop measurement tool ("measure before
+# optimizing"; complements `npm run perf`, which covers history operations).
+# It profiles pdf.js render, text extraction, worker-based search (cold
+# streaming pass + warm re-query), zoom re-layout, outline parse, heap, and
+# a CPU profile, all on a generated 600-page PDF.
+#
+# Dispatch-only, and only on the private mirror where the Depot runners
+# live — it must never fire on pushes, so it cannot burn minutes by
+# accident. Usage:
+#   git push mirror <branch>
+#   gh workflow run perf-hotpath.yml --repo de0ch-org/paper-trail-mirror --ref <branch>
 name: Hot-path profiler (Depot)
 on:
-  push:
-    branches: ['perf-**']
+  workflow_dispatch:
 jobs:
   profile:
     if: ${{ github.repository == 'de0ch-org/paper-trail-mirror' }}
