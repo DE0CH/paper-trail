@@ -3,9 +3,14 @@
 # red/flaky. macOS is SIGNED + NOTARIZED (installs cleanly, no Gatekeeper
 # warning); Windows is unsigned (SmartScreen "More info > Run anyway").
 #
-# Uploads the five files the release publishes as run artifacts (NOTE:
-# GitHub always wraps artifact downloads in a zip container; bare-file
-# downloads would need release assets — pending an owner decision).
+# Uploads the FIVE artifacts the release publishes, each on its own so it
+# can be grabbed separately (GitHub wraps every artifact download in a
+# zip container — a platform constant, not a workflow choice):
+#   pt-mac-dmg        - macOS universal installer (.dmg)
+#   pt-mac-zip        - macOS universal app (.zip)
+#   pt-win-x64-app    - Windows x64 portable app (.zip)
+#   pt-win-arm64-app  - Windows arm64 portable app (.zip)
+#   pt-win-installer  - Windows NSIS installer (.exe — one, both arches)
 #
 # Uses the shared release config (package.json > build) unchanged, so the
 # outputs match the published release exactly.
@@ -80,21 +85,18 @@ jobs:
           else
             npx electron-builder --mac zip dmg --publish never
           fi
-      # Already-compressed payloads (zip / ULFO dmg): no recompression.
       - name: Upload macOS app (.zip)
         uses: actions/upload-artifact@v4
         with:
           name: pt-mac-zip
           path: dist-electron/Paper-Trail-*-mac.zip
           if-no-files-found: error
-          compression-level: 0
       - name: Upload macOS installer (.dmg)
         uses: actions/upload-artifact@v4
         with:
           name: pt-mac-dmg
           path: dist-electron/Paper-Trail-*.dmg
           if-no-files-found: error
-          compression-level: 0
 
   windows:
     # Windows never runs on Depot (no interactive session) and the mirror
@@ -122,25 +124,21 @@ jobs:
       - name: List built windows artifacts
         shell: bash
         run: ls -la dist-electron/
-      # Already-compressed payloads: no recompression (see the mac note).
       - name: Upload Windows x64 app
         uses: actions/upload-artifact@v4
         with:
           name: pt-win-x64-app
           path: dist-electron/Paper-Trail-*-x64-win.zip
           if-no-files-found: error
-          compression-level: 0
       - name: Upload Windows arm64 app
         uses: actions/upload-artifact@v4
         with:
           name: pt-win-arm64-app
           path: dist-electron/Paper-Trail-*-arm64-win.zip
           if-no-files-found: error
-          compression-level: 0
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: pt-win-installer
           path: dist-electron/Paper-Trail-Setup-*.exe
           if-no-files-found: error
-          compression-level: 0
