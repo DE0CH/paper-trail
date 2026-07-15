@@ -10,10 +10,25 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   29444069461, 10 assets). The 1.0 format policy is ACTIVE: strict
   .ptl backward compatibility + migrations for every change. History
   + per-version detail: [shipped-versions](shipped-versions.md).
-- NEXT (owner-requested): work on the searchSelectionBox wedge
-  root-cause TOGETHER with the owner (task #38; 3 CI hangs — Depot
-  mac, GitHub windows ×2, last one on the 1.0 gate; suspected real
-  deadlock in the right-click "Search for this" flow).
+- searchSelectionBox wedge RESOLVED (not a product bug): the test
+  stubbed only the Sync dialog while the close-save prompt went async
+  in 112deeb, so dirty-at-quit popped an unanswerable native prompt on
+  headless runners. Owner-authorized one-time test mutation (async
+  stub) + deterministic pin searchSelWedgeRepro in both desktop CI
+  suites; merged 9ee8c94, gate green. Test-only ⇒ NO dev build (owner
+  ruling: builds only for changes they can examine).
+- SignPath (Windows SmartScreen fix): application SUBMITTED
+  2026-07-15, days-to-weeks wait; attribution live (README download
+  section, CONTRIBUTING "Code signing", v1.0.0 notes); release.yml
+  integration MERGED INERT (322b379) — activates when
+  SIGNPATH_API_TOKEN/ORGANIZATION_ID/PROJECT_SLUG/
+  SIGNING_POLICY_SLUG secrets land; signed exe ⇒ latest.yml
+  regenerated (src/tools/regen_update_feed.py), stale blockmap
+  dropped (full-download updates — correct, heavier). Task #43.
+- Memory footprint investigated (owner asked): NOT a leak — probe
+  (src/tools/memLeakProbe.ts, kept as instrument) showed PLATEAU:
+  renderer +11.5MB vs paper-open after 41-page sweep + GC. Eviction
+  design sound; owner ruled NO memory changes to source.
 - README video: frame-verified take live at README.md:22
   (user-attachments URL via Chrome issue-draft flow, session 4).
 - Vercel preview pipeline live: vercel-preview.yml on every main push
