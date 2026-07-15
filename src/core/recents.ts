@@ -45,6 +45,11 @@ async function sameRef(a: FileRef | null, b: FileRef | null): Promise<boolean> {
   try { return await a.isSameEntry(b); } catch { return false; }
 }
 
+/** Two entries are the same recents row when both refs match pairwise. */
+export async function sameRecentEntry(a: RecentEntry, b: RecentEntry): Promise<boolean> {
+  return await sameRef(a.pdf, b.pdf) && await sameRef(a.session, b.session);
+}
+
 export async function updateRecent(
   list: RecentEntry[],
   incoming: RecentEntry,

@@ -57,6 +57,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
+      - name: Recents merge logic (interleaved windows lose nothing)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/recentsMergeUnit.js
+
       - name: Unit test coverage (src/core)
         if: ${{ !cancelled() }}
         shell: bash
@@ -175,6 +179,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/pendingSessionCorruptPdf.js
+
+      - name: Two windows' recent lists merge (no lost entries)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/recentsTwoWindows.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
@@ -411,6 +420,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
+      - name: Recents merge logic (interleaved windows lose nothing)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/recentsMergeUnit.js
+
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
       # pass/fail row while sharing one server.
@@ -509,6 +522,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/pendingSessionCorruptPdf.js
+
+      - name: Two windows' recent lists merge (no lost entries)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/recentsTwoWindows.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}

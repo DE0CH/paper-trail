@@ -8,10 +8,10 @@ import { NavStacks } from './history';
 import { SearchController } from './search';
 import { Preview } from './preview';
 import {
-  getRecents, saveRecents, ensureReadPermission,
+  getRecents, recordRecentMerged, removeRecentMerged, ensureReadPermission,
 } from './store';
 import {
-  updateRecent, buildDisplayList, isHandle, type RecentEntry, type RecentDisplay, type FileRef,
+  buildDisplayList, isHandle, type RecentEntry, type RecentDisplay, type FileRef,
 } from './recents';
 import {
   parseProgress, serializeProgress, progressVersion, PROGRESS_EXT, PROGRESS_VERSION,
@@ -409,8 +409,9 @@ export class Controller {
 
   /** Remove one entry from the welcome screen's Recent list. */
   async removeRecent(entry: RecentEntry): Promise<void> {
-    this.recents = this.recents.filter((e) => e !== entry);
-    await saveRecents(this.recents);
+    // Read-merge-write against the CURRENT store (see store.ts): another
+    // window may have saved since this one last read the list.
+    this.recents = await removeRecentMerged(entry);
     this.notify();
   }
 
@@ -434,16 +435,16 @@ export class Controller {
     if (!pdf) return;
     const session: FileRef | null = sessionHandle ?? sessionPath;
     try {
-      await updateRecent(this.recents, {
+      // Read-merge-write against the CURRENT store (see store.ts): merging
+      // into this window's snapshot and saving that back blind erased the
+      // entries other windows recorded since this one attached.
+      this.recents = await recordRecentMerged({
         pdf,
         session,
         pdfName,
         sessionFileName: session ? sessionName : null,
         timestamp: Date.now(),
       });
-      this.recents.sort((a, b) => b.timestamp - a.timestamp);
-      if (this.recents.length > 12) this.recents.length = 12;
-      await saveRecents(this.recents);
       this.notify();
     } catch (e) {
       console.warn('recordRecent failed', e);
