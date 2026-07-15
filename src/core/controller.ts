@@ -1366,9 +1366,15 @@ export class Controller {
     // loads; with nothing open, the first dropped file opens.
     const f = this.docOpen ? files.find((x) => /\.ptl$/i.test(x.name)) : files[0];
     if (!f) return;
-    const item = dt.items?.[0];
+    // The handle must come from the DataTransfer item AT THE SAME INDEX as
+    // the chosen file (the spec keeps kind==='file' items in dt.files order).
+    // Taking items[0] blindly bound the WRONG file's handle when a PDF+.ptl
+    // pair was dropped with the PDF first — a later save then wrote session
+    // text over the PDF itself.
     let handle: FileSystemFileHandle | null = null;
     try {
+      const fileItems = [...(dt.items ?? [])].filter((it) => it.kind === 'file');
+      const item = fileItems[files.indexOf(f)];
       if (item?.getAsFileSystemHandle) {
         handle = (await item.getAsFileSystemHandle()) as FileSystemFileHandle | null;
       }

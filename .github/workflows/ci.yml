@@ -156,6 +156,11 @@ jobs:
         shell: bash
         run: node build-node/test/dropBindsSilentTarget.js
 
+      - name: A dropped PDF+session pair binds the session as the save target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropPairSessionTarget.js
+
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
         shell: bash
@@ -469,6 +474,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/dropBindsSilentTarget.js
+
+      - name: A dropped PDF+session pair binds the session as the save target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropPairSessionTarget.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
