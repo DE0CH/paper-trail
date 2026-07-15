@@ -112,11 +112,11 @@ export class Controller {
   private searchEntry: ReturnType<NavStacks['visit']> | null = null;
   private outline: OutlineNode[] = [];
   private recents: RecentEntry[] = [];
-  // The open PDF's handle and/or on-disk path — recents key on whichever is
-  // present (a handle for browser / drag-drop opens, a path for desktop
-  // OS-open / input-fallback opens, which used to be left out of the list).
-  private currentPdfHandle: FileSystemFileHandle | null = null;
-  private currentPdfPath: string | null = null;
+  // The open PDF's identity as the recents list keys it — a handle for
+  // browser / drag-drop opens, an on-disk path for desktop OS-open /
+  // input-fallback opens. Only ever a recents KEY (plus a display name):
+  // the PDF is re-read through openRecent, never through this ref.
+  private currentPdfRef: FileRef | null = null;
   // A fresh (never-saved) session: set when a PDF opens without a bound
   // session, cleared on the first save or when an existing session loads.
   private freshSession = false;
@@ -471,19 +471,15 @@ export class Controller {
   }
 
   // Record (or refresh) a recent for the open PDF and its session, keyed on
-  // the PDF's handle OR its on-disk path (so desktop path-only opens list
-  // too). Defensive: a handle without isSameEntry (e2e fakes) just no-ops.
+  // their FileRefs (a handle or an on-disk path — so desktop path-only opens
+  // list too). Defensive: a handle without isSameEntry (e2e fakes) no-ops.
   private async recordRecent(
-    pdfHandle: FileSystemFileHandle | null,
-    pdfPath: string | null,
-    sessionHandle: FileSystemFileHandle | null,
-    sessionPath: string | null,
+    pdf: FileRef | null,
+    session: FileRef | null,
     pdfName: string,
     sessionName: string,
   ): Promise<void> {
-    const pdf: FileRef | null = pdfHandle ?? pdfPath;
     if (!pdf) return;
-    const session: FileRef | null = sessionHandle ?? sessionPath;
     try {
       // Read-merge-write against the CURRENT store (see store.ts): merging
       // into this window's snapshot and saving that back blind erased the
@@ -660,9 +656,7 @@ export class Controller {
     if (this.freshSession) {
       this.freshSession = false;
       void this.recordRecent(
-        this.currentPdfHandle, this.currentPdfPath,
-        bound?.kind === 'handle' ? bound.ref as FileSystemFileHandle : null,
-        bound?.kind === 'path' ? bound.ref as string : null,
+        this.currentPdfRef, bound?.ref ?? null,
         this.currentName, bound?.name ?? '');
     }
     this.showToast('Session saved');
@@ -893,11 +887,10 @@ export class Controller {
     }
     const progress: ProgressFile = { ...this.progressFileObject(), state: slot.state };
     const ok = await this.openData(got.bytes, got.name, {
-      handle: got.handle,
+      pdfRef: got.handle,
       source: slot.source,
       progress,
-      progressHandle: this.session.handle,
-      progressPath: this.session.path,
+      sessionFile: this.session.file, // keep the session binding across the swap
     });
     if (!ok) {
       // openData already toasted the failure; without this gate the slot
@@ -1030,20 +1023,17 @@ export class Controller {
     data: Uint8Array,
     name: string,
     opts: {
-      handle?: FileSystemFileHandle | null;
-      /** Desktop shell: the PDF's on-disk path (for path-keyed recents). */
-      pdfPath?: string | null;
+      /** The PDF's recents-list identity (a handle or an on-disk path). */
+      pdfRef?: FileRef | null;
       progress?: ProgressFile | null;
-      progressHandle?: FileSystemFileHandle | null;
-      /** Desktop shell: the bound .ptl's on-disk path (auto-save target). */
-      progressPath?: string | null;
+      /** The .ptl the session is bound to — the (auto-)save target. */
+      sessionFile?: BoundFile | null;
       /** Re-readable reference to where the bytes came from (for undoable replace). */
       source?: PdfSource | null;
     } = {},
   ): Promise<boolean> {
     const {
-      handle = null, pdfPath = null, progress = null, progressHandle = null,
-      progressPath = null, source = null,
+      pdfRef = null, progress = null, sessionFile = null, source = null,
     } = opts;
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
     try {
@@ -1052,7 +1042,7 @@ export class Controller {
       this.resetPinch(); // the new document must not inherit a mid-flight gesture
       this.docOpen = true;
       this.currentName = name;
-      this.currentSource = source ?? handle ?? null;
+      this.currentSource = source ?? (pdfRef && isHandle(pdfRef) ? pdfRef : null);
       this.searchEntry = null;
       this.currentPage = 1;
       document.title = `${name} \u2014 Paper Trail`;
@@ -1072,20 +1062,16 @@ export class Controller {
         this.restoring = false;
       }
 
-      // ONE binding (path preferred on the desktop — the silent target).
-      this.session.file = progressPath ? new PathFile(progressPath)
-        : progressHandle ? new HandleFile(progressHandle) : null;
+      this.session.file = sessionFile;
       this.session.dirty = false;
       this.session.saving = false;
       clearTimeout(this.fileSaveTimer);
       this.mismatch_ = (progress && progress.pdf.name && progress.pdf.name !== name)
         ? { savedName: progress.pdf.name, openName: name }
         : null;
-      this.currentPdfHandle = handle;
-      this.currentPdfPath = pdfPath;
-      this.freshSession = !(progressHandle || progressPath);
-      void this.recordRecent(handle, pdfPath, progressHandle, progressPath, name,
-        progressHandle?.name ?? this.baseName(progressPath));
+      this.currentPdfRef = pdfRef;
+      this.freshSession = !sessionFile;
+      void this.recordRecent(pdfRef, sessionFile?.ref ?? null, name, sessionFile?.name ?? '');
       this.currentPage = this.viewer.currentPosition().page;
       this.notify();
       return true;
@@ -1119,12 +1105,10 @@ export class Controller {
       const ph = this.pendingProgressHandle;
       const ppath = this.pendingProgressPath;
       const ok = await this.openData(buf, file.name, {
-        handle,
-        pdfPath: path,
+        pdfRef: handle ?? path,
         source,
         progress: pp.json,
-        progressHandle: ph,
-        progressPath: ppath,
+        sessionFile: ppath ? new PathFile(ppath) : ph ? new HandleFile(ph) : null,
       });
       // Consume the waiting session only once its PDF actually opened.
       // Consuming it up front meant a corrupt pick silently discarded the
@@ -1144,7 +1128,7 @@ export class Controller {
       this.openPdfElsewhere(file);
       return;
     }
-    await this.openData(buf, file.name, { handle, pdfPath: path, source });
+    await this.openData(buf, file.name, { pdfRef: handle ?? path, source });
   }
 
   /** Open a PDF in a fresh window/tab because this one is occupied. */
@@ -1284,9 +1268,8 @@ export class Controller {
     // handle OR a path. (The old `if (cs.progressHandle)` skipped every
     // path-only .ptl — an OS-open / <input> fallback onto an already-open PDF.)
     void this.recordRecent(
-      this.currentPdfHandle, this.currentPdfPath,
-      cs.progressHandle, cs.progressPath,
-      this.currentName, cs.progressHandle?.name ?? this.baseName(cs.progressPath));
+      this.currentPdfRef, this.session.file?.ref ?? null,
+      this.currentName, this.session.file?.name ?? '');
     this.notify();
   }
 
@@ -1386,11 +1369,10 @@ export class Controller {
       ? { source: this.currentSource, state: this.serializeState() }
       : null;
     const progress = this.progressFileObject(); // carries the current state
-    const progressHandle = this.session.handle;
-    const progressPath = this.session.path; // keep the desktop file binding
+    const sessionFile = this.session.file; // keep the session binding
     const buf = new Uint8Array(await file.arrayBuffer());
     const source: PdfSource = handle ?? file;
-    const ok = await this.openData(buf, file.name, { handle, source, progress, progressHandle, progressPath });
+    const ok = await this.openData(buf, file.name, { pdfRef: handle, source, progress, sessionFile });
     if (!ok) {
       // The failed open already tore the old document down (viewer.open
       // closes it before parsing). Leave the on-disk session untouched —
@@ -1617,12 +1599,12 @@ export class Controller {
       }
     }
     await this.openData(pdfBytes, isHandle(pdf) ? pdfFile!.name : (this.baseName(pdf) || pdfName), {
-      handle: isHandle(pdf) ? pdf : null,
-      pdfPath: isHandle(pdf) ? null : pdf,
+      pdfRef: pdf,
       source: isHandle(pdf) ? pdf : null,
       progress,
-      progressHandle: progress && session != null && isHandle(session) ? session : null,
-      progressPath: progress && session != null && !isHandle(session) ? session : null,
+      sessionFile: progress && session != null
+        ? (isHandle(session) ? new HandleFile(session) : new PathFile(session))
+        : null,
     });
   }
 
