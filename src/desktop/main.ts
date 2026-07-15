@@ -395,8 +395,24 @@ app.on('open-file', (event, filePath) => {
 // process launched with --new-window.
 app.on('second-instance', (_event, argv, workingDirectory) => {
   const files = resolveFileArgs(argv, workingDirectory);
-  if (files.length) files.forEach((f) => openPath(f));
-  else if (argv.includes('--new-window')) createWindow();
+  if (files.length) {
+    const targets = new Set<BrowserWindow>();
+    for (const f of files) {
+      const win = openPath(f);
+      if (win) targets.add(win);
+    }
+    // Bring the receiving window forward: an Explorer double-click while
+    // the app is minimized or behind must not load the file invisibly.
+    // A brand-new still-hidden window is left alone — it reveals itself
+    // once its document is showing (no empty-window flash).
+    for (const win of targets) {
+      if (win.isDestroyed()) continue;
+      if (win.isMinimized()) win.restore();
+      else if (!win.isVisible()) continue;
+      win.show();
+      win.focus();
+    }
+  } else if (argv.includes('--new-window')) createWindow();
   else {
     const win = focusedWindow();
     if (win) { win.show(); win.focus(); }
