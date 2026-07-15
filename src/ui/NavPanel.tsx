@@ -167,9 +167,12 @@ export default function NavPanel({
   // three header labels ~1px apart. A box-shadow draws the same 2px accent
   // underline without a layout box, so the tab centres in the full 36px —
   // identical to the other headers — and can't shift on active/inactive.
+  // px-1.5 (not px-2): with the header's pl-1.5 this starts the first tab
+  // label at the shared 12px inset every panel header label uses (panel
+  // p-1.5 + row px-1.5), so the three headers read as one line.
   const tabBtn = (t: NavTab, label: string) => (
     <button
-      className={`inline-flex items-center h-full px-2 text-[12px] min-w-0 shrink cursor-pointer ${tab === t ? 'text-fgapp shadow-[inset_0_-2px_0_0_var(--color-accent)]' : 'text-dim'}`}
+      className={`inline-flex items-center h-full px-1.5 text-[12px] min-w-0 shrink cursor-pointer ${tab === t ? 'text-fgapp shadow-[inset_0_-2px_0_0_var(--color-accent)]' : 'text-dim'}`}
       onClick={() => onTab(t)}
     >
       {label}
