@@ -6,6 +6,7 @@
 // resize the popup height.
 
 import { loadUI, saveUI } from './store';
+import { backingGeometry } from './renderGeometry';
 import type { Viewer } from './viewer';
 
 const HOVER_DELAY_MS = 350;
@@ -124,19 +125,12 @@ export class Preview {
   // ---- geometry (mirrors the viewer's device-pixel-exact math: the CSS box
   // must equal backing / dpr, or the bitmap resamples and goes soft) ----
 
-  private pageDpr(vp1w: number, vp1h: number): number {
-    let dpr = window.devicePixelRatio || 1;
-    const w = vp1w * this.viewer.scale;
-    const h = vp1h * this.viewer.scale;
-    while (w * dpr * h * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
-    return dpr;
-  }
-
-  private exactCss(vp1w: number, vp1h: number) {
-    const dpr = this.pageDpr(vp1w, vp1h);
-    const backingW = Math.round(vp1w * this.viewer.scale * dpr);
-    const backingH = Math.round(vp1h * this.viewer.scale * dpr);
-    return { dpr, backingW, backingH, cssW: backingW / dpr, cssH: backingH / dpr };
+  private exactCss(vp1w: number, vp1h: number): ReturnType<typeof backingGeometry> {
+    return backingGeometry(
+      vp1w * this.viewer.scale,
+      vp1h * this.viewer.scale,
+      window.devicePixelRatio || 1,
+    );
   }
 
   /** (Re)create one holder per page of the document, rendered lazily. */

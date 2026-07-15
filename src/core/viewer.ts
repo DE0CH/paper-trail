@@ -10,6 +10,7 @@ import {
   type PageViewport,
 } from 'pdfjs-dist';
 import type { Pos } from './types';
+import { backingGeometry } from './renderGeometry';
 
 GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -179,27 +180,22 @@ export class Viewer {
     // pixels (backing / dpr); flooring here while the canvas backing store
     // rounds separately would make the bitmap resample slightly (~2.001:1
     // instead of 2:1) and every glyph goes soft.
-    const dpr = this.effectiveDpr(p);
-    const { cssW, cssH } = this.exactPageCss(p, dpr);
+    const { cssW, cssH } = this.pageGeometry(p);
     p.el.style.width = `${cssW}px`;
     p.el.style.height = `${cssH}px`;
     p.el.style.setProperty('--scale-factor', String(this.scale));
   }
 
-  /** Device pixel ratio used for rendering, after the canvas-area cap. */
-  private effectiveDpr(p: PageRec): number {
-    let dpr = window.devicePixelRatio || 1;
-    const w = p.vp1.width * this.scale;
-    const h = p.vp1.height * this.scale;
-    while (w * dpr * h * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
-    return dpr;
-  }
-
-  /** CSS size that corresponds exactly to the rounded backing store. */
-  private exactPageCss(p: PageRec, dpr: number): { cssW: number; cssH: number; backingW: number; backingH: number } {
-    const backingW = Math.round(p.vp1.width * this.scale * dpr);
-    const backingH = Math.round(p.vp1.height * this.scale * dpr);
-    return { cssW: backingW / dpr, cssH: backingH / dpr, backingW, backingH };
+  /**
+   * Backing-store size and the exactly-corresponding CSS box for a page at
+   * the current scale (shared math — see renderGeometry.ts).
+   */
+  private pageGeometry(p: PageRec): ReturnType<typeof backingGeometry> {
+    return backingGeometry(
+      p.vp1.width * this.scale,
+      p.vp1.height * this.scale,
+      window.devicePixelRatio || 1,
+    );
   }
 
   setScale(
@@ -407,11 +403,9 @@ export class Viewer {
     const scale = this.scale;
     const vp = p.page.getViewport({ scale });
     // Render at the full device pixel ratio (browser zoom raises it beyond
-    // 2 on retina displays; capping it makes text soft). Only the total
-    // canvas area is capped (memory / browser limits) — desktop Chromium
-    // handles very large canvases, 64M pixels stays well inside the limits.
-    const dpr = this.effectiveDpr(p);
-    const { cssW, cssH, backingW, backingH } = this.exactPageCss(p, dpr);
+    // 2 on retina displays; capping it makes text soft) — reduced only as
+    // far as the canvas caps demand (see renderGeometry.ts).
+    const { cssW, cssH, backingW, backingH } = this.pageGeometry(p);
 
     const canvas = document.createElement('canvas');
     canvas.width = backingW;
@@ -546,8 +540,7 @@ export class Viewer {
     p.textReady = null;
     p.el.querySelectorAll('.searchHl').forEach((e) => e.remove());
     if (p.canvas) {
-      const dpr = this.effectiveDpr(p);
-      const { cssW, cssH } = this.exactPageCss(p, dpr);
+      const { cssW, cssH } = this.pageGeometry(p);
       p.canvas.style.width = `${cssW}px`;
       p.canvas.style.height = `${cssH}px`;
     }

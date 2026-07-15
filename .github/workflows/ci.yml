@@ -57,6 +57,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
+      - name: Unit tests — canvas render-geometry caps
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/renderGeometryUnit.js
+
       - name: Unit test coverage (src/core)
         if: ${{ !cancelled() }}
         shell: bash
@@ -135,6 +139,31 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/offCenterZoom.js
+
+      - name: A huge page at high zoom renders within the canvas caps (not blank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hugePageZoomBlank.js
+
+      - name: A persistently failing page render does not retry-storm
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renderRetryStorm.js
+
+      - name: Replace PDF with a same-named file refreshes the thumbnails
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/staleThumbsAfterReplace.js
+
+      - name: Pinch-gesture state does not survive a document swap
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pinchDocSwap.js
+
+      - name: A devicePixelRatio change re-renders the visible pages
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dprChangeRerender.js
 
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}
@@ -391,6 +420,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
+      - name: Unit tests — canvas render-geometry caps
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/renderGeometryUnit.js
+
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
       # pass/fail row while sharing one server.
@@ -449,6 +482,31 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/offCenterZoom.js
+
+      - name: A huge page at high zoom renders within the canvas caps (not blank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hugePageZoomBlank.js
+
+      - name: A persistently failing page render does not retry-storm
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renderRetryStorm.js
+
+      - name: Replace PDF with a same-named file refreshes the thumbnails
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/staleThumbsAfterReplace.js
+
+      - name: Pinch-gesture state does not survive a document swap
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pinchDocSwap.js
+
+      - name: A devicePixelRatio change re-renders the visible pages
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dprChangeRerender.js
 
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}
