@@ -252,6 +252,11 @@ jobs:
         shell: bash
         run: node build-node/test/editRowActions.js
 
+      - name: Hover tools never bleed into the close/remove button
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hoverIconSpacing.js
+
       - name: Alt+Arrow shortcuts stay out of text fields
         if: ${{ !cancelled() }}
         shell: bash
@@ -462,6 +467,12 @@ jobs:
       - name: Installer never force-closes a running app (unsaved work wins)
         shell: bash
         run: node build-node/test/installerCloseUnsaved.js
+
+      - name: Installed-apps list shows the app icon (DisplayIcon)
+        # installs the packaged Setup exe like the tests above, so it
+        # must also skip when packaging did
+        shell: bash
+        run: node build-node/test/installerDisplayIcon.js
 
   # Update tests live in their own job so their two packaging runs
   # (current version + next-version feed) don't serialize behind the
@@ -735,6 +746,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/editRowActions.js
+
+      - name: Hover tools never bleed into the close/remove button
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hoverIconSpacing.js
 
       - name: Alt+Arrow shortcuts stay out of text fields
         if: ${{ !cancelled() }}

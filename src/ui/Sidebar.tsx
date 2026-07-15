@@ -80,7 +80,9 @@ function StackRow({ snap, id, name }: {
         </span>
       )}
       {!editing && (
-        <span className={`${toolsOverlay} right-[22px]`}>
+        // 32 = 6px row padding + the 20px ✕ slot + the row's 6px gap; 22
+        // left the overlay's last icon 4px inside the ✕'s box.
+        <span className={`${toolsOverlay} right-[32px]`}>
           <button
             className={`editName ${toolBtn}`}
             title="Rename this trail"
@@ -182,7 +184,9 @@ function HistRow({ label, page, current, index, removable }: {
         </span>
       )}
       {!editing && (
-        <span className={`${toolsOverlay} ${removable ? 'right-[22px]' : 'right-1.5'}`}>
+        // Same 32px clearance as StackRow's overlay when the remove ✕ slot
+        // exists; without it the overlay parks at the row's padding edge.
+        <span className={`${toolsOverlay} ${removable ? 'right-[32px]' : 'right-1.5'}`}>
           <button
             className={`editName ${toolBtn}`}
             title="Rename this entry"
