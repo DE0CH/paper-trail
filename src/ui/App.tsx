@@ -123,6 +123,10 @@ export default function App() {
         return;
       }
       if (!mod && e.altKey) {
+        // In a text field, Alt+arrows are the caret's own moves (word-wise
+        // on macOS) — the navigation shortcuts must not hijack them and
+        // yank the document away mid-edit.
+        if (editing) return;
         if (e.key === 'ArrowLeft') { e.preventDefault(); controller.goBack(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); controller.goForward(); }
         else if (e.code === 'BracketLeft') { e.preventDefault(); controller.stackCycle(-1); }
@@ -399,9 +403,22 @@ export default function App() {
       const w = clampW(start[which] + ev.clientX - startX, MIN_W[which], max);
       setWidths((prev) => ({ ...prev, [which]: w }));
     };
-    const up = () => {
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
+    // A drag can also end abnormally: a pointercancel, or the handle
+    // unmounting mid-drag (⌘B closes the sidebar), which silently drops
+    // the pointer capture. The listeners live on window — capture
+    // retargets events to the handle, but they still bubble, and window
+    // outlives the handle — plus lostpointercapture on the handle, so
+    // finish() runs exactly once however the drag ends. Otherwise
+    // body.resizing would stick (global col-resize cursor, no text
+    // selection) and the dragged width would never be persisted.
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      handle.removeEventListener('lostpointercapture', finish);
       handle.classList.remove('bg-[rgba(79,140,255,0.35)]');
       document.body.classList.remove('resizing');
       setWidths((prev) => {
@@ -414,8 +431,10 @@ export default function App() {
       });
       controller.refitIfNeeded();
     };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    handle.addEventListener('lostpointercapture', finish);
   };
 
   return (

@@ -124,10 +124,22 @@ function HistRow({ label, page, current, index, removable }: {
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // History rows are addressed by index, so a structural history change
+  // (mark, clear, remove, undo…) can move this row onto a DIFFERENT
+  // entry while a rename is open — and native menu actions don't blur
+  // the input first. Cancel the editor instead of ever committing the
+  // stale text to whatever entry now sits at this index. The ref also
+  // vetoes the blur-commit in case the unmounting input still blurs.
+  const cancelled = useRef(false);
   useEffect(() => {
     if (editing) {
+      cancelled.current = false;
       inputRef.current?.focus();
       inputRef.current?.select();
+      return controller.hist.onStructureChange(() => {
+        cancelled.current = true;
+        setEditing(false);
+      });
     }
   }, [editing]);
 
@@ -147,14 +159,14 @@ function HistRow({ label, page, current, index, removable }: {
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter') {
-              controller.entryRename(index, (e.target as HTMLInputElement).value);
+              if (!cancelled.current) controller.entryRename(index, (e.target as HTMLInputElement).value);
               setEditing(false);
             } else if (e.key === 'Escape') {
               setEditing(false);
             }
           }}
           onBlur={(e) => {
-            controller.entryRename(index, e.target.value);
+            if (!cancelled.current) controller.entryRename(index, e.target.value);
             setEditing(false);
           }}
         />
