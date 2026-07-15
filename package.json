@@ -29,6 +29,7 @@
     "test:e2e:ui-align": "node build-node/test/uiAlignment.js",
     "test:e2e:alt-arrows": "node build-node/test/altArrowsEditing.js",
     "test:e2e:rename-target": "node build-node/test/histRenameTarget.js",
+    "test:e2e:resize-cancel": "node build-node/test/resizeDragCancel.js",
     "test:desktop:edges": "electron build-node/test/desktopEdges.js",
     "test:os-open-flash": "electron build-node/test/osOpenFlash.js",
     "test:os-open-derived": "electron build-node/test/osOpenDerivedTitle.js",
