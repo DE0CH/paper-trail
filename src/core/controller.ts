@@ -16,6 +16,9 @@ import {
 import {
   parseProgress, serializeProgress, progressVersion, PROGRESS_EXT, PROGRESS_VERSION,
 } from './progressFormat';
+import {
+  HandleFile, PathFile, fromPickerHandle, fromShellDialog, type BoundFile,
+} from './boundFile';
 import type {
   HistStack, OutlineNode, Pos, ProgressFile, SerializedState,
 } from './types';
@@ -52,13 +55,38 @@ export interface Snapshot {
   mismatch: { savedName: string; openName: string } | null;
 }
 
-interface Session {
-  handle: FileSystemFileHandle | null;
-  /** Desktop shell only: the bound .ptl's on-disk path (no handle exists
-   * for OS-opened files). Auto-save and Save write straight back to it. */
-  path: string | null;
-  dirty: boolean;
-  saving: boolean;
+/**
+ * The bound session file and save state. The binding is ONE BoundFile —
+ * a browser handle or a desktop path, decided at acquisition — so the
+ * write paths never branch on twin nullable fields. `handle` and `path`
+ * are compatibility VIEWS over the binding for the stable window.__pt
+ * hook surface (tests read them and inject fakes): reading yields the
+ * underlying ref when the binding is of that kind, else null; writing
+ * rebinds, and assigning null clears only a binding of the same kind,
+ * so the two views can be assigned in either order.
+ */
+class Session {
+  file: BoundFile | null = null;
+  dirty = false;
+  saving = false;
+
+  get handle(): FileSystemFileHandle | null {
+    return this.file?.kind === 'handle' ? this.file.ref as FileSystemFileHandle : null;
+  }
+
+  set handle(h: FileSystemFileHandle | null) {
+    if (h) this.file = new HandleFile(h);
+    else if (this.file?.kind === 'handle') this.file = null;
+  }
+
+  get path(): string | null {
+    return this.file?.kind === 'path' ? this.file.ref as string : null;
+  }
+
+  set path(p: string | null) {
+    if (p) this.file = new PathFile(p);
+    else if (this.file?.kind === 'path') this.file = null;
+  }
 }
 
 type PdfSource = File | FileSystemFileHandle | string;
@@ -73,7 +101,7 @@ export class Controller {
   hist = new NavStacks(null);
   search!: SearchController;
   preview!: Preview;
-  session: Session = { handle: null, path: null, dirty: false, saving: false };
+  session = new Session();
 
   // Set true just before we programmatically re-close a window after an async
   // save, so the beforeunload handler lets that close through (see closeAndSave).
@@ -209,7 +237,7 @@ export class Controller {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.docOpen) {
-        if ((this.session.handle || this.session.path) && this.session.dirty) {
+        if (this.session.file && this.session.dirty) {
           this.writeProgressAuto().catch(() => { /* dirty flag stays honest */ });
         }
       }
@@ -273,10 +301,10 @@ export class Controller {
           ? 'saving'
           : this.session.dirty
             ? 'dirty'
-            : (this.session.handle || this.session.path)
+            : this.session.file
               ? 'saved'
               : 'idle',
-        saveBound: !!this.session.handle || !!this.session.path,
+        saveBound: !!this.session.file,
         toast: this.toast_,
         pendingPdfName: this.pendingProgress?.json.pdf.name ?? null,
         confirmPdfName: this.confirmSession?.json.pdf.name ?? null,
@@ -327,7 +355,7 @@ export class Controller {
       this.session.dirty = true;
       this.notify();
     }
-    if (this.session.handle || this.session.path) {
+    if (this.session.file) {
       // Bound to a progress file (handle in the browser, path in the
       // desktop shell): auto-save continuously (debounced).
       clearTimeout(this.fileSaveTimer);
@@ -346,21 +374,10 @@ export class Controller {
    * always come back in the 'prompt' state).
    */
   private async canWriteSilently(): Promise<boolean> {
-    // A desktop path binding writes straight to disk (no permission UI),
-    // so it is always silent.
-    if (this.session.path) return true;
-    const h = this.session.handle;
-    if (!h) return false;
-    if (!h.queryPermission) return true; // API absent (tests fake)
-    try {
-      if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
-      if (window.ptDesktop && h.requestPermission) {
-        return (await h.requestPermission({ mode: 'readwrite' })) === 'granted';
-      }
-      return false;
-    } catch {
-      return true;
-    }
+    // A path binding is always silent (straight to disk, no permission
+    // UI); a handle follows the File System Access permission model —
+    // both live in the binding itself (see boundFile.ts).
+    return this.session.file ? this.session.file.canWriteSilently() : false;
   }
 
   /** Auto-save path: write only when it can happen without a prompt. */
@@ -508,7 +525,8 @@ export class Controller {
    * an auto-save was silently skipped, and the desktop path branch even
    * ran two whole-file writes at once) — each queued write serializes the
    * state as of ITS turn. Returns true only when this call's write ran
-   * and succeeded; a thrown handle write propagates to the caller.
+   * and succeeded; a failed write of either kind (an IPC false, a throwing
+   * handle write) is a false, never a throw.
    */
   async writeProgress(): Promise<boolean> {
     const task = this.saveChain.then(() => this.writeProgressNow());
@@ -518,7 +536,8 @@ export class Controller {
 
   private async writeProgressNow(): Promise<boolean> {
     if (!this.docOpen) return false;
-    if (!this.session.handle && !this.session.path) return false;
+    const file = this.session.file;
+    if (!file) return false;
     this.session.saving = true;
     this.notify();
     try {
@@ -529,22 +548,12 @@ export class Controller {
       const gen = this.dirtyGen;
       // Line-oriented plain-text format: small, clear git diffs.
       const text = serializeProgress(this.progressFileObject());
-      let ok = false;
-      if (this.session.path && window.ptDesktop?.saveSessionToPath) {
-        // Desktop: write straight back to the bound file path (no handle
-        // exists for an OS-opened .ptl).
-        ok = await window.ptDesktop.saveSessionToPath(this.session.path, text);
-      } else if (this.session.handle) {
-        const w = await this.session.handle.createWritable();
-        await w.write(text);
-        await w.close();
-        ok = true;
-      }
+      // ONE write path for both binding kinds (see boundFile.ts).
+      const ok = await file.write(text);
       // Only a SUCCESSFUL write of the NEWEST state clears dirty. A failed
-      // write — the path handler returned false, or a handle write threw
-      // (skips this line) — leaves the change dirty so it's never silently
-      // lost; the next auto-save / manual save / close-flush retries it.
-      // Likewise an edit that arrived mid-write (generation moved on).
+      // write leaves the change dirty so it's never silently lost; the next
+      // auto-save / manual save / close-flush retries it. Likewise an edit
+      // that arrived mid-write (generation moved on).
       if (ok && this.dirtyGen === gen) this.session.dirty = false;
       return ok;
     } finally {
@@ -559,39 +568,32 @@ export class Controller {
     // ---- Acquisition: each branch only DECIDES the write target (boundHandle
     // / boundPath) and whether it already wrote the bytes, then converges on
     // the one block below — so no branch can silently skip the recent-record.
-    let boundHandle = this.session.handle;
-    let boundPath = this.session.path;
+    let bound = this.session.file;
     let alreadyWritten = false;
     let savedViaQueue = false; // the queued writer manages `dirty` itself
 
-    // Desktop: a session already bound to a path writes straight back, no
-    // dialog — through the QUEUED writer, so it can never overlap an
-    // in-flight auto-save (two concurrent whole-file IPC writes), and a
-    // failed write says so instead of silently leaving the change unsaved.
-    if (this.session.path && window.ptDesktop?.saveSessionToPath) {
+    if (bound?.kind === 'path') {
+      // Desktop: a session already bound to a path writes straight back, no
+      // dialog — through the QUEUED writer, so it can never overlap an
+      // in-flight auto-save (two concurrent whole-file IPC writes), and a
+      // failed write says so instead of silently leaving the change unsaved.
       const ok = await this.writeProgress();
       if (!ok) {
-        this.showToast(`Couldn’t write to ${this.session.path}`);
+        this.showToast(`Couldn’t write to ${String(bound.ref)}`);
         return; // write failed — leave the session dirty
       }
       alreadyWritten = true;
       savedViaQueue = true;
     }
-    if (this.session.handle) {
+    if (bound?.kind === 'handle') {
       // User-initiated save: the right moment for a permission prompt if
       // one is needed (auto-save never prompts).
-      try {
-        if (this.session.handle.queryPermission
-            && (await this.session.handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
-          const r = await this.session.handle.requestPermission?.({ mode: 'readwrite' });
-          if (r !== 'granted') {
-            this.showToast('Write permission denied \u2014 session not saved');
-            return;
-          }
-        }
-      } catch { /* proceed; writeProgress surfaces real failures */ }
+      if (!(await bound.requestWrite())) {
+        this.showToast('Write permission denied \u2014 session not saved');
+        return;
+      }
     }
-    if (!alreadyWritten && !this.session.handle) {
+    if (!bound) {
       const suggestedName = this.currentName.replace(/\.pdf$/i, '') + PROGRESS_EXT;
       // The unsaved-close prompt's Save must not touch the file picker:
       // right after a canceled unload, showSaveFilePicker never settles
@@ -601,7 +603,7 @@ export class Controller {
         const saved = await window.ptDesktop.saveSessionFallback(
           serializeProgress(this.progressFileObject()), suggestedName);
         if (!saved) return; // user canceled — no-op
-        boundPath = saved; // the shell dialog binds a path, not a handle
+        bound = fromShellDialog(saved); // the shell dialog binds a path, not a handle
         alreadyWritten = true;
       } else if (!window.showSaveFilePicker) {
         this.showToast('Saving progress files requires a Chromium-based browser');
@@ -625,27 +627,30 @@ export class Controller {
           const saved = await window.ptDesktop.saveSessionFallback(
             serializeProgress(this.progressFileObject()), suggestedName);
           if (!saved) return; // user canceled the shell dialog — no-op
-          boundPath = saved;
+          bound = fromShellDialog(saved);
           alreadyWritten = true;
         }
-        if (picked) boundHandle = picked;
+        if (picked) bound = fromPickerHandle(picked);
       }
     }
 
     // ---- Single convergence point: bind, write if not already, and record
     // the recent for EVERY first-save path (handle OR path). No acquisition
     // branch above may skip this — that was the missed-case bug.
-    this.session.handle = boundHandle;
-    this.session.path = boundPath;
+    this.session.file = bound;
     if (!alreadyWritten) {
       // The queued writer clears dirty itself (generation-aware: an edit
       // arriving mid-write must stay dirty), so no blanket clear here.
       const ok = await this.writeProgress();
       if (!ok) {
-        this.showToast(boundPath
-          ? `Couldn’t write to ${boundPath}`
-          : 'Session not saved — the write failed');
-        return;
+        // A failed path write says which file couldn't be written; a failed
+        // handle write THROWS so saveProgressSafe and the close flow surface
+        // it as "Save failed: …" (the wording the close tests pin).
+        if (bound?.kind === 'path') {
+          this.showToast(`Couldn’t write to ${String(bound.ref)}`);
+          return;
+        }
+        throw new Error('the session file write failed');
       }
     } else if (!savedViaQueue) {
       // The shell save dialog wrote the bytes itself (outside the queued
@@ -656,8 +661,9 @@ export class Controller {
       this.freshSession = false;
       void this.recordRecent(
         this.currentPdfHandle, this.currentPdfPath,
-        boundHandle, boundPath,
-        this.currentName, boundHandle?.name ?? this.baseName(boundPath));
+        bound?.kind === 'handle' ? bound.ref as FileSystemFileHandle : null,
+        bound?.kind === 'path' ? bound.ref as string : null,
+        this.currentName, bound?.name ?? '');
     }
     this.showToast('Session saved');
     this.notify();
@@ -1066,8 +1072,9 @@ export class Controller {
         this.restoring = false;
       }
 
-      this.session.handle = progressHandle;
-      this.session.path = progressPath;
+      // ONE binding (path preferred on the desktop — the silent target).
+      this.session.file = progressPath ? new PathFile(progressPath)
+        : progressHandle ? new HandleFile(progressHandle) : null;
       this.session.dirty = false;
       this.session.saving = false;
       clearTimeout(this.fileSaveTimer);
@@ -1264,8 +1271,8 @@ export class Controller {
     } finally {
       this.restoring = false;
     }
-    this.session.handle = cs.progressHandle;
-    this.session.path = cs.progressPath;
+    this.session.file = cs.progressPath ? new PathFile(cs.progressPath)
+      : cs.progressHandle ? new HandleFile(cs.progressHandle) : null;
     this.session.dirty = false;
     this.session.saving = false;
     clearTimeout(this.fileSaveTimer);
@@ -1303,7 +1310,7 @@ export class Controller {
     // progressFileObject() always serializes the currently open PDF's
     // identity, so marking the session dirty is enough to persist it.
     this.markDirty();
-    if (this.session.handle) {
+    if (this.session.file?.kind === 'handle') {
       this.writeProgress().catch((e) => console.warn('adopt save failed', e));
     }
     this.notify();
