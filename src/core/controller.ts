@@ -789,13 +789,21 @@ export class Controller {
       return;
     }
     const progress: ProgressFile = { ...this.progressFileObject(), state: slot.state };
-    await this.openData(got.bytes, got.name, {
+    const ok = await this.openData(got.bytes, got.name, {
       handle: got.handle,
       source: slot.source,
       progress,
       progressHandle: this.session.handle,
       progressPath: this.session.path,
     });
+    if (!ok) {
+      // openData already toasted the failure; without this gate the slot
+      // bookkeeping below adopted a PDF that never opened and wrote the
+      // session over a blank window.
+      this.lastReplaceAction = 'none';
+      this.notify();
+      return;
+    }
     this.adoptCurrentPdf();
     this.lastReplaceAction = next;
     this.showToast(next === 'redoable'
@@ -905,6 +913,15 @@ export class Controller {
 
   // ---------- opening documents ----------
 
+  /**
+   * Open PDF bytes into the viewer and (re)bind session state. Returns
+   * true only when the document actually opened; false when the open was
+   * superseded by a newer one or the bytes failed to parse (the failure
+   * is toasted here, but callers with follow-up bookkeeping — adopting
+   * the PDF, writing the session, arming undo slots — must gate on it:
+   * the old document is already torn down by then, and pressing on once
+   * overwrote the on-disk reading position with page 1).
+   */
   async openData(
     data: Uint8Array,
     name: string,
@@ -919,7 +936,7 @@ export class Controller {
       /** Re-readable reference to where the bytes came from (for undoable replace). */
       source?: PdfSource | null;
     } = {},
-  ): Promise<void> {
+  ): Promise<boolean> {
     const {
       handle = null, pdfPath = null, progress = null, progressHandle = null,
       progressPath = null, source = null,
@@ -927,7 +944,7 @@ export class Controller {
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
     try {
       const doc = await this.viewer.open({ data });
-      if (!doc) return;
+      if (!doc) return false; // superseded by a newer open
       this.docOpen = true;
       this.currentName = name;
       this.currentSource = source ?? handle ?? null;
@@ -965,9 +982,11 @@ export class Controller {
         progressHandle?.name ?? this.baseName(progressPath));
       this.currentPage = this.viewer.currentPosition().page;
       this.notify();
+      return true;
     } catch (e) {
       console.error(e);
       this.showToast('Failed to open PDF: ' + ((e as Error)?.message ?? String(e)));
+      return false;
     }
   }
 
@@ -1258,7 +1277,20 @@ export class Controller {
     const progressPath = this.session.path; // keep the desktop file binding
     const buf = new Uint8Array(await file.arrayBuffer());
     const source: PdfSource = handle ?? file;
-    await this.openData(buf, file.name, { handle, source, progress, progressHandle, progressPath });
+    const ok = await this.openData(buf, file.name, { handle, source, progress, progressHandle, progressPath });
+    if (!ok) {
+      // The failed open already tore the old document down (viewer.open
+      // closes it before parsing). Leave the on-disk session untouched —
+      // no adopt, no dirty, no "replaced" toast — and arm undo so the
+      // previous PDF is one step away.
+      if (prevSlot) {
+        this.replaceUndoSlot = prevSlot;
+        this.replaceRedoSlot = null;
+        this.lastReplaceAction = 'undoable';
+        this.notify();
+      }
+      return;
+    }
     // Deliberate swap: adopt the new PDF into the session, no banner.
     this.adoptCurrentPdf();
     if (prevSlot) {
