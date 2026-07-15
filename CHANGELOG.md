@@ -3,6 +3,115 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.21
+
+- Saving a reading session into your Documents folder no longer makes
+  macOS ask for permission to access the folder. The system-managed
+  "Open Recent" menu was removed as part of this; the Recent list on
+  the welcome screen is the place to reopen your reading.
+- The Recent list now remembers files however they were opened — a
+  double-click from the Finder or Explorer, a drag onto the window, or
+  the file picker all count — and saving a session for the first time
+  updates its PDF's entry instead of adding a duplicate.
+- Clicking Fit (or making a large zoom jump) no longer leaves a stray
+  ghost of a page floating at the wrong place.
+- Zooming with the buttons or keyboard keeps the page centered instead
+  of pinning it to the left edge.
+- Renaming a trail or history entry now gives the text box the full
+  row; the row's action icons no longer sit on top of it.
+- On Windows, the find bar no longer overlaps the window's
+  minimize/maximize/close buttons.
+- The app icon now sits on Apple's standard icon grid, so it no longer
+  looks oversized next to other apps in the Dock.
+
+## 0.5.20
+
+- Opening a reading session now works the same however you open it —
+  dragging a session onto an already-open PDF, the file picker, Recent,
+  or a double-click all bind it identically, so it auto-saves and closes
+  without asking where to save.
+- Closing a window with unsaved changes saves quietly in the background
+  and only prompts if the save actually fails; this now applies to
+  sessions opened from Recent too.
+- Your unsaved reading sessions are now protected when you shut down or
+  log out — the app holds the shutdown and lets you save first.
+- Recent now remembers each PDF together with its reading session,
+  most-recently-used first.
+- Right-clicking selected text and choosing "Search for this" now fills
+  the find box.
+- Refreshed the interface: crisper icons, and controls and list rows
+  that line up on a consistent grid.
+- New Windows document and installer icons.
+- Updates now install quietly in the background and apply the next time
+  you quit; there is no separate update window.
+
+## 0.5.18
+
+- Opening a reading session now behaves the same however you open it.
+  Before, dragging a session file onto the window or using "Load
+  session…" could leave Paper Trail unsure where to save — so it didn't
+  auto-save, and asked "Do you want to save?" when you closed. Now every
+  way of opening binds the session, so it auto-saves and closes without
+  nagging. (In the browser, closing with unsaved changes still shows the
+  browser's own warning — that can't be avoided on the web.)
+- The Windows installer and the "Installed apps" entry now show a Paper
+  Trail package icon instead of a generic one.
+
+## 0.5.15
+
+- In the macOS update window, Cancel (and closing the window) now simply
+  dismisses it and lets the download keep running in the background,
+  instead of stopping it — updates download automatically, so there's
+  nothing to abort; the next check goes straight to "Restart to Update"
+  once it's ready.
+- On Windows, reopening Paper Trail while an update is installing no
+  longer flashes an empty, broken-looking window: it quietly keeps the
+  current version running and applies the update the next time you quit.
+- Closing a window whose reading session auto-saves no longer asks
+  whether to save — it closes right away and writes your changes in the
+  background. If a save ever fails, the window returns with the normal
+  save prompt so nothing is lost.
+- Double-clicking a reading session (.ptl) now shows its window
+  immediately instead of after a brief delay.
+- When searching, pressing Enter to step through matches keeps a single
+  entry in your history; the next search, after you do something else,
+  starts a fresh one.
+- The rename box no longer shifts the text sideways when you start
+  editing.
+
+## 0.5.13
+
+- The macOS "Check for Updates…" flow is now a proper update window,
+  like the ones many Mac apps use: it announces the new version and
+  lets you Update Now or Later, shows a progress bar while it downloads
+  — which you can Cancel to stop the download — and offers Restart to
+  Update once it's ready.
+- Documents no longer wear the app's icon: on macOS they get the
+  system-composed document icon, and on Windows a proper page icon with
+  the Paper Trail logo and file-type label.
+- A new app icon — the trail on a dark squircle — identical on macOS,
+  Windows, and the web.
+- The installer and uninstaller use the standard installer icons
+  instead of hand-drawn ones.
+- Scrollbars are the operating system's own dark scrollbars again; on
+  Windows the rail and arrow buttons are back.
+- Windows opened for a document never flash empty first.
+- The reference hover preview opens reliably even while the page is
+  still re-rendering.
+- Opening a reading session (.ptl) and then its PDF now keeps the
+  session bound to that file, so auto-save works and Save no longer
+  asks where to put it.
+- The README gained the new logo plus build and coverage badges.
+
+## 0.5.12 (skipped)
+
+Never released: the tagged build's release workflow startup-failed. The
+owner-keyed CI matrix used a `fromJSON` expression that is valid on a
+normal push but not when the release calls the CI as a reusable workflow
+(workflow_call). Version numbers are not reused, so these changes shipped
+as 0.5.13, with the matrix rewritten to a static matrix plus an
+owner-keyed `runs-on`.
+
 ## 0.5.11
 
 - The Windows installer is no longer pixelated on HiDPI screens.

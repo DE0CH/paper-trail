@@ -17,7 +17,9 @@ export default function SearchBar({ snap, searchRef, open, onClose }: {
   if (!open) return null;
 
   const close = () => {
+    clearTimeout(debounce.current); // a pending debounced search dies with the bar
     if (searchRef.current) searchRef.current.value = '';
+    controller.commitSearch(); // dismissing the find bar (Esc / ×): found it (or gave up), moved on
     void controller.runSearch('', { jump: false });
     onClose();
   };
@@ -41,7 +43,12 @@ export default function SearchBar({ snap, searchRef, open, onClose }: {
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            void controller.gotoMatch(e.shiftKey ? -1 : 1);
+            // flush a pending debounced search: Enter means "search what I
+            // typed, now" — never step the previous query's matches
+            clearTimeout(debounce.current);
+            const q = e.currentTarget.value.trim();
+            if (q !== controller.search.query) void controller.runSearch(q);
+            else void controller.gotoMatch(e.shiftKey ? -1 : 1);
           } else if (e.key === 'Escape') {
             close();
           }

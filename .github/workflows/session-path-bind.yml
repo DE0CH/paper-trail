@@ -1,0 +1,34 @@
+# Focused dev workflow: build + run ONLY the OS-opened-session path-bind
+# test, on BOTH macOS and Windows, for fast per-platform red/green on the
+# Depot mirror. The full ci.yml also runs it (both jobs) for the release.
+
+name: session path-bind test
+
+on:
+  # Push-triggered on these dev branches (a brand-new workflow can't be
+  # dispatched by name until it's on the default branch); dispatch stays
+  # available once it reaches main.
+  push:
+    branches: [fix-ptl-then-pdf-binding, red-ptl-then-pdf-binding]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # One mac + one windows leg — witness the bug/fix on EACH platform.
+        runner: ${{ github.repository_owner == 'de0ch-org' && fromJSON('["depot-macos-latest","depot-windows-2025"]') || fromJSON('["macos-latest","windows-latest"]') }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: OS-opened session binds to its file path
+        shell: bash
+        run: npx electron build-node/test/desktopSessionPathBind.js

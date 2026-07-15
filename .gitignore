@@ -10,3 +10,8 @@ __pycache__/
 dist-electron/
 dist-update-feed/
 coverage/
+
+# Claude Code working dir: fork worktrees + local/transient files.
+# Keep the shared project settings tracked; ignore everything else.
+.claude/*
+!.claude/settings.json

@@ -7,9 +7,10 @@ name: CI
 
 on:
   push:
-    # every branch — feature branches get the same verdicts as main;
-    # tags are excluded (the release workflow runs this via workflow_call)
-    branches: ['**']
+    # main only — per-branch push CI was too costly (owner). Feature
+    # branches validate on demand via workflow_dispatch or a push to the
+    # de0ch-org Depot mirror; tags run this via the release workflow_call.
+    branches: [main]
   pull_request: {}
   workflow_dispatch: {}
   # the release workflow runs this full pyramid first and publishes
@@ -22,6 +23,14 @@ jobs:
       fail-fast: false
       matrix:
         runner: [windows-latest, windows-11-arm]
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): x64 on Depot, arm stays github-hosted. STATIC matrix +
+    # owner-keyed runs-on ON PURPOSE — a fromJSON matrix expression
+    # startup-fails the release's workflow_call (push worked, tag didn't).
+    # Windows always runs on GitHub-hosted runners, never Depot: Depot's
+    # ephemeral Windows has no interactive desktop session, so the electron
+    # desktop-GUI e2e tests can't launch there. Depot handles Mac/Linux;
+    # Windows stays on GitHub (owner policy). main runs everything here anyway.
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -48,14 +57,34 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
+      - name: Unit tests — canvas render-geometry caps
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/renderGeometryUnit.js
+
+      - name: Bound-file unit tests (handle/path file identity)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/boundFileUnit.js
+
+      - name: Recents merge logic (interleaved windows lose nothing)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/recentsMergeUnit.js
+
+      - name: BOM-prefixed session files parse
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/progressBomUnit.js
+
       - name: Unit test coverage (src/core)
         if: ${{ !cancelled() }}
         shell: bash
         run: npm run coverage
 
       - name: Upload coverage to Codecov
-        # one leg is enough — the numbers are platform-independent
-        if: ${{ !cancelled() && matrix.runner == 'windows-latest' }}
+        # one leg is enough — the numbers are platform-independent. Only on
+        # the canonical public repo: the private Depot mirror
+        # (de0ch-org/paper-trail-mirror) isn't registered with Codecov, so
+        # the upload there fails "Repository not found" and, with
+        # fail_ci_if_error, would fail every mirror/Depot dev run.
+        if: ${{ !cancelled() && matrix.runner == 'windows-latest' && github.repository == 'de0ch/paper-trail' }}
         uses: codecov/codecov-action@v5
         with:
           files: coverage/lcov.info
@@ -113,15 +142,158 @@ jobs:
         shell: bash
         run: node build-node/test/previewRebuild.js
 
+      - name: A large scale jump leaves no ghost page (destroyed canvas removed)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/ghostPageAfterFit.js
+
+      - name: A no-anchor zoom stays horizontally centered across the fit boundary
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/offCenterZoom.js
+
+      - name: A huge page at high zoom renders within the canvas caps (not blank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hugePageZoomBlank.js
+
+      - name: A persistently failing page render does not retry-storm
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renderRetryStorm.js
+
+      - name: Replace PDF with a same-named file refreshes the thumbnails
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/staleThumbsAfterReplace.js
+
+      - name: Pinch-gesture state does not survive a document swap
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pinchDocSwap.js
+
+      - name: A devicePixelRatio change re-renders the visible pages
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dprChangeRerender.js
+
+      - name: Search entries commit on the right actions and only those
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchCommitState.js
+
+      - name: Search streams partial results from the worker while indexing
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchWorkerStream.js
+
+      - name: The rename input never shifts the text (no-jank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renameNoShift.js
+
+      - name: Rapid-action race conditions stay consistent (CPU-throttled)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/raceConditions.js
+
+      - name: Every open method binds the same silent-write target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropBindsSilentTarget.js
+
+      - name: A dropped PDF+session pair binds the session as the save target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropPairSessionTarget.js
+
+      - name: An edit during an in-flight save is never marked saved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/writeGenerationDirty.js
+
+      - name: Replacing with a corrupt PDF leaves the session untouched
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceCorruptPdf.js
+
+      - name: A corrupt PDF pick keeps the waiting session
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pendingSessionCorruptPdf.js
+
+      - name: Two windows' recent lists merge (no lost entries)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/recentsTwoWindows.js
+
+      - name: An explicit save queues behind an in-flight auto-save
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/explicitSaveDuringAutosave.js
+
+      - name: Replace undo/redo keeps navigation done since the replace
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceUndoRecapture.js
+
+      - name: Toolbar controls + list rows stay aligned (measured)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/uiAlignment.js
+
+      - name: Renaming a row hides its action icons (full row width)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/editRowActions.js
+
+      - name: Alt+Arrow shortcuts stay out of text fields
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/altArrowsEditing.js
+
+      - name: An open rename never lands on a different history entry
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/histRenameTarget.js
+
+      - name: An aborted panel drag never wedges the resize state
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/resizeDragCancel.js
+
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/desktopE2e.js
 
+      - name: Real drag-drop binds the on-disk path (no getPathForFile stub)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/desktopDropBinds.js
+
+      - name: Right-click "Search for this" fills the find box
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchSelectionBox.js
+
+      - name: The find bar never overlaps the native window controls
+        # Windows-only: reads the titlebar-area-* env vars the Windows
+        # titleBarOverlay sets. macOS keeps its traffic lights top-left,
+        # clear of the right-aligned bar, so this test doesn't run there.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/findBarWindowControls.js
+
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopSave.js
+
+      - name: Saving a session never registers it with the OS Open-Recent (TCC prompt)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopNoRecentDoc.js
 
       - name: Desktop offline regression (no network requests at all)
         if: ${{ !cancelled() }}
@@ -132,6 +304,67 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
+
+      - name: Close with autosave on — no prompt, background flush
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseAutosave.js
+
+      - name: Async close-and-save — a handle-bound session closes silently too
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseAsync.js
+
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopShutdownGuard.js
+
+      - name: A failed auto-save keeps the session dirty (no silent loss)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopWriteFailKeepsDirty.js
+
+      - name: Cancel on the unsaved-close dialog keeps the window open
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseCancelKeepsWindow.js
+
+      # The four steps below drive the REAL native close-confirm dialog
+      # (answered by a native auto-clicker) — the nested-modal teardown race
+      # they pin does not exist under instant dialog stubs.
+      - name: Close + Save… reaches the save-as picker (window-close path)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: close
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: Quit + Save… reaches the save-as picker (quit path)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: quit
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: A failing close-save surfaces and keeps the window
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: save-fails
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: Closed windows are pruned from the unsaved set (self-skips off macOS)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: stale-edited
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: OS-opened session binds to its file path (auto-save + Save)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopSessionPathBind.js
 
       - name: Desktop edge cases (open routing, external links, bounds)
         if: ${{ !cancelled() }}
@@ -150,6 +383,11 @@ jobs:
         shell: bash
         run: npx electron build-node/test/osOpenDerivedTitle.js
 
+      - name: A double-clicked .ptl session reveals its window at once
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/osOpenSessionReveal.js
+
       - name: Jump List New Window task opens a fresh window
         if: ${{ !cancelled() }}
         shell: bash
@@ -159,6 +397,31 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/jumpListRegistration.js
+
+      - name: Shell helper unit tests (bounds placement, argv resolution)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node --test build-node/test/desktopShellUnit.js
+
+      - name: Two quick OS opens land in two windows, one doc each
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/osOpenTwoQuick.js
+
+      - name: A relative CLI path resolves against the caller's directory
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/secondInstanceCwd.js
+
+      - name: A second-instance file open restores a minimized window
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/secondInstanceReveal.js
+
+      - name: Off-screen remembered bounds land back on a real display
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/restoreOffscreenBounds.js
 
       - name: Package the Windows app (unsigned)
         env:
@@ -203,6 +466,14 @@ jobs:
       fail-fast: false
       matrix:
         runner: [windows-latest, windows-11-arm]
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): x64 on Depot, arm stays github-hosted. STATIC matrix +
+    # owner-keyed runs-on ON PURPOSE — a fromJSON matrix expression
+    # startup-fails the release's workflow_call (push worked, tag didn't).
+    # Windows always runs on GitHub-hosted runners, never Depot: Depot's
+    # ephemeral Windows has no interactive desktop session, so the electron
+    # desktop-GUI e2e tests can't launch there. Depot handles Mac/Linux;
+    # Windows stays on GitHub (owner policy). main runs everything here anyway.
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
@@ -249,12 +520,21 @@ jobs:
         shell: bash
         run: node build-node/test/updateWinOpenAfterUpdate.js
 
+      - name: Resilience — hard kill during the install
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinKillDuringInstall.js
+
   mac:
     strategy:
       fail-fast: false
       matrix:
         runner: [macos-latest, macos-15-intel]
-    runs-on: ${{ matrix.runner }}
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): Apple-silicon on Depot, Intel stays github-hosted.
+    # STATIC matrix + owner-keyed runs-on — a fromJSON matrix expression
+    # startup-fails the release's workflow_call.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'macos-latest' && 'depot-macos-latest' || matrix.runner) || matrix.runner }}
     steps:
       - uses: actions/checkout@v5
 
@@ -275,6 +555,22 @@ jobs:
       - name: Unit edge cases (hostile session files, model invariants)
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
+
+      - name: Unit tests — canvas render-geometry caps
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/renderGeometryUnit.js
+
+      - name: Bound-file unit tests (handle/path file identity)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/boundFileUnit.js
+
+      - name: Recents merge logic (interleaved windows lose nothing)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/recentsMergeUnit.js
+
+      - name: BOM-prefixed session files parse
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/progressBomUnit.js
 
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
@@ -325,15 +621,150 @@ jobs:
         shell: bash
         run: node build-node/test/previewRebuild.js
 
+      - name: A large scale jump leaves no ghost page (destroyed canvas removed)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/ghostPageAfterFit.js
+
+      - name: A no-anchor zoom stays horizontally centered across the fit boundary
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/offCenterZoom.js
+
+      - name: A huge page at high zoom renders within the canvas caps (not blank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/hugePageZoomBlank.js
+
+      - name: A persistently failing page render does not retry-storm
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renderRetryStorm.js
+
+      - name: Replace PDF with a same-named file refreshes the thumbnails
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/staleThumbsAfterReplace.js
+
+      - name: Pinch-gesture state does not survive a document swap
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pinchDocSwap.js
+
+      - name: A devicePixelRatio change re-renders the visible pages
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dprChangeRerender.js
+
+      - name: Search entries commit on the right actions and only those
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchCommitState.js
+
+      - name: Search streams partial results from the worker while indexing
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchWorkerStream.js
+
+      - name: The rename input never shifts the text (no-jank)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/renameNoShift.js
+
+      - name: Rapid-action race conditions stay consistent (CPU-throttled)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/raceConditions.js
+
+      - name: Every open method binds the same silent-write target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropBindsSilentTarget.js
+
+      - name: A dropped PDF+session pair binds the session as the save target
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/dropPairSessionTarget.js
+
+      - name: An edit during an in-flight save is never marked saved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/writeGenerationDirty.js
+
+      - name: Replacing with a corrupt PDF leaves the session untouched
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceCorruptPdf.js
+
+      - name: A corrupt PDF pick keeps the waiting session
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/pendingSessionCorruptPdf.js
+
+      - name: Two windows' recent lists merge (no lost entries)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/recentsTwoWindows.js
+
+      - name: An explicit save queues behind an in-flight auto-save
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/explicitSaveDuringAutosave.js
+
+      - name: Replace undo/redo keeps navigation done since the replace
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceUndoRecapture.js
+
+      - name: Toolbar controls + list rows stay aligned (measured)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/uiAlignment.js
+
+      - name: Renaming a row hides its action icons (full row width)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/editRowActions.js
+
+      - name: Alt+Arrow shortcuts stay out of text fields
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/altArrowsEditing.js
+
+      - name: An open rename never lands on a different history entry
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/histRenameTarget.js
+
+      - name: An aborted panel drag never wedges the resize state
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/resizeDragCancel.js
+
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/desktopE2e.js
 
+      - name: Real drag-drop binds the on-disk path (no getPathForFile stub)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/desktopDropBinds.js
+
+      - name: Right-click "Search for this" fills the find box
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchSelectionBox.js
+
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopSave.js
+
+      - name: Saving a session never registers it with the OS Open-Recent (TCC prompt)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopNoRecentDoc.js
 
       - name: Desktop offline regression (no network requests at all)
         if: ${{ !cancelled() }}
@@ -344,6 +775,67 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopAutosave.js
+
+      - name: Close with autosave on — no prompt, background flush
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseAutosave.js
+
+      - name: Async close-and-save — a handle-bound session closes silently too
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseAsync.js
+
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopShutdownGuard.js
+
+      - name: A failed auto-save keeps the session dirty (no silent loss)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopWriteFailKeepsDirty.js
+
+      - name: Cancel on the unsaved-close dialog keeps the window open
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopCloseCancelKeepsWindow.js
+
+      # The four steps below drive the REAL native close-confirm dialog
+      # (answered by a native auto-clicker) — the nested-modal teardown race
+      # they pin does not exist under instant dialog stubs.
+      - name: Close + Save… reaches the save-as picker (window-close path)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: close
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: Quit + Save… reaches the save-as picker (quit path)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: quit
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: A failing close-save surfaces and keeps the window
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: save-fails
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: Closed windows are pruned from the unsaved set (self-skips off macOS)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: stale-edited
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
+      - name: OS-opened session binds to its file path (auto-save + Save)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopSessionPathBind.js
 
       - name: Desktop edge cases (open routing, external links, bounds)
         if: ${{ !cancelled() }}
@@ -361,25 +853,33 @@ jobs:
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/osOpenDerivedTitle.js
 
+      - name: A double-clicked .ptl session reveals its window at once
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/osOpenSessionReveal.js
+
       - name: Jump List New Window task opens a fresh window
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/newWindowTask.js
 
-      - name: Software Update window flow (states, buttons, Later)
+      - name: Shell helper unit tests (bounds placement, argv resolution)
         if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateWindow.js
+        run: node --test build-node/test/desktopShellUnit.js
 
-      - name: Restart to Update guards unsaved sessions (Cancel/Save)
+      - name: Two quick OS opens land in two windows, one doc each
         if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateRestartUnsaved.js
+        run: npx electron build-node/test/osOpenTwoQuick.js
 
-      - name: Update window edge cases (up to date, errors, resume, no re-download)
+      - name: A relative CLI path resolves against the caller's directory
         if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateWindowEdges.js
+        run: npx electron build-node/test/secondInstanceCwd.js
 
-      - name: Restart edge cases (re-check after Cancel, second window, Don't Save)
+      - name: A second-instance file open restores a minimized window
         if: ${{ !cancelled() }}
-        run: npx electron build-node/test/updateRestartEdges.js
+        run: npx electron build-node/test/secondInstanceReveal.js
+
+      - name: Off-screen remembered bounds land back on a real display
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/restoreOffscreenBounds.js
 
       - name: Package the macOS app (unsigned)
         env:
@@ -407,7 +907,11 @@ jobs:
       fail-fast: false
       matrix:
         runner: [macos-latest, macos-15-intel]
-    runs-on: ${{ matrix.runner }}
+    # Public repo (de0ch): both CPU arches, GitHub-hosted. Private mirror
+    # (de0ch-org): Apple-silicon on Depot, Intel stays github-hosted.
+    # STATIC matrix + owner-keyed runs-on — a fromJSON matrix expression
+    # startup-fails the release's workflow_call.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && (matrix.runner == 'macos-latest' && 'depot-macos-latest' || matrix.runner) || matrix.runner }}
     env:
       HAS_CERT: ${{ secrets.MAC_CERT_P12 != '' }}
     steps:
@@ -458,14 +962,6 @@ jobs:
 
       - name: Closed-stdio regression (Finder launches must not crash)
         run: node build-node/test/desktopStdioClosed.js
-
-      - name: Window update install test (update window through Restart to Update)
-        if: env.HAS_CERT == 'true'
-        run: node build-node/test/updateMacWindowInstall.js
-
-      - name: Cancel-then-quit test (abandoned restart, silent install on plain quit)
-        if: env.HAS_CERT == 'true'
-        run: node build-node/test/updateMacCancelThenQuit.js
 
       # LAST: this one replaces the packaged bundle with the new version,
       # so every test needing the current version must run before it.

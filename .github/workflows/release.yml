@@ -16,6 +16,10 @@ on:
 
 permissions:
   contents: write
+  # The reusable ci.yml requests id-token: write for the Codecov OIDC
+  # upload; a called workflow can't be granted more than its caller, so
+  # this must be here or release.yml startup-fails to call ci.yml.
+  id-token: write
 
 jobs:
   check-version:

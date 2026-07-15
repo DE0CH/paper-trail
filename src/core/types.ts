@@ -62,14 +62,6 @@ export interface OutlineNode {
   children: OutlineNode[];
 }
 
-export interface RecentEntry {
-  fp: string;
-  name: string;
-  ts: number;
-  handle?: FileSystemFileHandle;
-  progressHandle?: FileSystemFileHandle;
-}
-
 export type MenuAction =
   | 'open' | 'save' | 'save-from-close' | 'load-session' | 'replace-pdf' | 'back' | 'forward'
   | 'undo' | 'redo' | 'mark' | 'mark-branch' | 'reanchor'
@@ -103,11 +95,32 @@ declare global {
     }) => Promise<FileSystemFileHandle>;
     ptDesktop?: {
       platform: string; // process.platform of the shell ('darwin', 'win32', ...)
+      // On-disk path of a File the renderer holds (drop / picker handle /
+      // input), so every open method binds the same silent-write target.
+      getPathForFile?: (file: File) => string;
+      // Native "Load session…" open dialog: returns the picked .ptl's text
+      // and real path so the session binds directly. Null on cancel.
+      openSessionDialog?: () => Promise<{ name: string; text: string; path: string } | null>;
       onMenu: (cb: (action: MenuAction, payload?: string) => void) => void;
-      onOpenFile: (cb: (file: { name: string; data: ArrayBuffer }) => void) => void;
+      onOpenFile: (cb: (file: { name: string; data: ArrayBuffer; path?: string }) => void) => void;
       showContextMenu: (ctx: ContextMenuRequest) => Promise<string | null>;
       setDocumentEdited: (edited: boolean) => void;
       saveSessionFallback: (text: string, suggestedName: string) => Promise<string | null>;
+      saveSessionToPath?: (path: string, text: string) => Promise<boolean>;
+      // Read a file's bytes by on-disk path — reopening a path-based recent
+      // (an OS-opened / input-fallback / shell-saved file with no handle).
+      // null if the file is gone or unreadable.
+      readFileByPath?: (path: string) => Promise<ArrayBuffer | null>;
+      // The native "save your reading session?" dialog on close, shown by the
+      // renderer only when the async close-save couldn't write silently.
+      confirmCloseSave?: () => Promise<'save' | 'dont-save' | 'cancel'>;
+      // The close flow kept the window open (Cancel / canceled picker /
+      // failed save) — lets a pending quit stop waiting for this window.
+      closeFlowKeptWindow?: () => void;
+      // DORMANT: a SYNCHRONOUS flush kept for the deferred OS-shutdown fast-path
+      // (a time-boxed shutdown can't wait for the async close-save). Not used by
+      // the normal close flow any more — see Controller.closeAndSave.
+      saveSessionOnClose?: (path: string, text: string) => boolean;
       openInNewWindow: (name: string, data: ArrayBuffer) => void;
     };
     __pt?: unknown;

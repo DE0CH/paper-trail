@@ -2,12 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { controller, type Snapshot } from '../core/controller';
 import {
   IconSidebar, IconToc, IconBack, IconForward, IconSwap, IconGitHub,
+  IconMinus, IconPlus,
 } from './icons';
 
-const btn = 'px-2.5 py-1 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
-const input = 'bg-inputbg text-fgapp border border-borderapp rounded-md px-2 py-1 outline-none focus:border-accent';
+// Every interactive control in the toolbar shares ONE height (h-7 = 28px)
+// so the whole bar reads as a single row: text buttons used to be ~26.2px
+// (py-1 + the 18.2px line box) while icon buttons and the page input were
+// 28px, so the hover pills didn't line up. Fixed height + items-center
+// centres the label vertically; box-border keeps the input the same 28px
+// despite its 1px frame.
+const btn = 'inline-flex items-center h-7 px-2.5 rounded-md text-fgapp hover:bg-hoverrow disabled:text-[#5a5b60] disabled:hover:bg-transparent cursor-pointer disabled:cursor-default';
+const input = 'bg-inputbg text-fgapp border border-borderapp rounded-md h-7 px-2 outline-none focus:border-accent';
 const sep = <span className="w-px h-5 bg-borderapp mx-1" />;
-const iconBtn = `${btn} inline-flex items-center justify-center h-7 px-2`;
+const iconBtn = `${btn} justify-center px-2`;
 
 export default function Toolbar({
   snap,
@@ -108,9 +115,9 @@ export default function Toolbar({
       <span id="pageCount" className="text-dim">/ {snap.numPages}</span>
       {sep}
 
-      <button className={btn} title="Zoom out" onClick={() => controller.zoomOut()}>&minus;</button>
-      <span className="text-dim min-w-10 text-center">{snap.zoomPercent}%</span>
-      <button className={btn} title="Zoom in" onClick={() => controller.zoomIn()}>+</button>
+      <button id="btnZoomOut" className={iconBtn} title="Zoom out" onClick={() => controller.zoomOut()}><IconMinus /></button>
+      <span id="zoomPct" className="text-dim min-w-10 text-center">{snap.zoomPercent}%</span>
+      <button id="btnZoomIn" className={iconBtn} title="Zoom in" onClick={() => controller.zoomIn()}><IconPlus /></button>
       <button className={btn} title="Fit width" onClick={() => controller.fitWidth()}>Fit</button>
 
       {/* Web-only: the desktop app behaves like an offline app and should

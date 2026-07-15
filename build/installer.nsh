@@ -22,7 +22,7 @@
   StrCmp $R0 "0" 0 notRunning_${PT_UID}
 
   IfSilent close_${PT_UID}
-  MessageBox MB_OKCANCEL|MB_ICONINFORMATION `${PRODUCT_NAME} is running. Click OK to close it - you will be asked to save any unsaved reading session first.` /SD IDOK IDOK close_${PT_UID}
+  MessageBox MB_OKCANCEL|MB_ICONINFORMATION `${PRODUCT_NAME} is running. Click OK to close it.` /SD IDOK IDOK close_${PT_UID}
   SetErrorLevel 4
   Quit
 
@@ -43,7 +43,7 @@ wait_${PT_UID}:
 giveUp_${PT_UID}:
   ; still running: the app (or its user) declined to close
   IfSilent abort_${PT_UID}
-  MessageBox MB_OK|MB_ICONEXCLAMATION `${PRODUCT_NAME} is still running - it may be waiting for you to save your reading session. Finish up in the app, then run the installer again.`
+  MessageBox MB_OK|MB_ICONEXCLAMATION `${PRODUCT_NAME} is still running - please close it and run the installer again.`
 
 abort_${PT_UID}:
   SetErrorLevel 4
@@ -51,4 +51,12 @@ abort_${PT_UID}:
 
 notRunning_${PT_UID}:
   !undef PT_UID
+!macroend
+
+; Windows' "Installed apps" / Add-Remove-Programs list reads DisplayIcon.
+; electron-builder's default left it showing the stock uninstaller icon
+; (the red no-entry circle). Anchor it to the installed app exe, whose
+; embedded icon is the app icon (the trail).
+!macro customInstall
+  WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\${UNINSTALL_APP_KEY}" "DisplayIcon" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
 !macroend

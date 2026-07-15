@@ -10,6 +10,7 @@ import {
   type PageViewport,
 } from 'pdfjs-dist';
 import type { Pos } from './types';
+import { backingGeometry } from './renderGeometry';
 
 GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -39,6 +40,11 @@ export interface PageRec {
   annotDiv: HTMLDivElement | null;
   annots: Annot[] | null;
   rendered: boolean;
+  // A rendered page whose canvas is currently a stretched smooth-zoom
+  // placeholder (wrong scale, awaiting a fresh render). `rendered` still
+  // means "a canvas is mounted in this shell" so destroyPage can reliably
+  // tear it down; `stale` says that canvas is not yet crisp.
+  stale: boolean;
   renderedScale: number;
   rendering: Promise<void> | null;
   renderFailed?: boolean;
@@ -95,6 +101,39 @@ export class Viewer {
         this.onScrollEvent();
       });
     });
+
+    // Re-render when the window moves to a display with a different
+    // devicePixelRatio (1x <-> 2x): already-rendered pages would otherwise
+    // stay at the old density forever (nothing else invalidates them), and
+    // shells sized with the old dpr would drift sub-pixel from canvases
+    // rendered at the new one. A `resolution` media query fires exactly on
+    // that change; it must be re-armed for each new ratio.
+    const watchDpr = (): void => {
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      const onChange = (): void => {
+        mq.removeEventListener('change', onChange);
+        this.refreshForDprChange();
+        watchDpr();
+      };
+      mq.addEventListener('change', onChange);
+    };
+    watchDpr();
+  }
+
+  /**
+   * Invalidate every page for a new devicePixelRatio: re-size the shells
+   * (their CSS box depends on the dpr) and mark the mounted canvases stale
+   * — kept stretched as placeholders, exactly like a zoom — then re-render
+   * the visible ones crisply at the new density.
+   */
+  refreshForDprChange(): void {
+    if (!this.pages.length) return;
+    for (const p of this.pages) {
+      p.renderFailed = false; // the failure may have been density-related
+      this.markStale(p);
+      this.sizeShell(p);
+    }
+    this.updateVisible();
   }
 
   private loadingTask: ReturnType<typeof getDocument> | null = null;
@@ -124,6 +163,7 @@ export class Viewer {
         annotDiv: null,
         annots: null,
         rendered: false,
+        stale: false,
         renderedScale: 0,
         rendering: null,
         textReady: null,
@@ -143,11 +183,25 @@ export class Viewer {
     this.doc = null;
     this.pages = [];
     this.viewerEl.replaceChildren();
+    // A close can land mid-pinch: never let the gesture's CSS transform
+    // (beginVisualZoom/applyVisualZoom) leak onto the next document.
+    this.viewerEl.style.transform = '';
+    this.viewerEl.style.willChange = '';
     this.lastPage = 0;
   }
 
   get numPages(): number {
     return this.pages.length;
+  }
+
+  /**
+   * Monotonic document generation: bumps whenever a document opens or
+   * closes. Lets per-document caches (thumbnails, timers armed against a
+   * document) detect a swap even when the name and page count both match
+   * (e.g. Replace PDF with a revised same-named file).
+   */
+  get docEpoch(): number {
+    return this.epoch;
   }
 
   computeFitScale(): number {
@@ -173,27 +227,22 @@ export class Viewer {
     // pixels (backing / dpr); flooring here while the canvas backing store
     // rounds separately would make the bitmap resample slightly (~2.001:1
     // instead of 2:1) and every glyph goes soft.
-    const dpr = this.effectiveDpr(p);
-    const { cssW, cssH } = this.exactPageCss(p, dpr);
+    const { cssW, cssH } = this.pageGeometry(p);
     p.el.style.width = `${cssW}px`;
     p.el.style.height = `${cssH}px`;
     p.el.style.setProperty('--scale-factor', String(this.scale));
   }
 
-  /** Device pixel ratio used for rendering, after the canvas-area cap. */
-  private effectiveDpr(p: PageRec): number {
-    let dpr = window.devicePixelRatio || 1;
-    const w = p.vp1.width * this.scale;
-    const h = p.vp1.height * this.scale;
-    while (w * dpr * h * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
-    return dpr;
-  }
-
-  /** CSS size that corresponds exactly to the rounded backing store. */
-  private exactPageCss(p: PageRec, dpr: number): { cssW: number; cssH: number; backingW: number; backingH: number } {
-    const backingW = Math.round(p.vp1.width * this.scale * dpr);
-    const backingH = Math.round(p.vp1.height * this.scale * dpr);
-    return { cssW: backingW / dpr, cssH: backingH / dpr, backingW, backingH };
+  /**
+   * Backing-store size and the exactly-corresponding CSS box for a page at
+   * the current scale (shared math — see renderGeometry.ts).
+   */
+  private pageGeometry(p: PageRec): ReturnType<typeof backingGeometry> {
+    return backingGeometry(
+      p.vp1.width * this.scale,
+      p.vp1.height * this.scale,
+      window.devicePixelRatio || 1,
+    );
   }
 
   setScale(
@@ -209,6 +258,15 @@ export class Viewer {
     const st = this.container.scrollTop;
     const sl = this.container.scrollLeft;
     const pos = anchor ? null : this.currentPosition();
+    // No-anchor zoom (toolbar/keyboard): the horizontal offset is otherwise
+    // left to CSS `margin: 0 auto`, which centers the page only while it is
+    // narrower than the viewport. Crossing the fit-width boundary would then
+    // snap it hard to the left. Capture the viewport-center point as a
+    // fraction of the scrollable width so it can be restored across the
+    // boundary (centered when narrower, same center-point when wider).
+    const cw = this.container.clientWidth;
+    const swBefore = this.container.scrollWidth;
+    const centerFrac = swBefore > 0 ? (sl + cw / 2) / swBefore : 0.5;
 
     // Anchored zoom (pinch commit): capture the exact page-relative point
     // under the cursor BEFORE relayout, so it can be restored exactly after
@@ -240,6 +298,7 @@ export class Viewer {
     this.fitWidth = fitWidth;
     this.viewerEl.style.setProperty('--scale-factor', String(scale));
     for (const p of this.pages) {
+      p.renderFailed = false; // a new scale is a fresh chance for a failed page
       this.markStale(p); // keep the old canvas stretched until the new render
       this.sizeShell(p);
     }
@@ -252,6 +311,12 @@ export class Viewer {
         el.offsetLeft + anchorRef.fx * el.offsetWidth - anchorRef.ax;
     } else if (pos) {
       this.scrollTo(pos);
+      // Restore the horizontal center-point after relayout (scrollTo only
+      // touches scrollTop). Clamps to 0 when the page is narrower than the
+      // viewport, so `margin: auto` keeps it centered.
+      const swAfter = this.container.scrollWidth;
+      const maxSl = Math.max(0, swAfter - cw);
+      this.container.scrollLeft = Math.min(Math.max(centerFrac * swAfter - cw / 2, 0), maxSl);
     }
     this.updateVisible();
     this.cb.onScaleChange?.(scale);
@@ -353,7 +418,12 @@ export class Viewer {
       const top = p.el.offsetTop;
       const bot = top + p.el.offsetHeight;
       if (bot >= st - RENDER_MARGIN && top <= st + ch + RENDER_MARGIN) {
-        this.ensureRendered(p);
+        // A page whose render FAILED is not retried from here: updateVisible
+        // runs on every scroll animation frame, so an unconditional retry
+        // becomes a storm of full-canvas allocations against a page that
+        // keeps failing. The flag clears on a scale change (setScale) and a
+        // document change; an explicit ensurePage() may still retry.
+        if (!p.renderFailed) this.ensureRendered(p);
       } else if (!p.pinned && (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN)) {
         this.destroyPage(p);
       }
@@ -361,7 +431,7 @@ export class Viewer {
   }
 
   private ensureRendered(p: PageRec): Promise<void> | null {
-    if ((p.rendered && p.renderedScale === this.scale) || p.rendering) return p.rendering;
+    if ((p.rendered && !p.stale && p.renderedScale === this.scale) || p.rendering) return p.rendering;
     p.renderFailed = false;
     p.rendering = this.render(p)
       .catch((e) => {
@@ -372,8 +442,9 @@ export class Viewer {
         p.rendering = null;
         // A scale/document change can invalidate a render mid-flight (the
         // result is discarded by the guard). Nothing else re-triggers
-        // rendering in that case, so check again.
-        if (!p.rendered && !p.renderFailed) {
+        // rendering in that case, so check again — including a page left
+        // stale (canvas still a placeholder) or rendered at the wrong scale.
+        if (!p.renderFailed && (!p.rendered || p.stale || p.renderedScale !== this.scale)) {
           queueMicrotask(() => this.updateVisible());
         }
       });
@@ -385,11 +456,9 @@ export class Viewer {
     const scale = this.scale;
     const vp = p.page.getViewport({ scale });
     // Render at the full device pixel ratio (browser zoom raises it beyond
-    // 2 on retina displays; capping it makes text soft). Only the total
-    // canvas area is capped (memory / browser limits) — desktop Chromium
-    // handles very large canvases, 64M pixels stays well inside the limits.
-    const dpr = this.effectiveDpr(p);
-    const { cssW, cssH, backingW, backingH } = this.exactPageCss(p, dpr);
+    // 2 on retina displays; capping it makes text soft) — reduced only as
+    // far as the canvas caps demand (see renderGeometry.ts).
+    const { cssW, cssH, backingW, backingH } = this.pageGeometry(p);
 
     const canvas = document.createElement('canvas');
     canvas.width = backingW;
@@ -399,7 +468,8 @@ export class Viewer {
     canvas.style.display = 'block';
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
-    const ctx = canvas.getContext('2d', { alpha: false })!;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) throw new Error('2d canvas context unavailable');
     await p.page.render({
       canvas,
       canvasContext: ctx,
@@ -419,6 +489,7 @@ export class Viewer {
     p.textLayerDiv = tld;
     p.annotDiv = ald;
     p.rendered = true;
+    p.stale = false;
     p.renderedScale = scale;
 
     p.textReady = (async () => {
@@ -494,6 +565,7 @@ export class Viewer {
     if (!p.rendered) return;
     p.el.replaceChildren();
     p.rendered = false;
+    p.stale = false;
     p.renderedScale = 0;
     p.canvas = null;
     p.textLayerDiv = null;
@@ -502,13 +574,17 @@ export class Viewer {
   }
 
   /**
-   * Invalidate a page for re-rendering but keep its old canvas stretched to
-   * the new size as a placeholder (temporarily blurry instead of blank), so
-   * zooming never flashes white. The fresh render replaces it atomically.
+   * Part of the smooth-zoom feature: invalidate a page for re-rendering but
+   * keep its old canvas stretched to the new size as a placeholder
+   * (temporarily blurry instead of blank), so a zoom stays smooth instead of
+   * flashing white. The fresh render replaces it atomically.
    */
   private markStale(p: PageRec): void {
-    if (!p.rendered) return;
-    p.rendered = false;
+    if (!p.canvas) return;
+    // Keep `rendered` true (a canvas is still mounted) so destroyPage can
+    // tear this shell down if the reflow pushes it out of range; `stale`
+    // marks the canvas as a placeholder awaiting a fresh, crisp render.
+    p.stale = true;
     p.renderedScale = 0;
     p.textLayerDiv?.remove(); // absolute px positions don't rescale
     p.annotDiv?.remove();
@@ -517,8 +593,7 @@ export class Viewer {
     p.textReady = null;
     p.el.querySelectorAll('.searchHl').forEach((e) => e.remove());
     if (p.canvas) {
-      const dpr = this.effectiveDpr(p);
-      const { cssW, cssH } = this.exactPageCss(p, dpr);
+      const { cssW, cssH } = this.pageGeometry(p);
       p.canvas.style.width = `${cssW}px`;
       p.canvas.style.height = `${cssH}px`;
     }

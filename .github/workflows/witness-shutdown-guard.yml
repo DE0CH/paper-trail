@@ -1,0 +1,50 @@
+# Focused single-test witness for the OS-shutdown guard. The veto seam is
+# platform-specific (query-session-end on Windows, before-quit on macOS), so
+# both OSes witness it — but each leg runs where it belongs:
+#   - Windows on GitHub-hosted (public de0ch): the electron GUI test needs an
+#     interactive desktop, which Depot's ephemeral Windows lacks; GitHub-hosted
+#     Windows concurrency is fine, and the private mirror won't provision it.
+#   - macOS on Depot (private de0ch-org mirror): GitHub-hosted macOS has a low
+#     concurrency limit (the real bottleneck), so mac goes to Depot.
+# So push a witness branch to BOTH remotes — origin runs the Windows leg, the
+# mirror runs the mac leg; each skips the other. Watch RED (guard reverted) and
+# GREEN (guard applied) at once via the witness branches (globbed below).
+name: Witness shutdown guard
+
+on:
+  workflow_dispatch: {}
+  push:
+    # Globs so fresh red/green iterations (…-red2, …-green2) trigger without
+    # editing this list — append-only, never force-push a witness branch.
+    branches: [witness-shutdown-guard-red*, witness-shutdown-guard-green*]
+
+jobs:
+  windows:
+    # Public repo only: GitHub-hosted Windows is fine; the mirror won't provision it.
+    if: ${{ github.repository_owner == 'de0ch' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/desktopShutdownGuard.js
+
+  mac:
+    # Mirror only: Depot dodges the scarce GitHub-hosted macOS concurrency.
+    if: ${{ github.repository_owner == 'de0ch-org' }}
+    runs-on: depot-macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: OS shutdown is vetoed while a session is unsaved
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/desktopShutdownGuard.js

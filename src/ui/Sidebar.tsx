@@ -7,10 +7,19 @@ import { IconAnchor, IconClose, IconCopy, IconEdit, IconPlus, IconTrash } from '
 // 22px rows on the 13px font (≈1.7em — the classic dark-IDE list
 // metric): the 18.2px text line gets real air inside the highlight,
 // and rows touch instead of leaving phantom gaps.
-const rowBase = 'flex items-center gap-1.5 h-[22px] px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
-// The rename input occupies the exact box of the name span (same font,
-// fixed height, padding compensated by negative margin) so nothing shifts.
-const renameCls = 'rename flex-1 min-w-0 h-5 px-1 -mx-1 bg-inputbg text-fgapp text-[13px] border border-accent rounded outline-none';
+const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 rounded-md cursor-pointer text-dim hover:bg-hoverrow hover:text-fgapp';
+// The rename input must occupy the SAME box as the name span so the text
+// never shifts on edit — match it on BOTH axes: the span's font-size and
+// its inherited line-height (body is 13px/1.4, so a 12px child's line box
+// is 16.8px). A fixed height is the trap: the old `h-5` (20px) was tuned
+// for the 13px font and outlived the 13→12px change, leaving the text in
+// a box 3.2px taller than the span (centres still align, so the box test
+// passed, but the text visibly shifted). Sizing by line-height keeps the
+// two boxes identical whatever the font. Horizontal padding is cancelled
+// by an equal negative margin; the accent outline is an INSET RING
+// (box-shadow, no layout), never a border (a 1px border would push the
+// text 1px right and eat 1px of height).
+const renameCls = 'rename flex-1 min-w-0 leading-[1.4] px-1 -mx-1 bg-inputbg text-fgapp text-[12px] ring-1 ring-inset ring-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
 // One shape for every small row button; the close button additionally
 // keeps a permanent flex slot so all rows align on it.
@@ -61,7 +70,7 @@ function StackRow({ snap, id, name }: {
         />
       ) : (
         <span
-          className="name flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+          className="name flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px]"
           onDoubleClick={(e) => {
             e.stopPropagation();
             setEditing(true);
@@ -94,16 +103,18 @@ function StackRow({ snap, id, name }: {
           </button>
         </span>
       )}
-      <button
-        className={`x ${toolBtn} flex-none ${active ? '' : 'opacity-0'} group-hover:opacity-100`}
-        title="Close this trail"
-        onClick={(e) => {
-          e.stopPropagation();
-          controller.stackClose(id);
-        }}
-      >
-        <IconClose size={14} />
-      </button>
+      {!editing && (
+        <button
+          className={`x ${toolBtn} flex-none ${active ? '' : 'opacity-0'} group-hover:opacity-100`}
+          title="Close this trail"
+          onClick={(e) => {
+            e.stopPropagation();
+            controller.stackClose(id);
+          }}
+        >
+          <IconClose />
+        </button>
+      )}
     </div>
   );
 }
@@ -113,10 +124,22 @@ function HistRow({ label, page, current, index, removable }: {
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // History rows are addressed by index, so a structural history change
+  // (mark, clear, remove, undo…) can move this row onto a DIFFERENT
+  // entry while a rename is open — and native menu actions don't blur
+  // the input first. Cancel the editor instead of ever committing the
+  // stale text to whatever entry now sits at this index. The ref also
+  // vetoes the blur-commit in case the unmounting input still blurs.
+  const cancelled = useRef(false);
   useEffect(() => {
     if (editing) {
+      cancelled.current = false;
       inputRef.current?.focus();
       inputRef.current?.select();
+      return controller.hist.onStructureChange(() => {
+        cancelled.current = true;
+        setEditing(false);
+      });
     }
   }, [editing]);
 
@@ -136,20 +159,20 @@ function HistRow({ label, page, current, index, removable }: {
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter') {
-              controller.entryRename(index, (e.target as HTMLInputElement).value);
+              if (!cancelled.current) controller.entryRename(index, (e.target as HTMLInputElement).value);
               setEditing(false);
             } else if (e.key === 'Escape') {
               setEditing(false);
             }
           }}
           onBlur={(e) => {
-            controller.entryRename(index, e.target.value);
+            if (!cancelled.current) controller.entryRename(index, e.target.value);
             setEditing(false);
           }}
         />
       ) : (
         <span
-          className="lbl flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+          className="lbl flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px]"
           onDoubleClick={(e) => {
             e.stopPropagation();
             setEditing(true);
@@ -182,7 +205,7 @@ function HistRow({ label, page, current, index, removable }: {
           </button>
         </span>
       )}
-      {removable && (
+      {!editing && removable && (
         <button
           className={`rmEntry ${toolBtn} flex-none ${current ? '' : 'opacity-0'} group-hover:opacity-100`}
           title="Remove this entry from the trail"
@@ -191,7 +214,7 @@ function HistRow({ label, page, current, index, removable }: {
             controller.entryRemove(index);
           }}
         >
-          <IconClose size={14} />
+          <IconClose />
         </button>
       )}
     </div>
@@ -245,8 +268,8 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
-        <div className="flex items-center h-9 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12.5px] px-1">Trails</span>
+        <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
+          <span className="text-dim text-[12px] px-1">Trails</span>
           <span className="flex-1" />
           <button
             id="btnNewTrail"
@@ -276,8 +299,8 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden"
         style={{ width: widths.side, minWidth: widths.side }}
       >
-        <div className="flex items-center h-9 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12.5px] px-1">History</span>
+        <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
+          <span className="text-dim text-[12px] px-1">History</span>
           <span className="flex-1" />
           <button
             id="btnMark"

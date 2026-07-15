@@ -320,7 +320,12 @@ async function run(): Promise<void> {
       await page.evaluate(() => {
         localStorage.setItem('pt:ui',
           JSON.stringify({ ...JSON.parse(localStorage.getItem('pt:ui') ?? '{}'), previewH: 900 }));
-        (window as never as { __pt: PtHooks }).__pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+        const pt = (window as never as { __pt: PtHooks }).__pt;
+        pt.viewer.scrollTo({ page: 1, yRatio: 0 });
+        // Clear dirty (a link was clicked above): otherwise the async close-save
+        // beforeunload preventDefaults and blocks this reset reload, so the
+        // small-window preview never gets its chance to appear. [owner-authorized]
+        pt.session.dirty = false;
       });
       await page.reload();
       await page.waitForSelector(LINK_SEL, { timeout: 20000 });

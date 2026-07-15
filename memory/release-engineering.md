@@ -20,6 +20,14 @@ metadata:
   together — the release workflow's built-in CI gate validates the
   release. Non-release work continues OPTIMISTICALLY: push, dispatch,
   iterate; fix forward on failure.
+- NEVER put `[skip actions]`/`[skip ci]` on the version-bump commit a
+  release tag points at (the v0.5.14 mess-up, 2026-07-13): GitHub's skip
+  directive suppresses EVERY workflow for that commit, including the
+  tag-triggered release.yml — so the tag pushes but no release run ever
+  appears (silent no-op, not a startup_failure). The version-bump commit
+  must run clean (no skip); its main-push CI running redundantly
+  alongside release.yml is fine/expected. `[skip actions]` is ONLY for
+  intermediate merge commits that no tag references.
 - NEVER reuse a version number (owner rule): a version that failed to
   build or was blocked gets SKIPPED — no `git tag -f`, no tag moving.
   Rename the unshipped CHANGELOG section to the new version AND add a
@@ -30,6 +38,20 @@ metadata:
   INSIDE release.yml — duplicates the branch-push run; owner explicitly
   prefers self-contained logic over saving runners (rejected the
   wait-for-branch-CI dedup; reverted).
+- REUSABLE-WORKFLOW PERMISSION RULE (the v0.5.12 startup_failure): a
+  called workflow can't be granted MORE permissions than its caller. If
+  ci.yml declares `permissions: id-token: write` (it does — Codecov
+  OIDC), then EVERY caller (release.yml) must ALSO grant `id-token:
+  write` at its top-level `permissions:`, or GitHub refuses to start the
+  release with a bare `startup_failure` (no logs, no failed job). Symptom
+  to recognize: `gh run list` shows the release run as `startup_failure`
+  the instant it's created. Whenever ci.yml's permissions grow, mirror
+  them into release.yml. (A throwaway branch with a minimal
+  `uses: ./ci.yml` caller is the fast way to confirm — it flips from
+  startup_failure to queued the moment the caller's perms match.)
+- ci.yml matrix must be workflow_call-safe: use a STATIC matrix + a
+  `runs-on:` expression for owner-keyed runner selection, NOT
+  `fromJSON` computed matrices.
 - Every release needs a user-facing `## <version>` CHANGELOG section;
   the workflow refuses to build without one and copies it into the
   GitHub Release notes.

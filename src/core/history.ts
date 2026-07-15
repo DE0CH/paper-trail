@@ -29,13 +29,43 @@ export class NavStacks {
   // (gone after save/reopen), and any new action clears the redo side.
   private undoStack: SerializedStacks[] = [];
   private redoStack: SerializedStacks[] = [];
+  // Runtime-only listeners, fired whenever the structure changes shape
+  // (any undoable mutation, undo/redo, load, reset). The UI uses this to
+  // cancel in-flight row editors: history rows are addressed by index, so
+  // a rename committed across a structural change could land on a
+  // different entry than the one it was opened on. Nothing serialized.
+  private structureListeners = new Set<() => void>();
 
   constructor(onChange: ((nav: NavStacks) => void) | null = null) {
     this.onChange = onChange;
     this.reset();
   }
 
-  /** Fresh state for a newly opened document. Clears undo/redo. */
+  /**
+   * Subscribe to shape changes of the entry/stack structure. Returns the
+   * unsubscribe function. Cursor moves (back/forward/jump/switch) do NOT
+   * fire — they re-point into the same structure.
+   */
+  onStructureChange(fn: () => void): () => void {
+    this.structureListeners.add(fn);
+    return () => { this.structureListeners.delete(fn); };
+  }
+
+  private emitStructureChange(): void {
+    for (const fn of [...this.structureListeners]) fn();
+  }
+
+  /**
+   * Fresh state for a newly opened document. Clears undo/redo.
+   *
+   * Deliberately NOT a structure-change event: reset() runs when a
+   * document finishes opening, and a rename opened on the placeholder
+   * rows during the load (the no-jank suite does exactly that) must
+   * survive it — cancelling here made renameNoShift flaky on slow
+   * runners. Every mutation the cancel-on-structure-change guard exists
+   * for (mark, clear, remove, rename, re-anchor, undo/redo, session
+   * load) flows through recordUndo() or load(), which do fire.
+   */
   reset(rootLabel = 'Start'): void {
     this.undoStack = [];
     this.redoStack = [];
@@ -62,6 +92,7 @@ export class NavStacks {
     if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
     this.redoStack = [];
     this.onMutate?.();
+    this.emitStructureChange();
   }
 
   canUndo(): boolean { return this.undoStack.length > 0; }
@@ -296,6 +327,9 @@ export class NavStacks {
       this.activeId = this.stacks.some((s) => s.id === d.activeId)
         ? d.activeId
         : this.stacks[0].id;
+      // load() replaces the whole structure — session loads, and undo/redo
+      // (which restore through here) included.
+      this.emitStructureChange();
       this.emit();
       return true;
     } catch {

@@ -1,0 +1,25 @@
+# Focused single-test witness for the .ptl slow-reveal fix: builds and
+# runs ONLY osOpenSessionReveal on a mac runner (has a display, no xvfb).
+# Used to watch the regression RED (fix reverted) and GREEN (fix applied)
+# at once. Branch-scoped push + dispatch — a brand-new workflow can't be
+# dispatched by name off the default branch, so the witness refs trigger
+# it by push. The reveal logic is platform-agnostic; one OS witnesses it.
+name: Witness ptl reveal
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [witness-ptl-reveal-red, witness-ptl-reveal-green]
+
+jobs:
+  witness:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: A double-clicked .ptl session reveals its window at once
+        run: npx electron build-node/test/osOpenSessionReveal.js

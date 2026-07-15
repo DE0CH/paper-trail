@@ -1,0 +1,42 @@
+# Focused dev workflow: runs ONLY the Windows mid-update-install
+# resilience smoke (hard-kill during the NSIS in-place install) plus its
+# minimal packaging deps — much faster than the full ci.yml pyramid while
+# iterating. Manual dispatch; prefers Depot on the mirror.
+name: Windows update resilience (focused)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  resilience:
+    # Public repo: github-hosted. Private mirror (de0ch-org): Depot x64.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-windows-2025' || 'windows-latest' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: Package the current version (installer only)
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win nsis --publish never
+      - name: Build the next version into the update feed
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        shell: bash
+        run: |
+          npm version patch --no-git-tag-version
+          npx electron-builder --win nsis --publish never -c.directories.output=dist-update-feed
+          git checkout -- package.json package-lock.json
+      - name: Update-feed names match the packaged artifacts
+        shell: bash
+        run: node build-node/test/updateFeedNames.js dist-electron dist-update-feed
+
+      - name: Hard kill during install
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/updateWinKillDuringInstall.js

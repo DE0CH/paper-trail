@@ -10,11 +10,25 @@
     </linearGradient>
   </defs>
 
-  <!-- The squircle plate belongs to the macOS icon only; the icons
-       script strips it (and scales #art up) for the Windows and web
-       icons, which are the bare trail artwork. -->
-  <rect id="plate" x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- The plate is the macOS app-icon shape from Apple's HIG grid: an
+       824×824 square centered on the 1024 canvas (100px gutter on every
+       side), corner radius 185.4, with Apple's continuous-curvature
+       corners rather than a plain rounded rect. The path was generated
+       with figma-squircle@1.1.0 getSvgPath({width:824, height:824,
+       cornerRadius:185.4, cornerSmoothing:0.6}) — 60% smoothing is
+       Figma's "iOS" preset, which matches Apple's icon template. The
+       icons script keeps this plate for the macOS and web icons, draws
+       a proportionally larger plate for the Windows icons (Windows
+       fills the canvas more), and pulls the bare #art for the document
+       icons. -->
+  <path id="plate" transform="translate(100 100)" fill="url(#bg)"
+        d="M 527.36 0 c 103.83 0 155.75 0 195.41 20.21 a 185.4 185.4 0 0 1 81.02 81.02 c 20.21 39.66 20.21 91.58 20.21 195.41 L 824 527.36 c 0 103.83 0 155.75 -20.21 195.41 a 185.4 185.4 0 0 1 -81.02 81.02 c -39.66 20.21 -91.58 20.21 -195.41 20.21 L 296.64 824 c -103.83 0 -155.75 0 -195.41 -20.21 a 185.4 185.4 0 0 1 -81.02 -81.02 c -20.21 -39.66 -20.21 -91.58 -20.21 -195.41 L 0 296.64 c 0 -103.83 0 -155.75 20.21 -195.41 a 185.4 185.4 0 0 1 81.02 -81.02 c 39.66 -20.21 91.58 -20.21 195.41 -20.21 Z"/>
 
+  <!-- #art keeps its historical coordinates (composed for the old
+       896-wide plate) so the document and installer icons, which pull
+       the bare art, are unchanged; this wrapper scales it to the HIG
+       plate (824/896 about the canvas center). -->
+  <g transform="translate(512 512) scale(0.9196429) translate(-512 -512)">
   <g id="art">
     <!-- the main trail: one smooth arc from the start, aimed at the target -->
     <path d="M 270 800 C 330 640, 450 500, 612 408"
@@ -31,5 +45,6 @@
     <!-- current position: the target ring, like the app's re-anchor mark -->
     <circle cx="700" cy="310" r="108" fill="#4f8cff"/>
     <circle cx="700" cy="310" r="54" fill="none" stroke="#ffffff" stroke-width="26"/>
+  </g>
   </g>
 </svg>

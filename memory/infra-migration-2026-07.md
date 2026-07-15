@@ -1,50 +1,149 @@
 ---
 name: infra-migration-2026-07
-description: "2026-07 infra migration — repo moved to de0ch-org, CI moving to Depot runners, Codecov needs re-linking; browser-only blockers must be escalated not hacked"
+description: 2026-07 CI/repo arrangement — public de0ch canonical on GitHub Actions; private de0ch-org mirror for MANUAL Depot dev-loop runs via owner-keyed dynamic runs-on
 metadata: 
   node_type: memory
   type: project
   originSessionId: 66ac1584-fe1c-41ef-b7ba-6a616f203268
 ---
 
-Infra migration in progress (owner-driven, 2026-07-13). Three moving
-parts, all with browser-only steps the owner handles separately:
+Settled arrangement (2026-07-13, after a brief org move was undone).
 
-1. **Repo moved to a GitHub org**: `de0ch/paper-trail` →
-   `de0ch-org/paper-trail` (managed runners are org-only). Git remote
-   already repointed; old URL redirects. Update hardcoded
-   `DE0CH/paper-trail` refs: README badges + Releases link, docs, the
-   About-box copyright in src/desktop/main.ts, Toolbar.tsx.
+**Two remotes on this clone:**
+- `origin` = `github.com/de0ch/paper-trail` — PUBLIC, canonical.
+  Per-commit CI + release run here on normal GitHub Actions (badges,
+  auto-update, Vercel deploy). Unchanged infra. `git push origin`.
+- `mirror` = `github.com/de0ch-org/paper-trail-mirror` — PRIVATE, all
+  branches seeded. `git push mirror <branch>` triggers CI on DEPOT
+  runners (Depot GitHub App installed on de0ch-org; private repo needs
+  no security toggle). Manual, cost-aware — push to the mirror only
+  when a fast/concurrent Depot run is wanted; not every commit needs it.
 
-2. **CI → Depot runners**. Label mapping (do the runs-on swap in-branch;
-   sizes/choices are the agent's):
-   - Linux ubuntu-* → `depot-ubuntu-24.04` (append `-8`/`-16` for heavy;
-     `depot-ubuntu-latest` also works).
-   - macOS macos-latest/15/14 → `depot-macos-latest` (=macos-15) or
-     `depot-macos-14`. Capacity NOT fully elastic (Apple licensing) —
-     occasional QUEUEING is expected, not a fault.
-   - Windows windows-latest/2022 → `depot-windows-2025` /
-     `depot-windows-latest` / `depot-windows-2022`. Depot Windows has
-     NO Hyper-V (AWS EC2) — keep any job needing nested virtualization
-     on github-hosted.
-   - NO Depot equivalent for the arch-specific legs `windows-11-arm`
-     and `macos-15-intel` → keep those github-hosted.
-   - Takes effect only after the org "Allow public repositories"
-     runner-group toggle is ON (public repo; being enabled separately).
-     Until then Depot runs sit queued / no-runner-matching-labels.
+**Repo references stay `DE0CH/paper-trail`** (public canonical). The
+earlier de0ch-org move + the `de0ch-org` ref rewrite were both fully
+undone. Do NOT rewrite refs to de0ch-org.
 
-3. **Codecov re-linking**: uploads fail with `Repository not found`
-   under the new org (ci.yml step is deliberately
-   `fail_ci_if_error: true`, owner's explicit choice — do NOT weaken
-   it). Blocks main CI green until re-linked. Owner handling separately.
+**Per-commit CI is main-push only** (owner, 2026-07-13): ci.yml
+`on.push.branches: [main]` (was `['**']`). Feature branches validate
+on demand — `gh workflow run ci.yml --ref <branch>` or a push to the
+mirror. PREFER the Depot mirror for any manual CI trigger (private, no
+paid GitHub minutes, starts immediately vs the public queue): push the
+branch to `mirror` and `gh workflow run --repo de0ch-org/paper-trail-
+mirror`. RECORDING RUNNERS (ground truth, side-by-side probe 2026-07-13, run
+29219980572):
+- **Windows recordings on Depot** (`depot-windows-2025`): records fine
+  WITH real motion (verified end-to-end, run 29220525182). Recipe:
+  `ffmpeg -y -f gdigrab -framerate 30 -draw_mouse 1 -i desktop -t <sec>
+  out.mp4` (~21-30 fps, smooth; the Basic Display Adapter does NOT hand
+  a frozen buffer). `ddagrab` does NOT work on either runner (no D3D11
+  desktop duplication). The ONE hard limit: resolution is locked at
+  **800×600** — the Basic Display Adapter enumerates 0 display modes and
+  can't be raised via API (would need a firmware/registry framebuffer
+  override + reboot). windows-latest gives 1920×1080 (Hyper-V synthetic
+  GPU). So: SIMPLE Windows recordings → Depot (saves minutes); but
+  POLISHED APP-UI demos → windows-latest, because the app window
+  (~1440×940) is clipped/cramped at 800×600 and 1920×1080 looks
+  materially better. The 800×600 default is also what clamped the
+  desktopEdges window-bounds test. NSIS install works on Depot too.
+- **macOS recordings → github-hosted `macos-14`, NEVER Depot.** Depot
+  macOS (AWS EC2) IS headless, denies osascript assistive access
+  (-25211), and macOS 15 pops a ScreenCaptureKit consent that derails
+  screencapture. macos-14 has a real display + no consent. Depot-macOS viability (probed
+2026-07-13, runner macOS 15.7.3): NOT usable as-is — `screencapture -v`
+(video) exits immediately with no .mov, System Events times out
+(-1712/-25211), cliclick lacks accessibility. BUT Depot has SIP
+DISABLED + passwordless sudo (GitHub has SIP on), so the system TCC.db
+CAN be written to grant Accessibility/AppleEvents/ScreenCapture —
+a possible future path (no browser-only step needed). Unproven: the
+macOS-15 TCC insert schema (17 cols) and whether post-grant
+`screencapture -v` or `ffmpeg -f avfoundation` records. ~1-2 probe
+iterations to settle; not worth it now — keep the recorder on macos-14.
+
+**Depot-Windows env flakes** (AWS EC2, no Hyper-V, different display):
+`desktopEdges` (window-bounds round-trip) and `updateWinOpenAfterUpdate`
+fail there for environment reasons, not code — they pass on GitHub
+windows. Judge a mirror run by the steps that matter, not these two.
+
+**Memory lives on main**; feature branches carry stale copies (they
+branched before the memory commits). Do memory edits on main, commit
+with `[skip actions]` (GitHub honors it — no CI on main for that push).
+
+**Depot via dynamic runs-on** (add before pushing a branch to mirror):
+one workflow file, owner-keyed labels so public uses GitHub-hosted and
+the mirror uses Depot:
+`runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-ubuntu-24.04' || 'ubuntu-latest' }}`
+(and depot-macos-latest/macos-latest, depot-windows-2025/windows-latest).
+Depot has no ARM Windows / Intel macOS and no Hyper-V — keep those legs
+on their github labels. Guard every release/publish/deploy job with
+`if: ${{ github.repository_owner == 'de0ch' }}` so the mirror NEVER
+re-publishes or deploys — only the public repo does.
+
+**CI philosophy (owner, 2026-07-13):** Depot is FASTER, GitHub is higher
+QUALITY (more thorough/authoritative). The speed↔quality tradeoff shifts
+GRADUALLY toward GitHub as you approach release: DEV = fast iteration
+(feature branches → Depot mirror); as work moves toward MAIN + RELEASE it
+moves toward GitHub = quality assurance — run EVERYTHING on GitHub, SIMPLE
+setup, NO convoluted workflow logic (complicated CI logic hurts
+readability + breeds bugs), even redundantly (release.yml re-runs the full
+ci.yml pyramid on purpose) — quality at the expense of workflow time. So
+prefer SIMPLIFYING the workflow over adding clever conditionals; keep
+main's outcome "everything on GitHub."
+
+**Depot split (owner policy):** WINDOWS always on GitHub-hosted, never
+Depot — Depot's ephemeral Windows has no interactive desktop session so
+the electron desktop-GUI e2e tests can't launch there. ci.yml windows/
+windows-update jobs are just `runs-on: ${{ matrix.runner }}` (no Depot
+conditional); Mac keeps the owner-keyed `depot-macos-latest`/`macos-latest`.
+Feature branch on the mirror → Mac/Linux Depot + Windows github-hosted;
+main (de0ch, GitHub) → everything github-hosted.
+
+**Depot-mac expected noise on mirror full-CI runs (2026-07-15):**
+- The desktopSavePickerOnClose suite (real-native-dialog auto-clicker via
+  System Events) can NEVER pass on Depot mac — assistive access is denied
+  (-25211). Those steps failing on a mirror run are environment, not code;
+  judge the run by the other steps (same class as the Windows
+  runner-acquisition failures and the missing Intel-mac legs).
+- searchSelectionBox once HUNG 20+ minutes on Depot mac (run 29390318057;
+  finishes in ~30s healthy; not reproduced since). If a mirror mac leg
+  wedges >15 min on an untouched test: cancel, re-dispatch once, and only
+  then investigate.
+
+**Runner policy (owner, 2026-07-14):** DEFAULT = move as much as
+possible to DEPOT. If a job genuinely REQUIRES a GitHub-hosted runner
+and it's **Windows or Linux**, that's fine — use GitHub freely. If a mac
+job would need GitHub, consider ALTERNATIVES FIRST (Depot, or another
+approach): GitHub-hosted **macOS has a LOW CONCURRENCY LIMIT** and is the
+scarce resource, so don't casually fall back to GitHub mac. Corollary:
+the private de0ch-org mirror does NOT provision GitHub-hosted Windows
+(3-second runner-acquisition failure: empty runner_name, 0 steps — a
+billing/settings block, not transient). So a Windows-only leg that needs
+GitHub runs on ORIGIN (public de0ch, free GitHub Windows), not the
+mirror. Pattern for a platform-specific focused witness: gate per job by
+owner — `if: github.repository_owner == 'de0ch'` for a Windows leg that
+must use GitHub (runs on origin), `if: … == 'de0ch-org'` +
+`runs-on: depot-macos-latest` for the mac leg (Depot on the mirror); push
+the witness branch to BOTH remotes, each runs only its leg.
+
+**Codecov**: linked to de0ch/paper-trail (public). The private mirror
+de0ch-org isn't registered → upload returns "Repository not found". The
+step keeps `fail_ci_if_error: true` (owner's choice — do not weaken) but
+is GATED to the canonical repo: `if: … && github.repository ==
+'de0ch/paper-trail'`, so it runs on origin/main and is skipped on the
+mirror (Depot) rather than failing every mirror Windows job.
+
+**ALWAYS verify a Depot run actually landed on Depot** (owner rule,
+2026-07-14): agents frequently intend a Depot run but it ends up on
+GitHub-hosted anyway — wrong repo (origin instead of the mirror), a job
+whose `runs-on` isn't owner-keyed, a Windows leg (always GitHub), a
+`workflow_dispatch` that defaulted to origin, etc. After starting any
+run you meant for Depot, MONITOR the GitHub Actions run, confirm the
+runner label is a `depot-*` one (check the job's runner in the run
+view/logs), and if it landed on GitHub, fix it (push to `mirror`,
+dispatch on `de0ch-org/paper-trail-mirror`, add the owner-keyed
+`runs-on`) and re-run. Don't assume; check every time.
 
 **Browser-only blockers — escalate, don't hack** (owner rule): GitHub
-org runner-group settings, the Depot dashboard, Depot GitHub App
-permissions, billing/trial — these CANNOT be done from the headless
-box. If the first Depot run is stuck on one of these (no runner, label
-mismatch, auth/runner-group rejection, billing), do NOT loop-retry or
-work around it. Write the exact required action (what to click/enable
-and why) into an owner-visible doc (handoff/report on main, or
-docs/tauri-report/ on the tauri branch) and ask the human (Windows
-Claude-in-Chrome or owner) to intervene. Fix freely anything in YAML /
-labels / git / gh. See [[release-engineering]], [[ci-testing]].
+org settings, the Depot dashboard, Depot App permissions, billing can't
+be done headless. If blocked on one, write the exact required action to
+an owner-visible doc and ask the orchestrator/human. See
+[[release-engineering]], [[ci-testing]].

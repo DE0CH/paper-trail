@@ -19,6 +19,15 @@ html, body, #root {
   overflow: hidden;
   background: var(--color-bgapp);
   color: var(--color-fgapp);
+}
+/* The UI font lives on <body>, NOT <html>. Tailwind's rem-based sizes
+   (h-6, h-8, gap, padding…) resolve against the ROOT (html) font-size,
+   so a 13px font on <html> silently scaled EVERY rem utility to 0.8125×
+   — h-6 rendered 19.5px instead of 24px, cramming the text line into the
+   row (the "bottom-hug"). Leaving <html> at the 16px default keeps the
+   spacing scale on its intended pixels; the 13px UI text is set on <body>
+   and inherits down. */
+body {
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -177,4 +186,14 @@ body.desktopWin #toolbar {
   height: calc(env(titlebar-area-height, 36px) + 1px);
   padding-right: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 8px);
   -webkit-app-region: drag;
+}
+
+/* The find bar floats at the top-RIGHT of the page. On Windows the native
+   min/max/close buttons live in exactly that corner (titleBarOverlay), so
+   the bar's default 44px top tucked its top edge under them. Drop it below
+   the titlebar row — the titlebar-area-height env var is the overlay's own
+   height — so the two never collide. (macOS keeps its traffic lights at the
+   top-LEFT, clear of the right-aligned bar, so it needs no adjustment.) */
+body.desktopWin #searchBar {
+  top: calc(env(titlebar-area-height, 47px) + 5px);
 }

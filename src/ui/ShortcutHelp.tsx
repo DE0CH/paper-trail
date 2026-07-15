@@ -21,7 +21,7 @@ function Row({ keys, label }: { keys: string[]; label: string }) {
       <span className="flex items-center gap-1">
         {keys.map((k, i) => <Key key={i} k={k} />)}
       </span>
-      <span className="text-dim text-[12.5px] ml-2">{label}</span>
+      <span className="text-dim text-[12px] ml-2">{label}</span>
     </div>
   );
 }
@@ -90,7 +90,7 @@ export default function ShortcutHelp({ open, onClose }: { open: boolean; onClose
             title="Close"
             onClick={onClose}
           >
-            <IconClose size={14} />
+            <IconClose />
           </button>
         </div>
         <div className="grid grid-cols-2 gap-x-10 gap-y-4">

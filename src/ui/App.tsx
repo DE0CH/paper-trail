@@ -11,7 +11,10 @@ import Welcome from './Welcome';
 // Each panel owns its width independently: resizing, closing, or opening
 // one panel never changes the others' sizes — neighbors just shift and the
 // viewer absorbs the difference.
-const MIN_W = { nav: 90, stacks: 80, side: 150 } as const;
+// nav min holds the 3 header buttons (expand/collapse/close, ~98px with
+// padding at the intended 28px size) plus room for the two tabs, so the
+// Pages/Outline tabs never slide fully under the buttons on a narrow panel.
+const MIN_W = { nav: 140, stacks: 80, side: 150 } as const;
 const VIEWER_MIN = 260;
 
 const clampW = (v: number, min: number, max: number) =>
@@ -22,7 +25,7 @@ type Widths = { nav: number; stacks: number; side: number };
 function initialWidths(): Widths {
   const ui = loadUI();
   return {
-    nav: clampW(ui.navW ?? 150, MIN_W.nav, 500),
+    nav: clampW(ui.navW ?? 200, MIN_W.nav, 500),
     stacks: clampW(ui.stacksW ?? 150, MIN_W.stacks, 500),
     side: clampW(ui.sideW ?? 290, MIN_W.side, 800),
   };
@@ -36,6 +39,9 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
+  // A pending query to drop into the find box once it mounts (e.g. the
+  // right-click "Search for this" selection). Consumed by the effect below.
+  const [searchSeed, setSearchSeed] = useState<string | null>(null);
   const [widths, setWidths] = useState(initialWidths);
   const [dragOver, setDragOver] = useState(false);
   const [navOpen, setNavOpen] = useState(() => loadUI().navOpen ?? true);
@@ -47,6 +53,7 @@ export default function App() {
   searchOpenRef.current = searchOpen;
   const closeSearch = () => {
     if (searchRef.current) searchRef.current.value = '';
+    controller.commitSearch(); // dismissing the search box: found it (or gave up), moved on
     void controller.runSearch('', { jump: false });
     setSearchOpen(false);
   };
@@ -61,10 +68,18 @@ export default function App() {
   };
   useEffect(() => {
     if (searchOpen) {
+      // The bar is now mounted, so searchRef is live. If a query is
+      // pending (search-selection), fill the box with it — doing this in
+      // an inline microtask right after setSearchOpen fires BEFORE the
+      // mount, when the ref is still null, which left the box empty.
+      if (searchSeed != null && searchRef.current) {
+        searchRef.current.value = searchSeed;
+        setSearchSeed(null);
+      }
       searchRef.current?.focus();
       searchRef.current?.select();
     }
-  }, [searchOpen]);
+  }, [searchOpen, searchSeed]);
 
   const toggleNav = () => setNavOpen((v) => {
     saveUI({ navOpen: !v });
@@ -108,6 +123,10 @@ export default function App() {
         return;
       }
       if (!mod && e.altKey) {
+        // In a text field, Alt+arrows are the caret's own moves (word-wise
+        // on macOS) — the navigation shortcuts must not hijack them and
+        // yank the document away mid-edit.
+        if (editing) return;
         if (e.key === 'ArrowLeft') { e.preventDefault(); controller.goBack(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); controller.goForward(); }
         else if (e.code === 'BracketLeft') { e.preventDefault(); controller.stackCycle(-1); }
@@ -169,8 +188,8 @@ export default function App() {
     if (!window.ptDesktop) return;
     if (window.ptDesktop.platform === 'darwin') document.body.classList.add('desktopMac');
     if (window.ptDesktop.platform === 'win32') document.body.classList.add('desktopWin');
-    window.ptDesktop.onOpenFile(({ name, data }) => {
-      void controller.openFile(new File([data], name));
+    window.ptDesktop.onOpenFile(({ name, data, path }) => {
+      void controller.openFile(new File([data], name), null, path ?? null);
     });
   }, []);
 
@@ -285,14 +304,9 @@ export default function App() {
           break;
         case 'search-selection':
           if (payload) {
+            setSearchSeed(payload); // the effect fills the box once it mounts
             setSearchOpen(true);
-            queueMicrotask(() => {
-              if (searchRef.current) {
-                searchRef.current.value = payload;
-                searchRef.current.focus();
-              }
-              void controller.runSearch(payload);
-            });
+            void controller.runSearch(payload);
           }
           break;
         case 'toggle-sidebar': setSidebarVisible((v) => !v); break;
@@ -341,11 +355,10 @@ export default function App() {
       depth = 0;
       setDragOver(false);
       if (!e.dataTransfer) return;
-      if (controller.getSnapshot().docOpen) {
-        const session = [...e.dataTransfer.files].find((f) => /\.ptl$/i.test(f.name));
-        if (session) void controller.openFile(session);
-        return;
-      }
+      // openDropped handles both cases identically — with a document open it
+      // loads a dropped .ptl (a dropped PDF stays a no-op); with nothing open
+      // it opens the dropped file — and BOTH resolve the desktop path, so a
+      // dropped .ptl binds for auto-save no matter what was already open.
       void controller.openDropped(e.dataTransfer);
     };
     window.addEventListener('dragenter', enter);
@@ -390,9 +403,22 @@ export default function App() {
       const w = clampW(start[which] + ev.clientX - startX, MIN_W[which], max);
       setWidths((prev) => ({ ...prev, [which]: w }));
     };
-    const up = () => {
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
+    // A drag can also end abnormally: a pointercancel, or the handle
+    // unmounting mid-drag (⌘B closes the sidebar), which silently drops
+    // the pointer capture. The listeners live on window — capture
+    // retargets events to the handle, but they still bubble, and window
+    // outlives the handle — plus lostpointercapture on the handle, so
+    // finish() runs exactly once however the drag ends. Otherwise
+    // body.resizing would stick (global col-resize cursor, no text
+    // selection) and the dragged width would never be persisted.
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      handle.removeEventListener('lostpointercapture', finish);
       handle.classList.remove('bg-[rgba(79,140,255,0.35)]');
       document.body.classList.remove('resizing');
       setWidths((prev) => {
@@ -405,8 +431,10 @@ export default function App() {
       });
       controller.refitIfNeeded();
     };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    handle.addEventListener('lostpointercapture', finish);
   };
 
   return (
@@ -439,7 +467,7 @@ export default function App() {
           {snap.mismatch && (
             <div
               id="mismatchBanner"
-              className="flex items-center gap-2 px-3 py-1.5 bg-[#4a3a12] text-[#f0d48a] border-b border-[#6b5518] text-[12.5px]"
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#4a3a12] text-[#f0d48a] border-b border-[#6b5518] text-[12px]"
             >
               <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                 This session was saved with <b>{snap.mismatch.savedName}</b>, but{' '}
@@ -499,7 +527,7 @@ export default function App() {
         <div className="fixed inset-0 z-105 flex items-center justify-center bg-black/50">
           <div id="sessionConfirm" className="bg-panel border border-borderapp rounded-xl p-5 max-w-100 shadow-2xl">
             <div className="text-fgapp font-semibold mb-2">Load this reading session?</div>
-            <div className="text-dim text-[12.5px] leading-relaxed mb-4">
+            <div className="text-dim text-[12px] leading-relaxed mb-4">
               It replaces your current reading history and position for this
               document. (Unsaved history is lost.)
             </div>

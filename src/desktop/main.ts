@@ -17,11 +17,14 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, screen, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
 import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
+import { blockShutdown, unblockShutdown } from './winShutdown';
+import { placeWindow } from './windowPlacement';
+import { resolveFileArgs } from './openArgs';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
 // other end is already closed; a console write (electron-updater logs
@@ -31,6 +34,7 @@ process.stdout.on('error', () => { /* swallow EPIPE */ });
 process.stderr.on('error', () => { /* swallow EPIPE */ });
 
 const SMOKE = process.argv.includes('--smoke');
+
 // build-node/desktop -> project root
 const WEB_ROOT = path.resolve(__dirname, '..', '..', 'dist-web');
 const SCHEME = 'paper-trail';
@@ -78,7 +82,12 @@ function loadBounds(): { width: number; height: number; x?: number; y?: number }
     const s = JSON.parse(fs.readFileSync(stateFile(), 'utf8')) as {
       width: number; height: number; x?: number; y?: number;
     };
-    if (s.width > 300 && s.height > 200) return s;
+    // The remembered position is only trusted while it still lands on a
+    // connected display: after a monitor unplug, verbatim x/y would
+    // restore the window fully off-screen. The size survives either way.
+    if (s.width > 300 && s.height > 200) {
+      return placeWindow(s, screen.getAllDisplays().map((d) => d.workArea));
+    }
   } catch { /* first launch */ }
   return { width: 1440, height: 940 };
 }
@@ -158,24 +167,13 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
     });
   }
 
-  // The web app's beforeunload fires when there is unsaved reading progress;
-  // surface it as a native dialog instead of silently refusing to close.
-  win.webContents.on('will-prevent-unload', (event) => {
-    if (win.isDestroyed()) return;
-    const choice = dialog.showMessageBoxSync(win, {
-      type: 'warning',
-      buttons: ['Save\u2026', 'Don\u2019t Save', 'Cancel'],
-      defaultId: 0,
-      cancelId: 2,
-      message: 'Do you want to save your reading session?',
-      detail: 'Your changes will be lost if you don\u2019t save them.',
-    });
-    // Not plain 'save': right after a canceled unload the renderer's
-    // file picker never settles, so this save must use the shell dialog.
-    if (choice === 0) win.webContents.send('pt-menu', 'save-from-close'); // window stays open
-    else if (choice === 1) event.preventDefault(); // Don't Save: allow the close
-    // Cancel: keep the window open
-  });
+  // beforeunload now CANCELS a dirty close, and the renderer drives an ASYNC
+  // save-then-close (Controller.closeAndSave) while the window is held open \u2014
+  // showing its OWN native dialog via pt-confirm-close-save only if the save
+  // can't happen silently. So we must NOT pop a dialog here: a no-op honors the
+  // cancel (keeps the window open) so the renderer can take over. (Electron's
+  // default with no listener does the same; this is explicit about why.)
+  win.webContents.on('will-prevent-unload', () => { /* renderer handles it */ });
 
   // Native right-click menus for text fields and selections. On mac
   // they come from electron-context-menu (spell-check suggestions, Look
@@ -260,12 +258,48 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
       if (explicitSet && title !== 'Paper Trail') reveal();
     });
     // Patient enough that a slow cold start (pdf.js on a weak machine)
-    // does not fall through to an empty reveal.
-    setTimeout(reveal, 4000);
+    // does not fall through to an empty reveal. Opt-out lets the
+    // session-reveal test isolate the title-driven reveal, so a slow CI
+    // runner's timer can't fire first and hide the real behavior.
+    if (!process.env.PT_NO_SAFETY_REVEAL) setTimeout(reveal, 4000);
   }
 
+  // A dispatched file claims this window (see openPath); the claim
+  // lifts once a document's title lands, or with the window itself.
+  win.webContents.on('page-title-updated', (_event, title, explicitSet) => {
+    if (explicitSet && title !== 'Paper Trail') claimed.delete(win.id);
+  });
+  win.on('closed', () => { claimed.delete(win.id); });
+
   win.on('close', () => saveBounds(win));
-  win.on('closed', () => editedWindows.delete(win.id));
+
+  // Bookkeeping keyed on this window must not outlive it. In particular a
+  // dirty window closed via Don't Save (or save-then-close — the close beats
+  // the renderer's edited=false notification) would stay in editedWindows
+  // forever, making every later quit run the close-all cycle even with
+  // nothing unsaved.
+  const winId = win.id;
+  const wcId = win.webContents.id;
+  win.once('closed', () => {
+    editedWindows.delete(winId);
+    closeFlowBusy.delete(winId);
+    keptOpenResolvers.delete(winId);
+    readyWindows.delete(wcId);
+    queuedFiles.delete(wcId);
+  });
+
+  // Windows OS shutdown/logout: the vetoable query-session-end. A window with
+  // an unsaved session returns FALSE to WM_QUERYENDSESSION (preventDefault),
+  // withholding the shutdown; the reason string was already registered via
+  // blockShutdown() when the session went dirty. A clean window allows it —
+  // any one dirty window's veto is enough to hold the whole shutdown.
+  if (!isMac) {
+    win.on('query-session-end', (event) => {
+      if (!editedWindows.has(win.id)) return;
+      event.preventDefault();
+      void promptSaveAfterShutdownVeto();
+    });
+  }
 
   void win.loadURL(`${SCHEME}://app/index.html`);
   return win;
@@ -278,6 +312,21 @@ const readyWindows = new Set<number>();  // renderer listener registered
 /** A file to deliver: a path on disk, or bytes handed over from a renderer. */
 type QueuedFile = string | { name: string; data: ArrayBuffer };
 const queuedFiles = new Map<number, QueuedFile[]>();
+
+// Deliveries in flight per window (by kind), until the document's title
+// lands. A dispatched file claims its window IMMEDIATELY: routing by
+// title alone let two quick opens hit the same still-empty window, and
+// the renderer's racing opens silently lost one of them. A pending .ptl
+// still accepts one PDF (and vice versa) — the seamless session+PDF
+// pair, either order.
+type ClaimKind = 'pdf' | 'ptl';
+const claimed = new Map<number, Set<ClaimKind>>();
+
+function claimWindow(win: BrowserWindow, kind: ClaimKind): void {
+  const kinds = claimed.get(win.id) ?? new Set<ClaimKind>();
+  kinds.add(kind);
+  claimed.set(win.id, kinds);
+}
 
 function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
   dbg('sendFileTo', typeof item === 'string' ? item : item.name,
@@ -300,8 +349,11 @@ function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
     win.webContents.send('pt-open-file', {
       name,
       data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      // The real on-disk path: an OS-opened .ptl binds to it so the
+      // session auto-saves back silently (there is no
+      // FileSystemFileHandle for a file the shell handed us).
+      path: filePath,
     });
-    app.addRecentDocument(filePath);
     // macOS: title-bar proxy for the real file behind this window.
     if (isMac && /\.pdf$/i.test(filePath)) win.setRepresentedFilename(filePath);
   }).catch((e) => {
@@ -316,27 +368,33 @@ function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
  * empty (its title is the bare app name), and into a new window
  * otherwise. At launch the file goes into the first window (`target`).
  */
-function openPath(filePath: string, target?: BrowserWindow): void {
+function openPath(filePath: string, target?: BrowserWindow): BrowserWindow | null {
   if (!app.isReady()) {
     pendingPaths.push(filePath);
-    return;
+    return null;
   }
-  const empty = (w: BrowserWindow | null): boolean => {
-    if (!w || w.isDestroyed() || w === updateWin) return false;
+  const kind: ClaimKind = /\.ptl$/i.test(filePath) ? 'ptl' : 'pdf';
+  // Empty AND not already spoken for by a same-kind file in flight.
+  const canTake = (w: BrowserWindow | null): w is BrowserWindow => {
+    if (!w || w.isDestroyed() || claimed.get(w.id)?.has(kind)) return false;
     const t = w.getTitle();
     return w.webContents.isLoading() || t === 'Paper Trail' || t === '';
   };
-  let win = target && !target.isDestroyed() ? target : null;
+  let win = target && !target.isDestroyed() && !claimed.get(target.id)?.has(kind)
+    ? target : null;
   // ANY empty window takes the file — focused first, but an idle empty
   // window elsewhere beats spawning an offset new one.
   if (!win) {
     const focused = focusedWindow();
-    if (empty(focused)) win = focused;
-    else win = BrowserWindow.getAllWindows().find(empty) ?? null;
+    if (canTake(focused)) win = focused;
+    else win = BrowserWindow.getAllWindows().find(canTake) ?? null;
   }
   // A brand-new window stays hidden until the document is showing: no
   // flash of an empty window on OS opens.
-  sendFileTo(win ?? createWindow({ showWhenLoaded: true }), filePath);
+  win ??= createWindow({ showWhenLoaded: true });
+  claimWindow(win, kind);
+  sendFileTo(win, filePath);
+  return win;
 }
 
 // macOS: Open With…, drag onto the Dock icon, recent documents.
@@ -345,13 +403,31 @@ app.on('open-file', (event, filePath) => {
   openPath(filePath);
 });
 
-// Windows: the file path arrives in a second process's argv. The
-// taskbar Jump List's "New Window" task arrives the same way, as a
-// second process launched with --new-window.
-app.on('second-instance', (_event, argv) => {
-  const files = argv.filter((a) => /\.(pdf|ptl)$/i.test(a) && fs.existsSync(a));
-  if (files.length) files.forEach((f) => openPath(f));
-  else if (argv.includes('--new-window')) createWindow();
+// Windows: the file path arrives in a second process's argv, together
+// with THAT process's working directory — relative CLI paths must
+// resolve against it, not our own cwd (resolveFileArgs). The taskbar
+// Jump List's "New Window" task arrives the same way, as a second
+// process launched with --new-window.
+app.on('second-instance', (_event, argv, workingDirectory) => {
+  const files = resolveFileArgs(argv, workingDirectory);
+  if (files.length) {
+    const targets = new Set<BrowserWindow>();
+    for (const f of files) {
+      const win = openPath(f);
+      if (win) targets.add(win);
+    }
+    // Bring the receiving window forward: an Explorer double-click while
+    // the app is minimized or behind must not load the file invisibly.
+    // A brand-new still-hidden window is left alone — it reveals itself
+    // once its document is showing (no empty-window flash).
+    for (const win of targets) {
+      if (win.isDestroyed()) continue;
+      if (win.isMinimized()) win.restore();
+      else if (!win.isVisible()) continue;
+      win.show();
+      win.focus();
+    }
+  } else if (argv.includes('--new-window')) createWindow();
   else {
     const win = focusedWindow();
     if (win) { win.show(); win.focus(); }
@@ -390,100 +466,11 @@ function loadSessionDialog(): void {
 
 // ---- automatic updates (GitHub Releases feed) ----
 
-let downloadedVersion: string | null = null;
-
-// ---- the Software Update window ----
-// The standard fixed-size update window: checking → available →
-// downloading (progress bar) → "Restart to Update", driven entirely by
-// the main process. The window is a passive view: it renders the last
-// pushed state and sends back button actions.
-
-type UpdateUiState =
-  | { state: 'checking' }
-  | { state: 'none' }
-  | { state: 'available'; version: string }
-  | { state: 'downloading'; version: string; percent: number }
-  | { state: 'downloaded'; version: string }
-  | { state: 'error'; detail: string };
-
-let updateWin: BrowserWindow | null = null;
-let updateUi: UpdateUiState = { state: 'checking' };
-let availableVersion: string | null = null;
-
-function setUpdateUi(s: UpdateUiState): void {
-  updateUi = s;
-  if (updateWin && !updateWin.isDestroyed()) {
-    updateWin.webContents.send('pt-update-state',
-      { ...s, appVersion: app.getVersion() });
-  }
-}
-
-function openUpdateWindow(): void {
-  if (updateWin && !updateWin.isDestroyed()) {
-    updateWin.focus();
-    return;
-  }
-  updateWin = new BrowserWindow({
-    width: 540,
-    height: 190,
-    useContentSize: true,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    title: 'Software Update',
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'updatePreload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  updateWin.once('ready-to-show', () => {
-    if (!updateWin || updateWin.isDestroyed()) return;
-    if (process.env.PT_SHOT) updateWin.showInactive();
-    else updateWin.show();
-  });
-  updateWin.on('closed', () => { updateWin = null; });
-  void updateWin.loadURL(`${SCHEME}://app/update.html`);
-}
-
-ipcMain.on('pt-update-ready', (event) => {
-  if (updateWin && !updateWin.isDestroyed()
-    && event.sender === updateWin.webContents) {
-    event.sender.send('pt-update-state',
-      { ...updateUi, appVersion: app.getVersion() });
-  }
-});
-
-ipcMain.on('pt-update-action', (event, action: string) => {
-  if (!updateWin || updateWin.isDestroyed()
-    || event.sender !== updateWin.webContents) return;
-  if (action === 'later') updateWin.close();
-  else if (action === 'download') startInteractiveDownload();
-  else if (action === 'restart') void restartToUpdate();
-});
-
-function startInteractiveDownload(): void {
-  const version = availableVersion;
-  if (!version) return;
-  if (downloadedVersion === version) {
-    setUpdateUi({ state: 'downloaded', version });
-    return;
-  }
-  setUpdateUi({ state: 'downloading', version, percent: 0 });
-  // The background check usually has this download in flight already;
-  // re-checking is a no-op then, and restarts the download after an
-  // earlier network failure. Failures surface via the 'error' event.
-  autoUpdater.checkForUpdates().catch(() => { /* the event reports it */ });
-}
-
 /**
- * Updates download in the background and install when the app quits.
- * A toast in the renderer announces a downloaded update; the macOS menu
- * also offers an explicit check with a full download-and-restart flow.
- * Dev/test builds never update; the update tests point the updater at
- * a local feed with PT_UPDATE_URL and observe it via PT_UPDATE_TEST.
+ * Downloads updates in the background and installs them on the next
+ * quit — a fully silent path with no UI. Dev/test builds never update;
+ * the update tests point the updater at a local feed with PT_UPDATE_URL
+ * and observe it via PT_UPDATE_TEST.
  */
 function setupAutoUpdates(): void {
   autoUpdater.autoDownload = true;
@@ -494,27 +481,7 @@ function setupAutoUpdates(): void {
     return;
   }
   autoUpdater.autoInstallOnAppQuit = true;
-  // Background downloads are completely silent: no Dock/taskbar
-  // progress, no toast nagging to restart — the update installs on the
-  // next normal quit and the next start announces it (see
-  // announceUpdateOnFirstRun). Only a download the user asked for in
-  // the update window shows progress on the app icon.
-  autoUpdater.on('download-progress', (p) => {
-    if (updateUi.state === 'downloading') {
-      for (const w of BrowserWindow.getAllWindows()) {
-        if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(p.percent / 100);
-      }
-      setUpdateUi({ ...updateUi, percent: p.percent });
-    }
-  });
   autoUpdater.on('update-downloaded', (info) => {
-    downloadedVersion = info.version;
-    for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed() && w !== updateWin) w.setProgressBar(-1);
-    }
-    if (updateUi.state === 'downloading') {
-      setUpdateUi({ state: 'downloaded', version: info.version });
-    }
     if (process.env.PT_UPDATE_TEST === 'download') {
       console.log(`PT_UPDATE_DOWNLOADED ${info.version}`);
       app.exit(0);
@@ -523,12 +490,8 @@ function setupAutoUpdates(): void {
     }
   });
   autoUpdater.on('error', (e) => {
+    if (/cancell?ed/i.test(String(e))) { dbg('download cancelled'); return; }
     dbg('auto-update error', e);
-    // Only states the window is actively waiting on turn into an error
-    // view; a failed background re-check never hijacks a settled one.
-    if (updateUi.state === 'checking' || updateUi.state === 'downloading') {
-      setUpdateUi({ state: 'error', detail: String(e) });
-    }
     if (process.env.PT_UPDATE_TEST) {
       console.error('PT_UPDATE_ERROR', String(e));
       app.exit(1);
@@ -541,75 +504,121 @@ function setupAutoUpdates(): void {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
-/**
- * Restart into the new version. Document windows close one by one
- * first, so the standard unsaved-session prompt protects every window;
- * if the user keeps any window open (Save… or Cancel), the restart is
- * abandoned and the update window returns to its ready state — the
- * update still installs on the next normal quit.
- */
+// Windows whose reading session has unsaved changes (mirrored from the
+// renderer via pt-document-edited). Drives the unsaved-first close order and
+// tells the OS-shutdown guards whether anything is at risk.
 const editedWindows = new Set<number>();
 
-async function restartToUpdate(): Promise<void> {
+// Close-flow dialogs and writes in flight, per window id (the confirm
+// prompt, the save-as picker, a session write). While one is up the user is
+// deciding — promptCloseAllWindows' wedge timer must not count that time.
+const closeFlowBusy = new Set<number>();
+async function busyWhile<T>(win: BrowserWindow | null, work: () => Promise<T>): Promise<T> {
+  const id = win && !win.isDestroyed() ? win.id : null;
+  if (id != null) closeFlowBusy.add(id);
+  try {
+    return await work();
+  } finally {
+    if (id != null) closeFlowBusy.delete(id);
+  }
+}
+
+// A renderer whose close flow decided to KEEP its window open (Cancel at the
+// prompt, a canceled picker, a failed save) reports it here, so a pending
+// close-all stops waiting for that window at once instead of timing out.
+const keptOpenResolvers = new Map<number, () => void>();
+ipcMain.on('pt-close-kept-open', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) keptOpenResolvers.get(win.id)?.();
+});
+
+/**
+ * Close every document window one by one, unsaved sessions FIRST so each
+ * one's save prompt (the renderer's normal close flow) is answered before any
+ * clean window goes — without the ordering a Cancel could leave a half-closed
+ * workspace. Returns true only if every window actually closed; false the
+ * moment one stays open (the user chose Cancel, canceled the picker, or a
+ * save failed), leaving the rest untouched. Shared by the OS-shutdown guards.
+ *
+ * Waiting is gated on the renderer's DECISION, not wall-clock: each window
+ * either closes ('closed' → keep going) or its close flow reports that it
+ * kept the window open (pt-close-kept-open → stop). The residual timer only
+ * catches a wedged window, and it counts nothing while a close-flow dialog
+ * or write is up (closeFlowBusy) — the user may sit in the save prompt or
+ * the location picker for minutes without the quit being abandoned under
+ * them. A renderer-side write with no shell dialog (a handle-bound save)
+ * is invisible here, so the idle budget stays generous.
+ */
+async function promptCloseAllWindows(): Promise<boolean> {
   const all = [...BrowserWindow.getAllWindows()]
-    .filter((w) => !w.isDestroyed() && w !== updateWin);
-  // Windows with unsaved sessions hold the veto, so they are asked
-  // FIRST; clean windows only close once every unsaved session has
-  // agreed. (getAllWindows has no useful order — without this, a
-  // Cancel could leave a half-closed workspace.)
+    .filter((w) => !w.isDestroyed());
   const ordered = [
     ...all.filter((w) => editedWindows.has(w.id)),
     ...all.filter((w) => !editedWindows.has(w.id)),
   ];
   for (const w of ordered) {
     if (w.isDestroyed()) continue;
+    const wId = w.id;
     const closed = new Promise<boolean>((resolve) => {
-      w.once('closed', () => resolve(true));
-      // Counts only unblocked time: the close prompt is a synchronous
-      // dialog that halts the main process until answered.
-      setTimeout(() => resolve(false), 1500);
+      let timer: NodeJS.Timeout | undefined;
+      let idleLeft = 5000;
+      const TICK = 250;
+      const onClosed = () => settle(true);
+      const settle = (ok: boolean) => {
+        clearTimeout(timer);
+        keptOpenResolvers.delete(wId);
+        w.removeListener('closed', onClosed);
+        resolve(ok);
+      };
+      w.once('closed', onClosed);
+      keptOpenResolvers.set(wId, () => settle(false));
+      const tick = () => {
+        if (!closeFlowBusy.has(wId)) idleLeft -= TICK;
+        if (idleLeft <= 0) { settle(false); return; }
+        timer = setTimeout(tick, TICK);
+      };
+      timer = setTimeout(tick, TICK);
     });
     w.close();
-    if (!(await closed)) {
-      // A window stayed open (Save or Cancel): the restart is
-      // abandoned; the update window returns to its ready state.
-      if (downloadedVersion) {
-        setUpdateUi({ state: 'downloaded', version: downloadedVersion });
-      }
-      return;
-    }
+    if (!(await closed)) return false;
   }
-  autoUpdater.quitAndInstall();
+  return true;
 }
 
-async function checkForUpdatesInteractive(): Promise<void> {
-  if (!app.isPackaged && !process.env.PT_UPDATE_URL) {
-    await dialog.showMessageBox({ message: 'Updates apply to the installed app only.' });
-    return;
-  }
-  openUpdateWindow();
-  const before = updateUi;
-  setUpdateUi({ state: 'checking' });
+// ---- OS shutdown / logout protection --------------------------------------
+// A dirty reading session must survive an OS shutdown/logout, not just a
+// window close (the renderer's async close-save can't finish inside a
+// time-boxed shutdown). macOS routes shutdown/logout — and Cmd+Q — through
+// before-quit, where preventDefault() returns NSTerminateCancel and cancels
+// the whole action. Windows fires the vetoable query-session-end per window,
+// where preventDefault() returns FALSE to WM_QUERYENDSESSION and withholds the
+// shutdown while the OS shows the reason string registered via blockShutdown().
+// Both then drive the SAME per-window save dialog as a normal close.
+
+const SHUTDOWN_BLOCK_REASON = 'Paper Trail has an unsaved reading session.';
+
+// Set while our own app.quit() below re-enters before-quit, so the second pass
+// is allowed straight through.
+let quitApproved = false;
+// One query-session-end fires per window; the save flow must run only once.
+let handlingShutdownVeto = false;
+
+/**
+ * Shutdown was vetoed (Windows). Bring the unsaved window(s) forward so the
+ * save prompt is in view, then run the normal per-window close/save flow.
+ * Windows that close release their block automatically; any left dirty keep
+ * theirs, so a re-attempted shutdown is blocked again.
+ */
+async function promptSaveAfterShutdownVeto(): Promise<void> {
+  if (handlingShutdownVeto) return;
+  handlingShutdownVeto = true;
   try {
-    const r = await autoUpdater.checkForUpdates();
-    const latest = r?.updateInfo.version;
-    if (!latest || latest === app.getVersion()) {
-      setUpdateUi({ state: 'none' });
-      return;
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (editedWindows.has(w.id) && !w.isDestroyed()) { w.show(); w.focus(); }
     }
-    availableVersion = latest;
-    if (downloadedVersion === latest) {
-      setUpdateUi({ state: 'downloaded', version: latest });
-    } else if (before.state === 'downloading' && before.version === latest) {
-      // Checking again mid-download (the window was closed and
-      // reopened) resumes the progress view instead of re-offering
-      // the update; the next progress event refreshes the percent.
-      setUpdateUi(before);
-    } else {
-      setUpdateUi({ state: 'available', version: latest });
-    }
-  } catch (e) {
-    setUpdateUi({ state: 'error', detail: String(e) });
+    await promptCloseAllWindows();
+  } finally {
+    handlingShutdownVeto = false;
   }
 }
 
@@ -621,11 +630,6 @@ function buildMenu(): void {
       label: app.name,
       submenu: [
         { role: 'about' },
-        {
-          id: 'check-updates',
-          label: 'Check for Updates\u2026',
-          click: () => void checkForUpdatesInteractive(),
-        },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -641,11 +645,6 @@ function buildMenu(): void {
         { type: 'separator' },
         // Opens in a new window (unless the current one is still empty).
         { label: 'Open\u2026', accelerator: 'CmdOrCtrl+O', click: () => openDialog() },
-        ...(isMac ? [{
-          label: 'Open Recent',
-          role: 'recentDocuments' as const,
-          submenu: [{ role: 'clearRecentDocuments' as const }],
-        }] : []),
         { type: 'separator' },
         { label: 'Save Reading Session', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
         { label: 'Load Reading Session\u2026', accelerator: 'CmdOrCtrl+Shift+O', click: () => loadSessionDialog() },
@@ -816,14 +815,111 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
 // delegates here, and the file is written by the main process.
 ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedName: string }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const { canceled, filePath } = await dialog.showSaveDialog(win!, {
-    defaultPath: req.suggestedName,
+  if (!win) return null;
+  return busyWhile(win, async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: req.suggestedName,
+      filters: [{ name: 'Reading session', extensions: ['ptl'] }],
+    });
+    if (canceled || !filePath) return null;
+    await fs.promises.writeFile(filePath, req.text, 'utf8');
+    return filePath;
+  });
+});
+
+// "Load session…" on the desktop: a NATIVE open dialog (not the Chromium
+// showOpenFilePicker) so we get the file's real on-disk path back with the
+// bytes. The renderer binds that path as the silent-write target directly,
+// so auto-save arms and the window closes with no "save?" prompt — the same
+// as an OS-opened .ptl, and without depending on resolving a File System
+// Access handle's path. Returns null when the user cancels or the read fails.
+ipcMain.handle('pt-open-session-dialog', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return null;
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
     filters: [{ name: 'Reading session', extensions: ['ptl'] }],
   });
+  const filePath = filePaths[0];
   if (canceled || !filePath) return null;
-  await fs.promises.writeFile(filePath, req.text, 'utf8');
-  app.addRecentDocument(filePath);
-  return filePath;
+  try {
+    const text = await fs.promises.readFile(filePath, 'utf8');
+    return { name: path.basename(filePath), text, path: filePath };
+  } catch (e) {
+    console.warn('could not read session', filePath, e);
+    return null;
+  }
+});
+
+// Silent write-back for a session bound to an on-disk path (an
+// OS-opened .ptl, or one just saved through the shell dialog): auto-save
+// and in-app Save target it directly, no dialog. Returns whether it wrote.
+ipcMain.handle('pt-save-session-to-path', async (
+  event, req: { path: string; text: string }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return busyWhile(win, async () => {
+    try {
+      await fs.promises.writeFile(req.path, req.text, 'utf8');
+      return true;
+    } catch (e) {
+      console.warn('could not write session to', req.path, e);
+      return false;
+    }
+  });
+});
+
+// Read a file's bytes by on-disk path, so the renderer can reopen a
+// path-based recent (a PDF/.ptl bound without a FileSystemFileHandle).
+ipcMain.handle('pt-read-file', async (_event, filePath: string): Promise<ArrayBuffer | null> => {
+  try {
+    const buf = await fs.promises.readFile(filePath);
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  } catch (e) {
+    console.warn('could not read file', filePath, e);
+    return null;
+  }
+});
+
+// The close-save dialog, requested by the renderer's async close flow ONLY
+// when it couldn't write silently (never-saved session, denied permission, or
+// a failed write). Native, so it looks like the platform's. Returns the choice.
+// ASYNC (showMessageBox, never …Sync) — load-bearing: the synchronous variant
+// runs a nested modal loop that freezes this process's JS queue while the
+// renderer's cancelled close is still settling. The queued unload-prevented
+// ack then rots past Chromium's beforeunload patience, and the moment the
+// dialog closes the window is torn down — before the save-as picker can
+// appear. The user clicked "Save…" and the never-saved session was lost
+// (observed on both platforms). The async dialog keeps the queue turning, so
+// the close settles while the user reads the prompt and the window survives
+// to be saved.
+ipcMain.handle('pt-confirm-close-save', async (event): Promise<'save' | 'dont-save' | 'cancel'> => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return 'cancel';
+  return busyWhile(win, async () => {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Save…', 'Don’t Save', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      message: 'Do you want to save your reading session?',
+      detail: 'Your changes will be lost if you don’t save them.',
+    });
+    return response === 0 ? 'save' : response === 1 ? 'dont-save' : 'cancel';
+  });
+});
+
+// DORMANT — kept for the deferred OS-shutdown fast-path. A time-boxed OS
+// shutdown (Windows session-end / mac before-quit) can't wait for the renderer's
+// async close-save, so it will still need this SYNCHRONOUS write. NOT used by
+// the normal close flow any more (the renderer now saves async via closeAndSave).
+ipcMain.on('pt-save-session-on-close', (event, req: { path: string; text: string }) => {
+  try {
+    fs.writeFileSync(req.path, req.text, 'utf8');
+    event.returnValue = true;
+  } catch (e) {
+    console.warn('could not flush session on close to', req.path, e);
+    event.returnValue = false;
+  }
 });
 
 // The dot in the macOS close button mirrors unsaved session changes.
@@ -831,14 +927,26 @@ ipcMain.on('pt-document-edited', (event, edited: boolean) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
   win.setDocumentEdited(!!edited);
-  // restartToUpdate asks windows with unsaved sessions first.
-  if (edited) editedWindows.add(win.id);
-  else editedWindows.delete(win.id);
+  // The OS-shutdown guards ask windows with unsaved sessions first.
+  if (edited) {
+    editedWindows.add(win.id);
+    // Windows: register the reason NOW (no-op elsewhere) so it is already in
+    // place when the OS composes its shutdown screen; the query-session-end
+    // veto is what actually withholds the shutdown.
+    blockShutdown(win, SHUTDOWN_BLOCK_REASON);
+  } else {
+    editedWindows.delete(win.id);
+    unblockShutdown(win);
+  }
 });
 
 // A PDF picked in an occupied window opens in a window of its own.
 ipcMain.on('pt-open-new-window', (_event, file: { name: string; data: ArrayBuffer }) => {
-  sendFileTo(createWindow(), file);
+  const win = createWindow();
+  // The handed-over PDF is in flight: a racing OS open must not treat
+  // this window as empty and pile a second document into it.
+  claimWindow(win, 'pdf');
+  sendFileTo(win, file);
 });
 
 ipcMain.on('pt-open-file-ready', (event) => {
@@ -965,6 +1073,19 @@ void app.whenReady().then(() => {
       probe();
     });
   }
+});
+
+// macOS: OS shutdown/logout AND Cmd+Q both arrive here. Hold the quit while
+// any session is unsaved and drive the normal save dialog; only quit once
+// every window has agreed. (Windows uses per-window query-session-end.)
+app.on('before-quit', (event) => {
+  if (!isMac || quitApproved) return;
+  if (editedWindows.size === 0) return; // nothing unsaved → quit normally
+  event.preventDefault();               // NSTerminateCancel until the user decides
+  void (async () => {
+    if (await promptCloseAllWindows()) { quitApproved = true; app.quit(); }
+    // else a window stayed open (Save…/Cancel) → quit abandoned
+  })();
 });
 
 app.on('activate', () => {

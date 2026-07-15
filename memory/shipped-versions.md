@@ -1,15 +1,35 @@
 ---
 name: shipped-versions
-description: "Release history v0.3.4 → v0.5.11 — what each version shipped, skipped versions, verification results"
+description: "Release history v0.3.4 → v0.5.13 — what each version shipped, skipped versions, verification results"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 66ac1584-fe1c-41ef-b7ba-6a616f203268
 ---
 
-Latest released: **v0.5.11**. All releases verified post-publish:
+Latest released: **v0.5.13**. All releases verified post-publish:
 dash-named assets, updater URLs 200, deploy-web green.
 
+- v0.5.13 PUBLISHED+verified (10 assets): Sparkle-style native
+  "Software Update" WINDOW (offer "A new version…available" → Update
+  Now → progress bar → "Ready to update" → Restart to Update) with an
+  interruptable Cancel that stops the download mid-flight; native doc
+  icons; plated app icon everywhere; NSIS stock installer icons; native
+  scrollbars; no-flash windows; hover preview; .ptl-then-PDF
+  save-binding fix (opening a session then its PDF keeps auto-save
+  bound, no Save-As prompt); mac+win update-resilience tests (SIGKILL /
+  taskkill /F, mid-install kill, corrupt download — electron-updater's
+  atomic staging proved resilient, no product bug found). update-flash-
+  close CUT (see docs/flash-close-finding.md — held fix skips the
+  update; deferred, needs owner decision).
+- v0.5.12 SKIPPED: release.yml startup-failed. Cause: the reusable
+  ci.yml requests `id-token: write` (Codecov OIDC, added after 0.5.11)
+  but release.yml (the CALLER) only granted `contents: write` — a
+  called workflow can't exceed its caller's permissions → GitHub
+  refuses to start it (startup_failure). Fixed by adding
+  `id-token: write` to release.yml's permissions (v0.5.13). Also
+  rewrote ci.yml's owner-keyed matrix from `fromJSON` to static-matrix
+  + `runs-on` expression (workflow_call-safe). See [[release-engineering]].
 - v0.5.11 PUBLISHED+verified (10 assets): HiDPI-crisp NSIS installer
   (customHeader ManifestDPIAware), taskbar Jump List New Window
   (setAppUserModelId on win32), dark blended scrollbars (superseded by
@@ -39,12 +59,11 @@ dash-named assets, updater URLs 200, deploy-web green.
 - v0.3.4: first signed+notarized mac build (spctl "Notarized Developer
   ID" verified).
 
-Since 0.5.11 on main (unreleased, queued for v0.5.12): derived-title
-no-flash fix, native doc icons (mac: afterPackMac strips
-CFBundleTypeIconFile → LaunchServices composes; win: page+logo+label),
-plated app icon everywhere (win/web too), NSIS stock installer icons,
-native scrollbars (custom CSS deleted), core-gap tests + parseProgress
-hardening, c8+Codecov (OIDC, 96.18%, informational), CI on every
-branch push, review workflows (mac-screenshot, windows-file-icons,
-mac-scrollbar, mac-update-ui), preview survives annotation-layer
-rebuilds (merge ec848e2). See [[release-engineering]].
+On main since v0.5.13 (unreleased): recorder drip widened to ~24s
+(2f3c56a) so the canceled update recording's Cancel lands mid-download.
+Review/recording workflows on main: mac-screenshot, windows-file-icons,
+mac-scrollbar, mac-update-ui (the "macOS update UI recording"
+workflow_dispatch — records finished + canceled Sparkle-window videos
+on macos-14, uploads artifact "sparkle-update-window"). c8+Codecov
+(OIDC, informational) drives the id-token requirement above. See
+[[release-engineering]].
