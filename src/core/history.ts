@@ -55,11 +55,20 @@ export class NavStacks {
     for (const fn of [...this.structureListeners]) fn();
   }
 
-  /** Fresh state for a newly opened document. Clears undo/redo. */
+  /**
+   * Fresh state for a newly opened document. Clears undo/redo.
+   *
+   * Deliberately NOT a structure-change event: reset() runs when a
+   * document finishes opening, and a rename opened on the placeholder
+   * rows during the load (the no-jank suite does exactly that) must
+   * survive it — cancelling here made renameNoShift flaky on slow
+   * runners. Every mutation the cancel-on-structure-change guard exists
+   * for (mark, clear, remove, rename, re-anchor, undo/redo, session
+   * load) flows through recordUndo() or load(), which do fire.
+   */
   reset(rootLabel = 'Start'): void {
     this.undoStack = [];
     this.redoStack = [];
-    this.emitStructureChange();
     this.init(rootLabel);
     this.emit();
   }

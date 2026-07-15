@@ -96,6 +96,40 @@ async function run(): Promise<void> {
     await page.evaluate(() => {
       (window as never as PtWin).__pt.session.dirty = false;
     });
+
+    // Scenario 3 — the placeholder rows are visible before a document
+    // opens, and the no-jank suite opens renames in that window. The
+    // history reset that fires when the document finishes opening is
+    // NOT an editor-cancelling structural change: the editor must
+    // survive the open (cancelling here made renameNoShift flaky on
+    // slow runners).
+    const page2 = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+    page2.on('dialog', (d) => void d.accept());
+    await page2.goto(BASE + '/');
+    await page2.dblclick('.histItem[data-idx="0"] .lbl');
+    const preInput = page2.locator('.histItem input.rename');
+    await preInput.waitFor({ state: 'visible', timeout: 5_000 });
+    await preInput.fill('PREOPEN');
+    await page2.evaluate(async () => {
+      const res = await fetch('sample/WStarCats.pdf');
+      const data = await res.arrayBuffer();
+      await (window as never as {
+        __pt: { controller: { openFile: (f: File, x: null, p: null) => Promise<void> } };
+      }).__pt.controller.openFile(new File([data], 'WStarCats.pdf'), null, null);
+    });
+    await page2.waitForSelector('#pageInput:not([disabled])', { timeout: 20_000 });
+    check('a rename opened before the document finished opening survives it',
+      await preInput.isVisible());
+    check('the surviving editor keeps its text',
+      await preInput.inputValue().catch(() => '') === 'PREOPEN');
+    await page2.keyboard.press('Escape');
+    const preLabels = await labels(page2);
+    check('escaping the surviving editor commits nothing',
+      preLabels[0] === 'Start', `labels=${JSON.stringify(preLabels)}`);
+    await page2.evaluate(() => {
+      (window as never as PtWin).__pt.session.dirty = false;
+    });
+    await page2.close();
   } finally {
     await browser.close();
   }
