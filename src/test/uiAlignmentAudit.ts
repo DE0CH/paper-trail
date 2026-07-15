@@ -311,8 +311,21 @@ async function run(): Promise<void> {
     await shot(page, 'help-overlay', '#shortcutOverlay div');
     await page.keyboard.press('Escape');
 
-    // ---- seed one recent entry so the welcome screen shows the list ----
-    await page.evaluate(async () => {
+    await page.evaluate(() => {
+      (window as never as { __pt: { session: { dirty: boolean } } }).__pt.session.dirty = false;
+    });
+
+    // ---- 4+5: the welcome screen's Recent block ------------------------
+    // Seed one recent from an EMPTY page (openFile on a page with a
+    // document already open routes to a new window and records nothing
+    // here), then revisit the welcome screen to render the list.
+    const w = await context.newPage();
+    w.on('dialog', (d) => void d.accept());
+    await w.goto(BASE + '/');
+    await w.waitForFunction(() =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      !!(window as any).__pt?.controller, undefined, { timeout: 20_000 });
+    await w.evaluate(async () => {
       /* eslint-disable @typescript-eslint/no-explicit-any */
       const c = (window as any).__pt.controller;
       const bytes = new Uint8Array(
@@ -320,20 +333,13 @@ async function run(): Promise<void> {
       await c.openFile(new File([bytes], 'WStarCats.pdf'), null, '/tmp/pt-audit/WStarCats.pdf');
       /* eslint-enable @typescript-eslint/no-explicit-any */
     });
-    await page.waitForFunction(() => {
+    await w.waitForFunction(() => {
       /* eslint-disable @typescript-eslint/no-explicit-any */
       const c = (window as any).__pt.controller;
       return c.getSnapshot().recents.length > 0;
       /* eslint-enable @typescript-eslint/no-explicit-any */
     }, undefined, { timeout: 20_000 });
-    await page.waitForTimeout(400); // let the IndexedDB write settle
-    await page.evaluate(() => {
-      (window as never as { __pt: { session: { dirty: boolean } } }).__pt.session.dirty = false;
-    });
-
-    // ---- 4+5: the welcome screen's Recent block ------------------------
-    const w = await context.newPage();
-    w.on('dialog', (d) => void d.accept());
+    await w.waitForTimeout(400); // let the IndexedDB write settle
     await w.goto(BASE + '/');
     await w.waitForSelector('#recent .recentItem', { timeout: 20_000 });
     await w.evaluate(installHelpers);
