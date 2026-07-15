@@ -6,6 +6,10 @@
 name: Focus gate-slow
 
 on:
+  # push trigger because a workflow that has never been on the default
+  # branch is not registered for workflow_dispatch by filename.
+  push:
+    branches: ["fix-gate-slow-runners", "fix-gate-slow-runners-red"]
   workflow_dispatch:
     inputs:
       mac:
