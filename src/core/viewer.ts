@@ -10,6 +10,7 @@ import {
   type PageViewport,
 } from 'pdfjs-dist';
 import type { Pos } from './types';
+import { backingGeometry } from './renderGeometry';
 
 GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -100,6 +101,39 @@ export class Viewer {
         this.onScrollEvent();
       });
     });
+
+    // Re-render when the window moves to a display with a different
+    // devicePixelRatio (1x <-> 2x): already-rendered pages would otherwise
+    // stay at the old density forever (nothing else invalidates them), and
+    // shells sized with the old dpr would drift sub-pixel from canvases
+    // rendered at the new one. A `resolution` media query fires exactly on
+    // that change; it must be re-armed for each new ratio.
+    const watchDpr = (): void => {
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      const onChange = (): void => {
+        mq.removeEventListener('change', onChange);
+        this.refreshForDprChange();
+        watchDpr();
+      };
+      mq.addEventListener('change', onChange);
+    };
+    watchDpr();
+  }
+
+  /**
+   * Invalidate every page for a new devicePixelRatio: re-size the shells
+   * (their CSS box depends on the dpr) and mark the mounted canvases stale
+   * — kept stretched as placeholders, exactly like a zoom — then re-render
+   * the visible ones crisply at the new density.
+   */
+  refreshForDprChange(): void {
+    if (!this.pages.length) return;
+    for (const p of this.pages) {
+      p.renderFailed = false; // the failure may have been density-related
+      this.markStale(p);
+      this.sizeShell(p);
+    }
+    this.updateVisible();
   }
 
   private loadingTask: ReturnType<typeof getDocument> | null = null;
@@ -149,11 +183,25 @@ export class Viewer {
     this.doc = null;
     this.pages = [];
     this.viewerEl.replaceChildren();
+    // A close can land mid-pinch: never let the gesture's CSS transform
+    // (beginVisualZoom/applyVisualZoom) leak onto the next document.
+    this.viewerEl.style.transform = '';
+    this.viewerEl.style.willChange = '';
     this.lastPage = 0;
   }
 
   get numPages(): number {
     return this.pages.length;
+  }
+
+  /**
+   * Monotonic document generation: bumps whenever a document opens or
+   * closes. Lets per-document caches (thumbnails, timers armed against a
+   * document) detect a swap even when the name and page count both match
+   * (e.g. Replace PDF with a revised same-named file).
+   */
+  get docEpoch(): number {
+    return this.epoch;
   }
 
   computeFitScale(): number {
@@ -179,27 +227,22 @@ export class Viewer {
     // pixels (backing / dpr); flooring here while the canvas backing store
     // rounds separately would make the bitmap resample slightly (~2.001:1
     // instead of 2:1) and every glyph goes soft.
-    const dpr = this.effectiveDpr(p);
-    const { cssW, cssH } = this.exactPageCss(p, dpr);
+    const { cssW, cssH } = this.pageGeometry(p);
     p.el.style.width = `${cssW}px`;
     p.el.style.height = `${cssH}px`;
     p.el.style.setProperty('--scale-factor', String(this.scale));
   }
 
-  /** Device pixel ratio used for rendering, after the canvas-area cap. */
-  private effectiveDpr(p: PageRec): number {
-    let dpr = window.devicePixelRatio || 1;
-    const w = p.vp1.width * this.scale;
-    const h = p.vp1.height * this.scale;
-    while (w * dpr * h * dpr > 64_000_000 && dpr > 0.5) dpr *= 0.8;
-    return dpr;
-  }
-
-  /** CSS size that corresponds exactly to the rounded backing store. */
-  private exactPageCss(p: PageRec, dpr: number): { cssW: number; cssH: number; backingW: number; backingH: number } {
-    const backingW = Math.round(p.vp1.width * this.scale * dpr);
-    const backingH = Math.round(p.vp1.height * this.scale * dpr);
-    return { cssW: backingW / dpr, cssH: backingH / dpr, backingW, backingH };
+  /**
+   * Backing-store size and the exactly-corresponding CSS box for a page at
+   * the current scale (shared math — see renderGeometry.ts).
+   */
+  private pageGeometry(p: PageRec): ReturnType<typeof backingGeometry> {
+    return backingGeometry(
+      p.vp1.width * this.scale,
+      p.vp1.height * this.scale,
+      window.devicePixelRatio || 1,
+    );
   }
 
   setScale(
@@ -255,6 +298,7 @@ export class Viewer {
     this.fitWidth = fitWidth;
     this.viewerEl.style.setProperty('--scale-factor', String(scale));
     for (const p of this.pages) {
+      p.renderFailed = false; // a new scale is a fresh chance for a failed page
       this.markStale(p); // keep the old canvas stretched until the new render
       this.sizeShell(p);
     }
@@ -374,7 +418,12 @@ export class Viewer {
       const top = p.el.offsetTop;
       const bot = top + p.el.offsetHeight;
       if (bot >= st - RENDER_MARGIN && top <= st + ch + RENDER_MARGIN) {
-        this.ensureRendered(p);
+        // A page whose render FAILED is not retried from here: updateVisible
+        // runs on every scroll animation frame, so an unconditional retry
+        // becomes a storm of full-canvas allocations against a page that
+        // keeps failing. The flag clears on a scale change (setScale) and a
+        // document change; an explicit ensurePage() may still retry.
+        if (!p.renderFailed) this.ensureRendered(p);
       } else if (!p.pinned && (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN)) {
         this.destroyPage(p);
       }
@@ -407,11 +456,9 @@ export class Viewer {
     const scale = this.scale;
     const vp = p.page.getViewport({ scale });
     // Render at the full device pixel ratio (browser zoom raises it beyond
-    // 2 on retina displays; capping it makes text soft). Only the total
-    // canvas area is capped (memory / browser limits) — desktop Chromium
-    // handles very large canvases, 64M pixels stays well inside the limits.
-    const dpr = this.effectiveDpr(p);
-    const { cssW, cssH, backingW, backingH } = this.exactPageCss(p, dpr);
+    // 2 on retina displays; capping it makes text soft) — reduced only as
+    // far as the canvas caps demand (see renderGeometry.ts).
+    const { cssW, cssH, backingW, backingH } = this.pageGeometry(p);
 
     const canvas = document.createElement('canvas');
     canvas.width = backingW;
@@ -546,8 +593,7 @@ export class Viewer {
     p.textReady = null;
     p.el.querySelectorAll('.searchHl').forEach((e) => e.remove());
     if (p.canvas) {
-      const dpr = this.effectiveDpr(p);
-      const { cssW, cssH } = this.exactPageCss(p, dpr);
+      const { cssW, cssH } = this.pageGeometry(p);
       p.canvas.style.width = `${cssW}px`;
       p.canvas.style.height = `${cssH}px`;
     }
