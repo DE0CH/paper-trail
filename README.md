@@ -19,7 +19,7 @@ file you can come back to (or keep in git next to the paper).
 Following references, popping back, jumping around the history, and
 continuing in a new trail:
 
-https://github.com/user-attachments/assets/227b7518-edda-4029-82d1-9846d4006aed
+https://github.com/user-attachments/assets/3aadfc06-6e22-42d8-8901-3a83482db277
 
 <p align="center">
   <img src="docs/media/main.png" width="49%" alt="Two trails in the sidebar after a cmd+click duplicated the first one">
