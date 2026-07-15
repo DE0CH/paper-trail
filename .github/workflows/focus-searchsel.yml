@@ -1,0 +1,30 @@
+# TEMPORARY focused validation for the searchSelectionBox wedge fix
+# (task #38): runs ONLY the fixed searchSelectionBox test plus the
+# permanent wedge-pin regression on windows-latest (the platform of the
+# recorded hang). Deleted from the branch tip once green.
+
+name: Focus searchsel wedge
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [searchsel-wedge]
+
+jobs:
+  fixed-test-and-pin:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Right-click "Search for this" fills the find box (fixed stub)
+        shell: bash
+        run: node build-node/test/searchSelectionBox.js
+      - name: A dirty session at quit exits cleanly (search-selection wedge pin)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: PT_REPRO_STUB=both node build-node/test/searchSelWedgeRepro.js

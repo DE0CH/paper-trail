@@ -287,6 +287,11 @@ jobs:
         shell: bash
         run: node build-node/test/searchSelectionBox.js
 
+      - name: A dirty session at quit exits cleanly (search-selection wedge pin)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: PT_REPRO_STUB=both node build-node/test/searchSelWedgeRepro.js
+
       - name: The find bar never overlaps the native window controls
         # Windows-only: reads the titlebar-area-* env vars the Windows
         # titleBarOverlay sets. macOS keeps its traffic lights top-left,
@@ -787,6 +792,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/searchSelectionBox.js
+
+      - name: A dirty session at quit exits cleanly (search-selection wedge pin)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: PT_REPRO_STUB=both node build-node/test/searchSelWedgeRepro.js
 
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
