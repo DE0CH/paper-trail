@@ -66,10 +66,13 @@ function Thumbnails({ snap }: { snap: Snapshot }) {
   const listRef = useRef<HTMLDivElement>(null);
   const renderedRef = useRef(new Set<number>());
 
-  // Reset thumbnail cache when the document changes.
+  // Reset the thumbnail cache when the document changes. Keyed on the
+  // per-document generation, NOT on (docTitle, numPages): a Replace PDF
+  // with a revised same-named file keeps both, and the panel kept showing
+  // the old document's thumbnails forever.
   useEffect(() => {
     renderedRef.current.clear();
-  }, [snap.docTitle, snap.numPages]);
+  }, [snap.docGeneration]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -89,7 +92,7 @@ function Thumbnails({ snap }: { snap: Snapshot }) {
     );
     list.querySelectorAll('[data-thumb-page]').forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [snap.docOpen, snap.docTitle, snap.numPages]);
+  }, [snap.docOpen, snap.docGeneration, snap.numPages]);
 
   async function renderThumb(holder: HTMLElement, pageNumber: number): Promise<void> {
     const rec = controller.viewer.pages[pageNumber - 1];
@@ -126,10 +129,10 @@ function Thumbnails({ snap }: { snap: Snapshot }) {
     : 1.4;
 
   return (
-    <div ref={listRef} className="flex-1 overflow-auto p-2" id="thumbList">
+    <div ref={listRef} className="flex-1 overflow-auto p-2" id="thumbList" data-doc-gen={snap.docGeneration}>
       {Array.from({ length: snap.numPages }, (_, i) => i + 1).map((n) => (
         <div
-          key={`${snap.docTitle}:${n}`}
+          key={`${snap.docGeneration}:${n}`}
           className={`thumb mb-2 cursor-pointer rounded-sm p-0.5 ${n === snap.currentPage ? 'outline-2 outline-accent' : 'hover:outline-2 hover:outline-[rgba(79,140,255,0.4)]'}`}
           onClick={() => controller.gotoPage(n)}
           title={`Page ${n}`}

@@ -25,6 +25,9 @@ export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 export interface Snapshot {
   docOpen: boolean;
   docTitle: string;
+  /** Monotonic per-document generation (viewer epoch): changes on every
+   * document swap, even to a same-named file with the same page count. */
+  docGeneration: number;
   numPages: number;
   currentPage: number;
   zoomPercent: number;
@@ -242,6 +245,7 @@ export class Controller {
       this.snapshot = {
         docOpen: this.docOpen,
         docTitle: this.currentName,
+        docGeneration: this.viewer ? this.viewer.docEpoch : 0,
         numPages: this.viewer ? this.viewer.numPages : 0,
         currentPage: this.currentPage,
         zoomPercent: this.viewer ? Math.round(this.viewer.scale * 100) : 100,

@@ -157,6 +157,16 @@ export class Viewer {
     return this.pages.length;
   }
 
+  /**
+   * Monotonic document generation: bumps whenever a document opens or
+   * closes. Lets per-document caches (thumbnails, timers armed against a
+   * document) detect a swap even when the name and page count both match
+   * (e.g. Replace PDF with a revised same-named file).
+   */
+  get docEpoch(): number {
+    return this.epoch;
+  }
+
   computeFitScale(): number {
     const w = this.container.clientWidth - 36;
     const base = this.pages[0] ? this.pages[0].vp1.width : 612;
