@@ -24,16 +24,27 @@ src/core/                    framework-agnostic app core:
   viewer.ts                    imperative pdf.js viewer (lazy page windowing,
                                text/annotation layers, zoom, link labels)
   history.ts                   NavStacks: list of history stacks + snapshot undo
-  search.ts                    full-text search, Range-based highlights
+  search.ts                    search, DOM half: Range-based highlights,
+                               current-match handoff
+  searchWorker.ts              search, compute half in a Web Worker: page
+                               text streams in, matches stream back
   preview.ts                   hover preview popup
   progressFormat.ts            .ptl serializer/parser
-  store.ts                     UI prefs (localStorage), IndexedDB recents/handles
+  boundFile.ts                 BoundFile: one identity per opened file
+  recents.ts                   recently-opened list (PDF + session pairs)
+  renderGeometry.ts            canvas backing-store math: size caps,
+                               dpr-exact CSS boxes
+  store.ts                     UI prefs (localStorage) and recents
+                               persistence (IndexedDB)
+  platform.ts, types.ts        modifier-key display names; shared types
   controller.ts                everything wired together; owns all state
 src/ui/                      React components; subscribe to the controller
                              snapshot via useSyncExternalStore
 src/node/server.ts           static server for browser use (127.0.0.1 only)
-src/desktop/                 Electron shell: paper-trail:// protocol, native menus,
-                             minimal contextBridge (menu actions + OS file opens)
+src/desktop/                 Electron shell: paper-trail:// protocol, native
+                             menus (real Win32 popup menus), OS file opens,
+                             window placement, shutdown guard, minimal
+                             contextBridge
 src/test/                    test suites (browser e2e, desktop shell
                              harnesses, installer tests, unit tests)
 src/tools/                   generators and profiling: fixture PDFs,
@@ -45,6 +56,19 @@ desktop/make_app.py          generate the macOS .app bundle
 The core is imperative and owns all state. React renders an immutable
 snapshot (`controller.getSnapshot()`) and calls controller methods. The
 pdf.js canvases and text layers are non-React DOM inside a ref.
+
+A file can reach the app two ways: as a browser `FileSystemFileHandle`
+(pickers, Chromium drag-drop) or as an on-disk path string (OS opens,
+the desktop shell's native dialogs). At acquisition it is wrapped in a
+`BoundFile` (`boundFile.ts`), which is exactly one of the two and owns
+all reading, writing, and permission checks from then on, so nothing
+downstream branches on handle-versus-path.
+
+Full-document search is split across threads: a dedicated Web Worker
+(`searchWorker.ts`) receives each page's text as pdf.js extracts it and
+streams matches back, so a query issued while the index is still
+building shows results immediately and fills in as pages arrive; only
+the DOM work (highlight drawing) stays on the main thread.
 
 ## Building, running, and testing
 
@@ -60,24 +84,28 @@ npm test           # e2e suite — needs `npm start` running
 npm run perf       # performance profile + limit search
 ```
 
-CI additionally runs the desktop-shell harnesses (`test:desktop`,
-`test:offline`, `test:autosave`) and the installer tests
-(`test:install:win` on x64 and ARM machines, `test:install:mac` on
-Intel and Apple silicon), which install the packaged artifacts the way
-a user would and smoke-test the result.
+CI additionally runs a battery of focused browser regression suites,
+the desktop-shell harnesses (`test:desktop`, `test:offline`,
+`test:autosave`, and friends), the auto-update tests (real
+install–update–install cycles on Windows and macOS), and the installer
+tests (`test:install:win` on x64 and ARM machines, `test:install:mac`
+on Intel and Apple silicon), which install the packaged artifacts the
+way a user would and smoke-test the result.
 
 The unit tests (node:test, no extra dependencies) cover the pure core
-modules — the navigation history and the session-file format — and run
+modules — the navigation history, the session-file format, the
+recently-opened list, file binding, and the canvas geometry — and run
 in CI before the e2e suite.
 
-The end-to-end suite drives a headless copy of the locally installed
-Edge or Chrome with playwright-core. It emulates a person using the
-app — clicking PDF links, dragging dividers and text selections,
-sending pinch (ctrl+wheel) bursts, and pressing keyboard shortcuts —
-and asserts the outcomes, down to device-pixel-exact canvas geometry
-and pinch-release position deltas. Please keep element ids and classes
-(`#stacksPanel`, `.pdfLink`, `.searchHl`, and friends) and the
-`window.__pt` hooks stable, because the tests depend on them.
+The end-to-end suite drives a separate headless browser with
+playwright-core — Playwright's version-pinned Chromium where it is
+available, or an installed Edge or Chrome otherwise. It emulates a
+person using the app — clicking PDF links, dragging dividers and text
+selections, sending pinch (ctrl+wheel) bursts, and pressing keyboard
+shortcuts — and asserts the outcomes, down to device-pixel-exact
+canvas geometry and pinch-release position deltas. Please keep element
+ids and classes (`#stacksPanel`, `.pdfLink`, `.searchHl`, and friends)
+and the `window.__pt` hooks stable, because the tests depend on them.
 
 When running the desktop shell next to an installed copy of the app,
 set `PT_USERDATA` to any directory to get a separate profile and a
@@ -122,6 +150,12 @@ session file, then the PDF), and a plain name comparison drives the
 mismatch banner. Older files that still contain `pdf.relPath`,
 `pdf.fingerprint`, or `pdf.size` lines parse fine; those keys are
 ignored.
+
+The `v<N>` header carries the compatibility promise: from 1.0 on the
+format is strictly backward compatible, so every later version of the
+app reads files written by every earlier one, migrating older formats
+on load, while a file from a newer major version is refused with a
+clear message rather than misread.
 
 ## pdf.js v6 embedding notes
 
