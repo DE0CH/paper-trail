@@ -118,13 +118,6 @@ function spawnClicker(): void {
       $root = [System.Windows.Automation.AutomationElement]::RootElement
       $pidCond = New-Object System.Windows.Automation.PropertyCondition(
         [System.Windows.Automation.AutomationElement]::ProcessIdProperty, ${process.pid})
-      # Native dialogs only (MessageBox/TaskDialog both use class #32770):
-      # scanning the app window would reach the renderer's accessibility
-      # tree, whose toolbar has its own "Save" button — invoking that would
-      # drive the app, not the prompt.
-      $clsCond = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ClassNameProperty, '#32770')
-      $winCond = New-Object System.Windows.Automation.AndCondition($pidCond, $clsCond)
       $btnCond = New-Object System.Windows.Automation.PropertyCondition(
         [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
         [System.Windows.Automation.ControlType]::Button)
@@ -132,16 +125,25 @@ function spawnClicker(): void {
         if (Test-Path '${answeredFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'clicked'; exit 0 }
         $seen = @()
         try {
-          $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winCond)
+          # Any window class (TaskDialog is #32770, but never assume): the
+          # confirm prompt is identified by its BUTTON SET — it is the only
+          # window holding both a "Save…" and a "Don't Save" button. That
+          # also keeps the renderer's own toolbar "Save" button (reachable
+          # through the app window's accessibility tree) untouchable.
+          $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
           foreach ($w in $wins) {
             $btns = $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
-            foreach ($b in $btns) {
-              $name = $b.Current.Name
-              $seen += $name
-              if ($name -like 'Save*') {
-                $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-                Write-Output ('uia-invoked: ' + $name)
-                Start-Sleep -Milliseconds 500
+            $names = @(); foreach ($b in $btns) { $names += $b.Current.Name }
+            $seen += $names
+            $isConfirm = ($names -like 'Save*').Count -ge 1 -and ($names -like 'Don*').Count -ge 1
+            if ($isConfirm) {
+              foreach ($b in $btns) {
+                if ($b.Current.Name -like 'Save*') {
+                  $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                  Write-Output ('uia-invoked: ' + $b.Current.Name + ' in ' + $w.Current.ClassName)
+                  Start-Sleep -Milliseconds 500
+                  break
+                }
               }
             }
           }
@@ -228,6 +230,75 @@ Promise<{ canceled: boolean; filePath: string }> => {
   if (!delivered) return { canceled: true, filePath: '' };
   return { canceled: false, filePath: savePath };
 };
+
+// ---- environment canary ----------------------------------------------
+// The windows-11-arm runner never CREATES a native message-box window at
+// all: UIA showed the process keeping exactly one top-level window for
+// the whole life of a pending showMessageBox promise (probe runs
+// 29411888604 / 29412677536), so no clicker of any kind can answer it.
+// Before judging the save flow, prove the environment can display and
+// answer a native dialog: show a parentless canary and auto-answer it.
+// No dialog window in 10s ⇒ the runner cannot display native dialogs
+// (the Depot-mac assistive-access analog) and the mode SELF-SKIPS with
+// an explicit reason. If the canary works, a later unanswered real
+// dialog is a genuine defect and the assertions stand.
+const canaryFlag = path.join(outDir, 'canary.flg');
+function spawnCanaryClicker(): void {
+  if (isMac) return;
+  const ps = `
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $pidCond = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ProcessIdProperty, ${process.pid})
+    $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Button)
+    for ($i = 0; $i -lt 25; $i++) {
+      if (Test-Path '${canaryFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'canary-clicked'; exit 0 }
+      try {
+        $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
+        foreach ($w in $wins) {
+          $btns = $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
+          foreach ($b in $btns) {
+            if ($b.Current.Name -eq 'CanaryOK') {
+              $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+              Write-Output ('canary-invoked in ' + $w.Current.ClassName)
+            }
+          }
+        }
+      } catch { Write-Output ('canary-uia-error: ' + $_.Exception.Message) }
+      if ($i -eq 12) {
+        $desc = @()
+        try {
+          $mine = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
+          foreach ($w in $mine) { $desc += ($w.Current.ClassName + ':' + $w.Current.Name) }
+        } catch {}
+        Write-Output ('canary probe: process windows=[' + ($desc -join '; ') + ']')
+      }
+      Start-Sleep -Milliseconds 400
+    }
+    Write-Output 'canary-gave-up'`;
+  const psFile = path.join(outDir, 'canary.ps1');
+  fs.writeFileSync(psFile, ps, 'utf8');
+  spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psFile],
+    { stdio: 'inherit' });
+}
+async function dialogEnvCanary(): Promise<boolean> {
+  if (isMac) return true; // mac legs answer real dialogs via System Events
+  fs.rmSync(canaryFlag, { force: true });
+  spawnCanaryClicker();
+  const shown = (realMsgAsync as unknown as
+    (o: Electron.MessageBoxOptions) => Promise<Electron.MessageBoxReturnValue>)({
+      type: 'info', buttons: ['CanaryOK'], message: 'Paper Trail dialog canary',
+    }).then(() => true as const, () => true as const);
+  const ok = await Promise.race([shown, sleep(10_000).then(() => false as const)]);
+  fs.writeFileSync(canaryFlag, '1');
+  log(`dialog canary: ${ok
+    ? 'answered — this environment displays native dialogs'
+    : 'NO dialog window materialized in 10s — native dialogs unavailable here'}`);
+  return ok;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require(path.resolve(__dirname, '..', 'desktop', 'main.js'));
@@ -347,6 +418,15 @@ async function run(): Promise<void> {
   theWin.webContents.on('will-prevent-unload', () => log('webContents: will-prevent-unload'));
   theWin.webContents.on('destroyed', () => log('webContents: destroyed'));
   app.on('window-all-closed', () => log('app event: window-all-closed'));
+
+  // close / quit / save-fails all hinge on answering the REAL confirm
+  // dialog; prove the environment can show one first (see dialogEnvCanary).
+  if (MODE !== 'stale-edited' && !(await dialogEnvCanary())) {
+    check('SKIPPED: this runner cannot display native dialogs '
+      + '(no window materialized for a parentless canary)', true);
+    finish();
+    return;
+  }
 
   if (MODE === 'save-fails') { await runSaveFails(theWin); return; }
   if (MODE === 'stale-edited') { await runStaleEdited(theWin); return; }
