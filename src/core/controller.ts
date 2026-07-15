@@ -775,6 +775,12 @@ export class Controller {
     if (!this.docOpen) return;
     this.commitSearch(); // undo replaces the history snapshot the entry lives in
     if (this.lastReplaceAction === 'undoable' && this.replaceUndoSlot) {
+      // Re-capture the LIVE state into the redo slot first: the one taken
+      // at replace time is stale — restoring it would silently discard the
+      // reading done since (back/forward, scrolling, zoom).
+      if (this.currentSource) {
+        this.replaceRedoSlot = { source: this.currentSource, state: this.serializeState() };
+      }
       void this.applyReplaceSlot(this.replaceUndoSlot, 'redoable');
       return;
     }
@@ -786,6 +792,10 @@ export class Controller {
     if (!this.docOpen) return;
     this.commitSearch();
     if (this.lastReplaceAction === 'redoable' && this.replaceRedoSlot) {
+      // Mirror of undoHist: keep what the user did since the undo.
+      if (this.currentSource) {
+        this.replaceUndoSlot = { source: this.currentSource, state: this.serializeState() };
+      }
       void this.applyReplaceSlot(this.replaceRedoSlot, 'undoable');
       return;
     }

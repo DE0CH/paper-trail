@@ -190,6 +190,11 @@ jobs:
         shell: bash
         run: node build-node/test/explicitSaveDuringAutosave.js
 
+      - name: Replace undo/redo keeps navigation done since the replace
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceUndoRecapture.js
+
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
         shell: bash
@@ -537,6 +542,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/explicitSaveDuringAutosave.js
+
+      - name: Replace undo/redo keeps navigation done since the replace
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/replaceUndoRecapture.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
