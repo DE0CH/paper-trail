@@ -5,6 +5,8 @@ name: Uninstaller screenshot (temp)
 
 on:
   workflow_dispatch: {}
+  push:
+    branches: [uninstaller-icon]
 
 permissions:
   contents: read
