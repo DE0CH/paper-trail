@@ -108,21 +108,25 @@ export class SearchController {
     const worker = this.ensureWorker();
     void (async () => {
       if (!doc) return;
-      try {
-        for (let i = 1; i <= doc.numPages; i++) {
+      for (let i = 1; i <= doc.numPages; i++) {
+        const items: string[] = [];
+        try {
           const page = await doc.getPage(i);
           const tc = await page.getTextContent();
-          if (gen !== this.gen) return; // document changed mid-extraction
-          const items: string[] = [];
           for (const item of tc.items) {
             if ('str' in item && typeof item.str === 'string') items.push(item.str);
           }
-          worker.postMessage({ type: 'page', gen, items } satisfies ToWorker);
+        } catch {
+          // a corrupt (or destroyed-mid-swap) page contributes no text;
+          // indexing continues, and the empty page is still sent so page
+          // numbering stays aligned. Nothing is memoized on failure, so a
+          // reopen retries from scratch.
         }
-        if (gen === this.gen) worker.postMessage({ type: 'done', gen } satisfies ToWorker);
-      } catch {
-        // the document was closed mid-extraction; reset() restarts cleanly
+        if (gen !== this.gen) return; // document changed mid-extraction
+        worker.postMessage({ type: 'page', gen, items } satisfies ToWorker);
       }
+      // always close out the index so pending queries settle
+      if (gen === this.gen) worker.postMessage({ type: 'done', gen } satisfies ToWorker);
     })();
   }
 
