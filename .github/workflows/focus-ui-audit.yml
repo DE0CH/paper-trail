@@ -1,0 +1,49 @@
+# TEMPORARY focus workflow: fast red→green iteration for the UI
+# alignment/typography audit (uiAlignmentAudit). Runs the single audit
+# suite against the web build and uploads the measured region screenshots
+# as an artifact (before = red run on the unfixed commit, after = green
+# run on the fixed one). Deleted before handover.
+
+name: Focus UI alignment audit
+
+on:
+  push:
+    branches: [ui-alignment-audit]
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    # Mirror (de0ch-org) runs land on Depot; origin runs on GitHub-hosted.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-ubuntu-24.04' || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: UI alignment/typography audit (measured)
+        shell: bash
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          AUDIT_TAG=$(git rev-parse --short HEAD) node build-node/test/uiAlignmentAudit.js
+
+      - name: Upload the audited-region screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-audit-shots-${{ github.run_id }}
+          path: audit-shots/
+          if-no-files-found: warn
