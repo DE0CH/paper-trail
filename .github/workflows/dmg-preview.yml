@@ -47,10 +47,12 @@ jobs:
           else
             echo "background PNGs not committed yet - skipping"
           fi
-      - name: Package an unsigned x64 dmg (layout iteration only)
+      - name: Package mac universal, unsigned (the ci.yml mac-job shape)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --mac dmg --x64 --publish never -c.mac.notarize=false
+        run: npx electron-builder --mac --publish never -c.mac.notarize=false
+      - name: Installer test (immutable) stays green with the dmg config
+        run: node build-node/test/installerMac.js
       - name: Verify the mounted dmg layout
         run: |
           pip install --quiet ds-store mac_alias pillow
