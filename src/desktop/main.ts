@@ -17,12 +17,13 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, screen, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
 import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
 import { blockShutdown, unblockShutdown } from './winShutdown';
+import { placeWindow } from './windowPlacement';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
 // other end is already closed; a console write (electron-updater logs
@@ -80,7 +81,12 @@ function loadBounds(): { width: number; height: number; x?: number; y?: number }
     const s = JSON.parse(fs.readFileSync(stateFile(), 'utf8')) as {
       width: number; height: number; x?: number; y?: number;
     };
-    if (s.width > 300 && s.height > 200) return s;
+    // The remembered position is only trusted while it still lands on a
+    // connected display: after a monitor unplug, verbatim x/y would
+    // restore the window fully off-screen. The size survives either way.
+    if (s.width > 300 && s.height > 200) {
+      return placeWindow(s, screen.getAllDisplays().map((d) => d.workArea));
+    }
   } catch { /* first launch */ }
   return { width: 1440, height: 940 };
 }
