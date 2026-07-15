@@ -70,6 +70,37 @@ jobs:
           PT_SDC_MODE: save-fails
         run: npx electron build-node/test/desktopSavePickerOnClose.js
 
+  winx64:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: Close + Save… reaches the save-as picker (window-close path)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: close
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+      - name: Quit + Save… reaches the save-as picker (quit path)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: quit
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+      - name: A failing close-save surfaces and keeps the window
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PT_SDC_MODE: save-fails
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+
   mac-intel:
     if: ${{ inputs.mac == 'yes' }}
     runs-on: macos-15-intel
