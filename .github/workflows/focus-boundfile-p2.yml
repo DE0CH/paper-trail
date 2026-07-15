@@ -11,7 +11,10 @@ on:
 
 jobs:
   writepath:
-    runs-on: ubuntu-latest
+    # Depot runners live on the private mirror only; the public repo's
+    # GitHub-hosted push of this TEMP workflow is a deliberate skip.
+    if: ${{ github.repository == 'de0ch-org/paper-trail-mirror' }}
+    runs-on: depot-ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
