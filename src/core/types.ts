@@ -114,6 +114,9 @@ declare global {
       // The native "save your reading session?" dialog on close, shown by the
       // renderer only when the async close-save couldn't write silently.
       confirmCloseSave?: () => Promise<'save' | 'dont-save' | 'cancel'>;
+      // The close flow kept the window open (Cancel / canceled picker /
+      // failed save) — lets a pending quit stop waiting for this window.
+      closeFlowKeptWindow?: () => void;
       // DORMANT: a SYNCHRONOUS flush kept for the deferred OS-shutdown fast-path
       // (a time-boxed shutdown can't wait for the async close-save). Not used by
       // the normal close flow any more — see Controller.closeAndSave.

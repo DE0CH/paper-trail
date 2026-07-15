@@ -259,6 +259,21 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
 
   win.on('close', () => saveBounds(win));
 
+  // Bookkeeping keyed on this window must not outlive it. In particular a
+  // dirty window closed via Don't Save (or save-then-close — the close beats
+  // the renderer's edited=false notification) would stay in editedWindows
+  // forever, making every later quit run the close-all cycle even with
+  // nothing unsaved.
+  const winId = win.id;
+  const wcId = win.webContents.id;
+  win.once('closed', () => {
+    editedWindows.delete(winId);
+    closeFlowBusy.delete(winId);
+    keptOpenResolvers.delete(winId);
+    readyWindows.delete(wcId);
+    queuedFiles.delete(wcId);
+  });
+
   // Windows OS shutdown/logout: the vetoable query-session-end. A window with
   // an unsaved session returns FALSE to WM_QUERYENDSESSION (preventDefault),
   // withholding the shutdown; the reason string was already registered via
@@ -441,13 +456,45 @@ function setupAutoUpdates(): void {
 // tells the OS-shutdown guards whether anything is at risk.
 const editedWindows = new Set<number>();
 
+// Close-flow dialogs and writes in flight, per window id (the confirm
+// prompt, the save-as picker, a session write). While one is up the user is
+// deciding — promptCloseAllWindows' wedge timer must not count that time.
+const closeFlowBusy = new Set<number>();
+async function busyWhile<T>(win: BrowserWindow | null, work: () => Promise<T>): Promise<T> {
+  const id = win && !win.isDestroyed() ? win.id : null;
+  if (id != null) closeFlowBusy.add(id);
+  try {
+    return await work();
+  } finally {
+    if (id != null) closeFlowBusy.delete(id);
+  }
+}
+
+// A renderer whose close flow decided to KEEP its window open (Cancel at the
+// prompt, a canceled picker, a failed save) reports it here, so a pending
+// close-all stops waiting for that window at once instead of timing out.
+const keptOpenResolvers = new Map<number, () => void>();
+ipcMain.on('pt-close-kept-open', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) keptOpenResolvers.get(win.id)?.();
+});
+
 /**
  * Close every document window one by one, unsaved sessions FIRST so each
  * one's save prompt (the renderer's normal close flow) is answered before any
  * clean window goes — without the ordering a Cancel could leave a half-closed
  * workspace. Returns true only if every window actually closed; false the
- * moment one stays open (the user chose Save… or Cancel), leaving the rest
- * untouched. Shared by the OS-shutdown guards.
+ * moment one stays open (the user chose Cancel, canceled the picker, or a
+ * save failed), leaving the rest untouched. Shared by the OS-shutdown guards.
+ *
+ * Waiting is gated on the renderer's DECISION, not wall-clock: each window
+ * either closes ('closed' → keep going) or its close flow reports that it
+ * kept the window open (pt-close-kept-open → stop). The residual timer only
+ * catches a wedged window, and it counts nothing while a close-flow dialog
+ * or write is up (closeFlowBusy) — the user may sit in the save prompt or
+ * the location picker for minutes without the quit being abandoned under
+ * them. A renderer-side write with no shell dialog (a handle-bound save)
+ * is invisible here, so the idle budget stays generous.
  */
 async function promptCloseAllWindows(): Promise<boolean> {
   const all = [...BrowserWindow.getAllWindows()]
@@ -458,11 +505,26 @@ async function promptCloseAllWindows(): Promise<boolean> {
   ];
   for (const w of ordered) {
     if (w.isDestroyed()) continue;
+    const wId = w.id;
     const closed = new Promise<boolean>((resolve) => {
-      w.once('closed', () => resolve(true));
-      // Counts only unblocked time: the close prompt is a synchronous
-      // dialog that halts the main process until answered.
-      setTimeout(() => resolve(false), 1500);
+      let timer: NodeJS.Timeout | undefined;
+      let idleLeft = 5000;
+      const TICK = 250;
+      const onClosed = () => settle(true);
+      const settle = (ok: boolean) => {
+        clearTimeout(timer);
+        keptOpenResolvers.delete(wId);
+        w.removeListener('closed', onClosed);
+        resolve(ok);
+      };
+      w.once('closed', onClosed);
+      keptOpenResolvers.set(wId, () => settle(false));
+      const tick = () => {
+        if (!closeFlowBusy.has(wId)) idleLeft -= TICK;
+        if (idleLeft <= 0) { settle(false); return; }
+        timer = setTimeout(tick, TICK);
+      };
+      timer = setTimeout(tick, TICK);
     });
     w.close();
     if (!(await closed)) return false;
@@ -701,13 +763,15 @@ ipcMain.handle('pt-context-menu', async (event, ctx: {
 ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedName: string }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return null;
-  const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    defaultPath: req.suggestedName,
-    filters: [{ name: 'Reading session', extensions: ['ptl'] }],
+  return busyWhile(win, async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: req.suggestedName,
+      filters: [{ name: 'Reading session', extensions: ['ptl'] }],
+    });
+    if (canceled || !filePath) return null;
+    await fs.promises.writeFile(filePath, req.text, 'utf8');
+    return filePath;
   });
-  if (canceled || !filePath) return null;
-  await fs.promises.writeFile(filePath, req.text, 'utf8');
-  return filePath;
 });
 
 // "Load session…" on the desktop: a NATIVE open dialog (not the Chromium
@@ -738,14 +802,17 @@ ipcMain.handle('pt-open-session-dialog', async (event) => {
 // OS-opened .ptl, or one just saved through the shell dialog): auto-save
 // and in-app Save target it directly, no dialog. Returns whether it wrote.
 ipcMain.handle('pt-save-session-to-path', async (
-  _event, req: { path: string; text: string }) => {
-  try {
-    await fs.promises.writeFile(req.path, req.text, 'utf8');
-    return true;
-  } catch (e) {
-    console.warn('could not write session to', req.path, e);
-    return false;
-  }
+  event, req: { path: string; text: string }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return busyWhile(win, async () => {
+    try {
+      await fs.promises.writeFile(req.path, req.text, 'utf8');
+      return true;
+    } catch (e) {
+      console.warn('could not write session to', req.path, e);
+      return false;
+    }
+  });
 });
 
 // Read a file's bytes by on-disk path, so the renderer can reopen a
@@ -763,17 +830,29 @@ ipcMain.handle('pt-read-file', async (_event, filePath: string): Promise<ArrayBu
 // The close-save dialog, requested by the renderer's async close flow ONLY
 // when it couldn't write silently (never-saved session, denied permission, or
 // a failed write). Native, so it looks like the platform's. Returns the choice.
-ipcMain.handle('pt-confirm-close-save', (event): 'save' | 'dont-save' | 'cancel' => {
+// ASYNC (showMessageBox, never …Sync) — load-bearing: the synchronous variant
+// runs a nested modal loop that freezes this process's JS queue while the
+// renderer's cancelled close is still settling. The queued unload-prevented
+// ack then rots past Chromium's beforeunload patience, and the moment the
+// dialog closes the window is torn down — before the save-as picker can
+// appear. The user clicked "Save…" and the never-saved session was lost
+// (observed on both platforms). The async dialog keeps the queue turning, so
+// the close settles while the user reads the prompt and the window survives
+// to be saved.
+ipcMain.handle('pt-confirm-close-save', async (event): Promise<'save' | 'dont-save' | 'cancel'> => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const choice = dialog.showMessageBoxSync(win!, {
-    type: 'warning',
-    buttons: ['Save…', 'Don’t Save', 'Cancel'],
-    defaultId: 0,
-    cancelId: 2,
-    message: 'Do you want to save your reading session?',
-    detail: 'Your changes will be lost if you don’t save them.',
+  if (!win || win.isDestroyed()) return 'cancel';
+  return busyWhile(win, async () => {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Save…', 'Don’t Save', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      message: 'Do you want to save your reading session?',
+      detail: 'Your changes will be lost if you don’t save them.',
+    });
+    return response === 0 ? 'save' : response === 1 ? 'dont-save' : 'cancel';
   });
-  return choice === 0 ? 'save' : choice === 1 ? 'dont-save' : 'cancel';
 });
 
 // DORMANT — kept for the deferred OS-shutdown fast-path. A time-boxed OS
