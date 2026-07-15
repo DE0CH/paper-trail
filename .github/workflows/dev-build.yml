@@ -125,3 +125,6 @@ jobs:
           name: pt-win-installer
           path: dist-electron/Paper-Trail-Setup-*.exe
           if-no-files-found: error
+          # The NSIS payload is already LZMA-compressed; deflating it again
+          # in the artifact wrapper wastes minutes for no size gain.
+          compression-level: 0
