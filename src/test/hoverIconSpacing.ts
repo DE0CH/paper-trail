@@ -1,23 +1,29 @@
-// Hover-toolbar spacing: the overlay tools (✎ / ⌖ or ⧉) are absolutely
-// anchored just left of the trailing close/remove (✕) slot. The anchor must
-// clear the WHOLE ✕ box plus the row's standard 6px gap — an off-by-a-few-px
-// anchor makes the last overlay icon bleed into the ✕'s box (owner-reported:
-// "the ⌖ goes slightly into the box of the ✕").
+// Row-tools layout guard: all of a row's tool buttons (✎ / ⌖ or ⧉ / ✕)
+// live in ONE flex container (`.tools`) with the row's standard 6px gap,
+// so every inter-button gap is equal by construction — no absolute
+// anchors, no overlay. The row may reflow on hover (owner decision): the
+// hover-only tools join the flex flow and the label shrinks.
 // Asserts, on a hovered trail row and a hovered removable history row:
-//   (1) the overlay's last button does not intersect the trailing button, and
-//   (2) there is at least a 4px horizontal gap between them.
+//   (1) every gap between adjacent visible tool buttons is EQUAL (±0.5px)
+//       and at least MIN_GAP wide,
+//   (2) no tool button intersects another,
+//   (3) the label's click center still belongs to the label — double-
+//       click-to-rename keeps working (the df187c1 regression tripwire),
+// and, without hover:
+//   (4) the close/remove ✕ is visible on the CURRENT/active row only,
+//       while the hover-only tools take no layout space on any row.
+// Also pins the single-entry history semantics: the remove ✕ renders for
+// visual consistency even when the trail has only one entry, and clicking
+// it there is a designed (silent) no-op.
 // Run: node build-node/test/hoverIconSpacing.js   (server on 8377 first)
 
 import { findBrowser } from './browsers';
 import { chromium, type Page } from 'playwright-core';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8377';
-// The overlay sits FLUSH against the ✕ slot (gap >= 0, never overlapping):
-// the w-5 buttons carry ~3px of internal glyph padding each side, so flush
-// boxes still read as spaced. A larger box-gap is NOT wanted — pushing the
-// overlay further left eclipsed the label's click center and broke
-// double-click-to-rename (the df187c1 regression).
-const MIN_GAP = 0;
+// The container's flex gap is 6px (gap-1.5); anything under 4px means the
+// buttons stopped sharing the one-container layout.
+const MIN_GAP = 4;
 
 interface Result { name: string; ok: boolean; detail: string }
 const results: Result[] = [];
@@ -26,32 +32,63 @@ function check(name: string, ok: boolean, detail = ''): void {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 }
 
-async function probe(page: Page, kind: string, rowSel: string,
-  overlayLastSel: string, trailingSel: string): Promise<void> {
+interface Box { sel: string; left: number; right: number; top: number; bottom: number }
+
+async function probeHovered(page: Page, kind: string, rowSel: string): Promise<void> {
   const row = page.locator(rowSel).first();
   await row.hover();
-  const m = await page.evaluate(({ rowSel, overlayLastSel, trailingSel }) => {
+  const m = await page.evaluate((rowSel) => {
     const row = document.querySelector(rowSel) as HTMLElement;
-    const a = row.querySelector(overlayLastSel) as HTMLElement | null;
-    const b = row.querySelector(trailingSel) as HTMLElement | null;
     const label = row.querySelector('.name, .lbl') as HTMLElement | null;
-    if (!a || !b || !label) return null;
-    const ra = a.getBoundingClientRect();
-    const rb = b.getBoundingClientRect();
-    // The label's click center must belong to the label, not the overlay —
+    if (!label) return null;
+    const buttons = ([...row.querySelectorAll('.tools > button')] as HTMLElement[])
+      .map((b) => {
+        const r = b.getBoundingClientRect();
+        return {
+          sel: b.className.split(' ')[0],
+          left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+          visible: r.width > 0 && getComputedStyle(b).display !== 'none',
+        };
+      })
+      .filter((b) => b.visible)
+      .sort((a, b) => a.left - b.left);
+    // The label's click center must belong to the label, not any tool —
     // double-click-to-rename lands there (the df187c1 regression).
     const lr = label.getBoundingClientRect();
     const at = document.elementFromPoint(lr.x + lr.width / 2, lr.y + lr.height / 2);
     const centerIsLabel = at === label || label.contains(at);
-    return { aRight: ra.right, bLeft: rb.left, centerIsLabel };
-  }, { rowSel, overlayLastSel, trailingSel });
-  if (!m) { check(`${kind}: probe found the buttons and label`, false, 'missing element'); return; }
-  const gap = m.bLeft - m.aRight;
-  check(`${kind}: the overlay's last icon stays out of the trailing button's box`,
-    gap >= 0, `overlap=${(-gap).toFixed(1)}px`);
-  check(`${kind}: at least ${MIN_GAP}px between them (row gap consistency)`,
-    gap >= MIN_GAP, `gap=${gap.toFixed(1)}px`);
-  check(`${kind}: the hovered overlay leaves the label's click center clickable`,
+    return { buttons, centerIsLabel };
+  }, rowSel);
+  if (!m) { check(`${kind}: probe found the row's label`, false, 'missing element'); return; }
+
+  const expected = 3; // ✎ + (⌖ or ⧉) + ✕, all revealed by hover
+  check(`${kind}: hover reveals all ${expected} tool buttons`,
+    m.buttons.length === expected,
+    `visible: [${m.buttons.map((b) => b.sel).join(', ')}]`);
+
+  const gaps: number[] = [];
+  for (let i = 1; i < m.buttons.length; i++) {
+    gaps.push(m.buttons[i].left - m.buttons[i - 1].right);
+  }
+  const spread = gaps.length ? Math.max(...gaps) - Math.min(...gaps) : 0;
+  check(`${kind}: all inter-button gaps are equal (spread ${spread.toFixed(2)}px)`,
+    gaps.length > 0 && spread <= 0.5, `gaps=[${gaps.map((g) => g.toFixed(1)).join(', ')}]`);
+  check(`${kind}: every gap is at least ${MIN_GAP}px`,
+    gaps.every((g) => g >= MIN_GAP), `gaps=[${gaps.map((g) => g.toFixed(1)).join(', ')}]`);
+
+  const hits: string[] = [];
+  for (let i = 0; i < m.buttons.length; i++) {
+    for (let j = i + 1; j < m.buttons.length; j++) {
+      const a: Box = m.buttons[i]; const b: Box = m.buttons[j];
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) {
+        hits.push(`${a.sel}∩${b.sel}`);
+      }
+    }
+  }
+  check(`${kind}: no tool button intersects another`,
+    hits.length === 0, hits.join(', ') || 'none');
+
+  check(`${kind}: the hovered row leaves the label's click center clickable`,
     m.centerIsLabel, `elementAtCenter=${m.centerIsLabel ? 'label' : 'NOT the label'}`);
 }
 
@@ -67,15 +104,67 @@ async function run(): Promise<void> {
       undefined, { timeout: 20_000 });
     await page.waitForSelector('.stackRow .name', { timeout: 20_000 });
 
-    // Trail row: overlay is ✎ then ⧉ (.dup); trailing is the close ✕ (.x).
-    await probe(page, 'trail', '.stackRow', '.dup', '.x');
+    // Trail row: tools are ✎ (.editName), ⧉ (.dup), ✕ (.x).
+    await probeHovered(page, 'trail', '.stackRow');
 
-    // History row: needs >1 entry for the remove ✕ to render; mark one.
+    // Single-entry history: the remove ✕ renders for visual consistency
+    // (same slot semantics as everywhere else) and clicking it is a no-op.
+    await page.mouse.move(700, 450); // measure without hover first
+    await page.waitForTimeout(200);
+    const single = await page.evaluate(() => {
+      const rm = document.querySelector('.histItem.current .rmEntry') as HTMLElement | null;
+      const st = rm ? getComputedStyle(rm) : null;
+      return {
+        entries: document.querySelectorAll('.histItem').length,
+        rmShown: !!rm && !!st && st.display !== 'none' && st.opacity !== '0'
+          && rm.getBoundingClientRect().width > 0,
+      };
+    });
+    check('single-entry history: the ✕ renders on the unhovered current row',
+      single.entries === 1 && single.rmShown, JSON.stringify(single));
+    await probeHovered(page, 'history (single entry)', '.histItem.current');
+    await page.click('.histItem.current .rmEntry');
+    await page.waitForTimeout(150);
+    check('single-entry history: clicking the ✕ is a silent no-op',
+      await page.evaluate(() => document.querySelectorAll('.histItem').length === 1));
+
+    // Multi-entry history row: mark a spot so a second entry exists.
     await page.click('#btnMark');
     await page.waitForFunction(
       () => document.querySelectorAll('.histItem').length > 1,
       undefined, { timeout: 15_000 });
-    await probe(page, 'history', '.histItem', '.setPos', '.rmEntry');
+    await probeHovered(page, 'history', '.histItem.current');
+
+    // (4) — without hover: the ✕ shows on the current/active row only, and
+    // the hover-only tools take no layout space on any row.
+    await page.mouse.move(700, 450); // leave the rows
+    await page.waitForTimeout(200);
+    const idle = await page.evaluate(() => {
+      const shown = (el: Element | null) => !!el
+        && (el as HTMLElement).getBoundingClientRect().width > 0
+        && getComputedStyle(el).display !== 'none'
+        && getComputedStyle(el).opacity !== '0';
+      const laidOut = (el: Element | null) => !!el
+        && (el as HTMLElement).getBoundingClientRect().width > 0;
+      const cur = document.querySelector('.histItem.current');
+      const other = [...document.querySelectorAll('.histItem')]
+        .find((r) => !r.classList.contains('current')) ?? null;
+      return {
+        trailX: shown(document.querySelector('.stackRow .x')),
+        curRm: shown(cur?.querySelector('.rmEntry') ?? null),
+        otherRm: shown(other?.querySelector('.rmEntry') ?? null),
+        anyHoverToolLaidOut:
+          laidOut(document.querySelector('.stackRow .editName'))
+          || laidOut(document.querySelector('.stackRow .dup'))
+          || laidOut(cur?.querySelector('.editName') ?? null)
+          || laidOut(cur?.querySelector('.setPos') ?? null),
+      };
+    });
+    check('unhovered: the active trail row shows its ✕', idle.trailX);
+    check('unhovered: the current history row shows its ✕', idle.curRm);
+    check('unhovered: a non-current history row hides its ✕', !idle.otherRm);
+    check('unhovered: the hover-only tools take no layout space',
+      !idle.anyHoverToolLaidOut);
 
     // Marking dirtied the session; clear it so the harness closes silently.
     await page.evaluate(() => {

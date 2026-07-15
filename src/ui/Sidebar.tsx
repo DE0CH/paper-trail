@@ -21,12 +21,22 @@ const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 rounded-md cursor-pointer 
 // text 1px right and eat 1px of height).
 const renameCls = 'rename flex-1 min-w-0 leading-[1.4] px-1 -mx-1 bg-inputbg text-fgapp text-[12px] ring-1 ring-inset ring-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
-// One shape for every small row button; the close button additionally
-// keeps a permanent flex slot so all rows align on it.
-const toolBtn = 'inline-flex items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer';
-// Hover tools overlay the text instead of reserving space: absolutely
-// positioned just left of the close slot, on the row's own background.
-const toolsOverlay = 'absolute inset-y-0 hidden group-hover:flex items-center gap-1.5 pl-1 bg-inherit';
+// One shape for every small row button. The close button is always laid
+// out (`inline-flex`; opacity carries its visibility so its slot holds
+// every row's alignment), while the other tools are display-hidden until
+// the row is hovered — hover-only on EVERY row, current or not. The two
+// display treatments must stay in SEPARATE class strings: Tailwind v4
+// orders `.inline-flex` after `.hidden` in the compiled sheet, so a
+// button carrying both is always visible (the preview-review bug).
+const toolShape = 'items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer';
+const toolBtn = `inline-flex ${toolShape}`;
+const hoverTool = `hidden group-hover:inline-flex ${toolShape}`;
+// All of a row's tool buttons live in ONE flex container with the row's
+// standard 6px gap, so every inter-button gap is equal by construction —
+// no absolute anchors, no overlay. When the hover-only tools join the
+// flex flow the label shrinks to make room (owner decision: these rows
+// may reflow on hover).
+const toolsBox = 'tools flex flex-none items-center gap-1.5';
 
 function StackRow({ snap, id, name }: {
   snap: Snapshot; id: number; name: string;
@@ -43,7 +53,7 @@ function StackRow({ snap, id, name }: {
   const active = id === snap.activeStackId;
   return (
     <div
-      className={`stackRow group relative ${rowBase} ${active ? rowActive : ''}`}
+      className={`stackRow group ${rowBase} ${active ? rowActive : ''}`}
       data-id={id}
       title={`${name} — double-click to rename`}
       onClick={() => controller.stackSwitch(id)}
@@ -80,13 +90,9 @@ function StackRow({ snap, id, name }: {
         </span>
       )}
       {!editing && (
-        // 26 = 6px row padding + the 20px ✕ slot: flush against the ✕'s box
-        // (22 bled 4px INTO it; 32 added a gap but reached far enough left to
-        // eclipse the label's click center, breaking double-click-to-rename —
-        // the w-5 buttons' internal glyph padding provides the optical gap).
-        <span className={`${toolsOverlay} right-[26px]`}>
+        <span className={toolsBox}>
           <button
-            className={`editName ${toolBtn}`}
+            className={`editName ${hoverTool}`}
             title="Rename this trail"
             onClick={(e) => {
               e.stopPropagation();
@@ -96,7 +102,7 @@ function StackRow({ snap, id, name }: {
             <IconEdit />
           </button>
           <button
-            className={`dup ${toolBtn}`}
+            className={`dup ${hoverTool}`}
             title="Duplicate this trail"
             onClick={(e) => {
               e.stopPropagation();
@@ -105,26 +111,24 @@ function StackRow({ snap, id, name }: {
           >
             <IconCopy />
           </button>
+          <button
+            className={`x ${toolBtn} ${active ? '' : 'opacity-0'} group-hover:opacity-100`}
+            title="Close this trail"
+            onClick={(e) => {
+              e.stopPropagation();
+              controller.stackClose(id);
+            }}
+          >
+            <IconClose />
+          </button>
         </span>
-      )}
-      {!editing && (
-        <button
-          className={`x ${toolBtn} flex-none ${active ? '' : 'opacity-0'} group-hover:opacity-100`}
-          title="Close this trail"
-          onClick={(e) => {
-            e.stopPropagation();
-            controller.stackClose(id);
-          }}
-        >
-          <IconClose />
-        </button>
       )}
     </div>
   );
 }
 
-function HistRow({ label, page, current, index, removable }: {
-  label: string; page: number; current: boolean; index: number; removable: boolean;
+function HistRow({ label, page, current, index }: {
+  label: string; page: number; current: boolean; index: number;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -149,7 +153,7 @@ function HistRow({ label, page, current, index, removable }: {
 
   return (
     <div
-      className={`histItem group relative ${rowBase} ${current ? `current ${rowActive}` : ''}`}
+      className={`histItem group ${rowBase} ${current ? `current ${rowActive}` : ''}`}
       data-idx={index}
       title={`${label} — page ${page} — double-click to rename`}
       onClick={() => controller.histEntryClick(index)}
@@ -186,11 +190,9 @@ function HistRow({ label, page, current, index, removable }: {
         </span>
       )}
       {!editing && (
-        // Same flush 26px clearance as StackRow's overlay when the remove ✕
-        // slot exists; without it the overlay parks at the row's padding edge.
-        <span className={`${toolsOverlay} ${removable ? 'right-[26px]' : 'right-1.5'}`}>
+        <span className={toolsBox}>
           <button
-            className={`editName ${toolBtn}`}
+            className={`editName ${hoverTool}`}
             title="Rename this entry"
             onClick={(e) => {
               e.stopPropagation();
@@ -200,7 +202,7 @@ function HistRow({ label, page, current, index, removable }: {
             <IconEdit />
           </button>
           <button
-            className={`setPos ${toolBtn}`}
+            className={`setPos ${hoverTool}`}
             title="Set this entry to the current position"
             onClick={(e) => {
               e.stopPropagation();
@@ -209,19 +211,17 @@ function HistRow({ label, page, current, index, removable }: {
           >
             <IconAnchor />
           </button>
+          <button
+            className={`rmEntry ${toolBtn} ${current ? '' : 'opacity-0'} group-hover:opacity-100`}
+            title="Remove this entry from the trail"
+            onClick={(e) => {
+              e.stopPropagation();
+              controller.entryRemove(index);
+            }}
+          >
+            <IconClose />
+          </button>
         </span>
-      )}
-      {!editing && removable && (
-        <button
-          className={`rmEntry ${toolBtn} flex-none ${current ? '' : 'opacity-0'} group-hover:opacity-100`}
-          title="Remove this entry from the trail"
-          onClick={(e) => {
-            e.stopPropagation();
-            controller.entryRemove(index);
-          }}
-        >
-          <IconClose />
-        </button>
       )}
     </div>
   );
@@ -338,7 +338,6 @@ export default function Sidebar({
                   page={entry.pos.page}
                   current={i === snap.activeIndex}
                   index={i}
-                  removable={(active?.entries.length ?? 0) > 1}
                 />
               </li>
             ))}
