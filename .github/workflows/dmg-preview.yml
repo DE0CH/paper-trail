@@ -1,0 +1,137 @@
+# TEMPORARY workflow for iterating on the dmg installer-window design
+# (branch dmg-design). Renders the background, packages an unsigned
+# x64 dmg with the new dmg config, verifies the mounted volume's
+# layout programmatically (.background HiDPI pair, .DS_Store window
+# bounds, icon size and icon positions), and uploads the renders, a
+# composited window preview, and the dmg itself for visual review.
+# Delete this file before the branch is handed back.
+
+name: DMG design preview (temp)
+
+on:
+  push:
+    branches: ['dmg-design']
+
+permissions:
+  contents: read
+
+jobs:
+  dmg:
+    if: github.repository_owner == 'de0ch-org'
+    runs-on: depot-macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - name: Render the dmg background (plus review renders)
+        run: PT_DMG_RENDERS="$PWD/renders" node build-node/tools/dmgBackground.js
+      - name: Rendered sizes are the window size (540x380) and its 2x pair
+        run: |
+          for spec in build/background.png:540:380 build/background@2x.png:1080:760; do
+            IFS=: read -r f w h <<< "$spec"
+            gw=$(sips -g pixelWidth "$f" | awk '/pixelWidth/{print $2}')
+            gh=$(sips -g pixelHeight "$f" | awk '/pixelHeight/{print $2}')
+            echo "$f ${gw}x${gh} (want ${w}x${h})"
+            [ "$gw" = "$w" ] && [ "$gh" = "$h" ] || exit 1
+          done
+      - name: Committed PNGs match the regeneration (skipped until committed)
+        run: |
+          if git ls-files --error-unmatch build/background.png >/dev/null 2>&1; then
+            git diff --stat --exit-code build/background.png build/background@2x.png
+          else
+            echo "background PNGs not committed yet - skipping"
+          fi
+      - name: Package mac universal, unsigned (the ci.yml mac-job shape)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac --publish never -c.mac.notarize=false
+      - name: Installer test (immutable) stays green with the dmg config
+        run: node build-node/test/installerMac.js
+      - name: Verify the mounted dmg layout
+        run: |
+          pip install --quiet ds-store mac_alias pillow
+          python3 - <<'EOF'
+          import glob, os, plistlib, struct, subprocess, sys, tempfile
+          from ds_store import DSStore
+          from PIL import Image
+
+          dmg = glob.glob('dist-electron/*.dmg')[0]
+          mnt = tempfile.mkdtemp(prefix='pt-dmg-')
+          subprocess.run(['hdiutil', 'attach', dmg, '-nobrowse', '-readonly',
+                          '-mountpoint', mnt], check=True)
+          fails = []
+          def check(name, ok, detail=''):
+              print(('PASS ' if ok else 'FAIL ') + name + ('  - ' + str(detail) if detail else ''))
+              if not ok:
+                  fails.append(name)
+
+          def iloc(v):
+              if isinstance(v, (bytes, bytearray)):
+                  return struct.unpack('>II', v[:8])
+              return tuple(v[:2])
+
+          try:
+              check('app is in the dmg', os.path.exists(os.path.join(mnt, 'Paper Trail.app')))
+              check('Applications is a symlink', os.path.islink(os.path.join(mnt, 'Applications')))
+              # dmgbuild (electron-builder 26's dmg engine) stores the
+              # image as a hidden .background.tiff at the volume root
+              bgs = glob.glob(os.path.join(mnt, '.background*'))
+              bgs = [b for b in bgs if os.path.isfile(b)]
+              check('one background file present', len(bgs) == 1, bgs)
+              if bgs:
+                  im = Image.open(bgs[0])
+                  sizes = []
+                  for i in range(getattr(im, 'n_frames', 1)):
+                      im.seek(i)
+                      sizes.append(im.size)
+                  check('background is the 1x+2x HiDPI pair',
+                        sorted(sizes) == [(540, 380), (1080, 760)], sizes)
+              entries = {}
+              with DSStore.open(os.path.join(mnt, '.DS_Store'), 'rb') as d:
+                  for e in d:
+                      code = e.code.decode('ascii') if isinstance(e.code, (bytes, bytearray)) else e.code
+                      entries.setdefault(e.filename, {})[code] = e.value
+              print('DS_Store entries:', {fn: sorted(cs) for fn, cs in entries.items()})
+              app_loc = entries.get('Paper Trail.app', {}).get('Iloc')
+              link_loc = entries.get('Applications', {}).get('Iloc')
+              check('app icon centered at (135, 205)',
+                    app_loc is not None and iloc(app_loc) == (135, 205), app_loc)
+              check('Applications icon centered at (405, 205)',
+                    link_loc is not None and iloc(link_loc) == (405, 205), link_loc)
+              def root_plist(code):
+                  raw = next((cs[code] for cs in entries.values() if code in cs), None)
+                  if isinstance(raw, (bytes, bytearray)):
+                      return plistlib.loads(raw)
+                  return raw
+              bwsp = root_plist('bwsp')
+              check('window plist present', bwsp is not None)
+              if bwsp is not None:
+                  wb = bwsp.get('WindowBounds', '')
+                  check('window content is 540x380', '540' in wb and '380' in wb, wb)
+              icvp = root_plist('icvp')
+              check('icon-view plist present', icvp is not None)
+              if icvp is not None:
+                  check('icon size is 128', icvp.get('iconSize') == 128.0, icvp.get('iconSize'))
+                  check('background is a picture', icvp.get('backgroundType') == 2,
+                        icvp.get('backgroundType'))
+          finally:
+              subprocess.run(['hdiutil', 'detach', mnt], check=False)
+          sys.exit(1 if fails else 0)
+          EOF
+      - name: Upload the background renders and window preview
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dmg-background-renders
+          path: renders/*.png
+      - name: Upload the dmg for visual review
+        uses: actions/upload-artifact@v4
+        with:
+          name: pt-dmg-preview
+          path: dist-electron/*.dmg
