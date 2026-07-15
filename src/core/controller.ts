@@ -144,6 +144,10 @@ export class Controller {
       },
     });
     this.search = new SearchController(this.viewer);
+    // Streamed search results: keep the match count live in the UI while
+    // the worker is still indexing (highlights refresh inside the search
+    // controller itself).
+    this.search.onUpdate = () => this.notify();
     this.preview = new Preview(this.viewer, previewEl);
     this.hist.onChange = () => {
       this.markDirty();
@@ -823,6 +827,7 @@ export class Controller {
 
   async runSearch(q: string, { jump = true } = {}): Promise<void> {
     await this.search.setQuery(q);
+    if (this.search.query !== q) return; // superseded by a newer search
     this.notify();
     await this.search.refreshHighlights();
     if (jump && q && this.search.matches.length) await this.gotoMatch(1);
