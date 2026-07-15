@@ -54,7 +54,9 @@ export default function SearchBar({ snap, searchRef, open, onClose }: {
           }
         }}
       />
-      <span id="searchCount" className="text-dim min-w-13 text-center text-[12px]">
+      {/* No font-size override: counts share the toolbar's 13px (the
+          page "/ N" count) — one "count" role, one size. */}
+      <span id="searchCount" className="text-dim min-w-13 text-center">
         {snap.searchCount}
       </span>
       <button className={iconBtn} title="Previous match" onClick={() => void controller.gotoMatch(-1)}>

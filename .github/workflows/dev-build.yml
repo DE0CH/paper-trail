@@ -2,10 +2,10 @@
 # For examining a build during development while the full release CI is
 # red/flaky. macOS is SIGNED + NOTARIZED (installs cleanly, no Gatekeeper
 # warning); Windows is unsigned (SmartScreen "More info > Run anyway").
-# Artifacts are attached to the run, NOT published as a release, NOT deployed.
 #
 # Uploads the FIVE artifacts the release publishes, each on its own so it
-# can be grabbed separately:
+# can be grabbed separately (GitHub wraps every artifact download in a
+# zip container — a platform constant, not a workflow choice):
 #   pt-mac-dmg        - macOS universal installer (.dmg)
 #   pt-mac-zip        - macOS universal app (.zip)
 #   pt-win-x64-app    - Windows x64 portable app (.zip)
@@ -33,7 +33,11 @@ permissions:
 
 jobs:
   mac:
-    runs-on: macos-latest
+    # Owner-keyed like ci.yml: on the private mirror (de0ch-org) the mac
+    # leg runs on Depot — GitHub's mac pool is the throttled scarce
+    # resource. Signing secrets exist only on origin, so mirror builds
+    # are UNSIGNED (dev-loop tradeoff, chosen by the owner).
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-macos-latest' || 'macos-latest' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -58,20 +62,29 @@ jobs:
           [ -z "$KEY_ID" ] && missing="$missing APPLE_API_KEY_ID"
           [ -z "$ISSUER" ] && missing="$missing APPLE_API_ISSUER"
           if [ -n "$missing" ]; then
-            echo "::error::missing mac signing secrets:$missing"; exit 1
+            if [ "${{ github.repository_owner }}" = "de0ch" ]; then
+              echo "::error::missing mac signing secrets on origin:$missing"; exit 1
+            fi
+            echo "::warning::no signing secrets here (mirror) — building UNSIGNED"
+            echo "PT_UNSIGNED=1" >> "$GITHUB_ENV"
+            exit 0
           fi
           KEY_DIR="$RUNNER_TEMP/apple-keys"; mkdir -p "$KEY_DIR"
           printf '%s' "$P8" > "$KEY_DIR/AuthKey.p8"
           echo "APPLE_API_KEY=$KEY_DIR/AuthKey.p8" >> "$GITHUB_ENV"
           echo "APPLE_API_KEY_ID=$KEY_ID" >> "$GITHUB_ENV"
           echo "APPLE_API_ISSUER=$ISSUER" >> "$GITHUB_ENV"
-      - name: Package mac universal — SIGNED + NOTARIZED (zip + dmg)
+      - name: Package mac universal (signed+notarized when secrets exist)
         env:
           CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-        run: npx electron-builder --mac zip dmg --publish never
-      - name: List built mac artifacts
-        run: ls -la dist-electron/
+        run: |
+          if [ -n "$PT_UNSIGNED" ]; then
+            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac zip dmg \
+              --publish never --config.mac.notarize=false
+          else
+            npx electron-builder --mac zip dmg --publish never
+          fi
       - name: Upload macOS app (.zip)
         uses: actions/upload-artifact@v4
         with:
@@ -86,6 +99,10 @@ jobs:
           if-no-files-found: error
 
   windows:
+    # Windows never runs on Depot (no interactive session) and the mirror
+    # cannot provision GitHub-hosted Windows — so this job exists only on
+    # origin; a mirror dispatch builds mac-only.
+    if: ${{ github.repository_owner == 'de0ch' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5

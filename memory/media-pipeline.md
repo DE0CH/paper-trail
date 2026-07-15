@@ -22,10 +22,12 @@ metadata:
   bottom-center), stills on math pages with neutral cursor park;
   artifact always uploads (mpegts capture survives crashes); REVIEW
   LOOP: extract frames in CI + vision-check.
-- Demo video re-upload flow: commit mp4 → raw.githubusercontent fetch
-  in a GitHub new-issue page → synthetic ClipboardEvent paste into
-  textarea[aria-label="Markdown value"] → grab user-attachments URL →
-  clear draft (drafts CACHE — require a NEW asset id) → README; verify
-  player headlessly (autoplay flag).
+- Demo video re-upload flow (owner-corrected 2026-07-15): CLAUDE IN
+  CHROME (the owner's browser) uploads the committed mp4 into a NEW
+  GitHub issue, grabs the user-attachments asset URL from the rendered
+  markdown, closes/abandons the issue, and the URL goes into README's
+  player line. This is a browser step the orchestrator box cannot run —
+  prepare the mp4 + hand the owner the exact steps, then update README
+  once they supply the URL (drafts CACHE — require a NEW asset id).
 - See [[orchestrator-only-machine]] — frame extraction/vision review
   happens via CI artifacts, never locally on the 4GB box.

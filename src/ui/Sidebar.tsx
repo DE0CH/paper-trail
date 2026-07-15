@@ -80,7 +80,11 @@ function StackRow({ snap, id, name }: {
         </span>
       )}
       {!editing && (
-        <span className={`${toolsOverlay} right-[22px]`}>
+        // 26 = 6px row padding + the 20px ✕ slot: flush against the ✕'s box
+        // (22 bled 4px INTO it; 32 added a gap but reached far enough left to
+        // eclipse the label's click center, breaking double-click-to-rename —
+        // the w-5 buttons' internal glyph padding provides the optical gap).
+        <span className={`${toolsOverlay} right-[26px]`}>
           <button
             className={`editName ${toolBtn}`}
             title="Rename this trail"
@@ -182,7 +186,9 @@ function HistRow({ label, page, current, index, removable }: {
         </span>
       )}
       {!editing && (
-        <span className={`${toolsOverlay} ${removable ? 'right-[22px]' : 'right-1.5'}`}>
+        // Same flush 26px clearance as StackRow's overlay when the remove ✕
+        // slot exists; without it the overlay parks at the row's padding edge.
+        <span className={`${toolsOverlay} ${removable ? 'right-[26px]' : 'right-1.5'}`}>
           <button
             className={`editName ${toolBtn}`}
             title="Rename this entry"
@@ -268,8 +274,10 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
+        {/* px-1.5 puts the header label's text on the same x as the row
+            labels below it (panel p-1.5 + row px-1.5 = header pl-1.5 + px-1.5). */}
         <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12px] px-1">Trails</span>
+          <span className="text-dim text-[12px] px-1.5">Trails</span>
           <span className="flex-1" />
           <button
             id="btnNewTrail"
@@ -299,8 +307,9 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden"
         style={{ width: widths.side, minWidth: widths.side }}
       >
+        {/* px-1.5: same shared label inset as the Trails header and rows. */}
         <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12px] px-1">History</span>
+          <span className="text-dim text-[12px] px-1.5">History</span>
           <span className="flex-1" />
           <button
             id="btnMark"

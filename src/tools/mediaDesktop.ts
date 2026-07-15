@@ -176,17 +176,26 @@ async function run(): Promise<void> {
     await page.waitForTimeout(900);
 
     const avoidPages: number[] = [];
-    const findLinkInView = () => page.evaluate((avoid) => {
+    const findLinkInView = () => page.evaluate(async (avoid) => {
       const pt = (window as never as {
         __pt: {
-          hist: { active: { entries: Array<{ pos: { page: number } }> } };
-          viewer: { numPages: number };
+          hist: { active: { entries: Array<{ pos: { page: number }; label: string }> } };
+          viewer: {
+            numPages: number;
+            pages: Array<{ el: HTMLElement }>;
+            getLinkLabel(p: unknown, el: HTMLElement): Promise<string | null>;
+          };
         };
       }).__pt;
       const visited = new Set([
         ...pt.hist.active.entries.map((e) => e.pos.page),
         ...avoid,
       ]);
+      // Labels too, not just pages: two citations of the same result can
+      // anchor to different pages, and a repeated label makes a confusing
+      // demo (a fork must land somewhere visibly NEW, first try — no
+      // undo-retry choreography in the recording).
+      const seenLabels = new Set(pt.hist.active.entries.map((e) => e.label));
       // Only hop to CONTENT: a citation into the bibliography is a
       // dead end (no onward references there) and a dull demo.
       const lastContent = pt.viewer.numPages - 6;
@@ -200,6 +209,12 @@ async function run(): Promise<void> {
         if (r.width < 14 || r.height < 8) continue;
         if (r.top > cont.top + 90 && r.bottom < cont.bottom - 140
             && r.left > cont.left + 40 && r.right < cont.right - 40) {
+          // Pre-compute the label the click WOULD produce (the viewer's
+          // own extraction) and skip candidates that repeat one.
+          const pageRec = pt.viewer.pages.find((pg) => pg.el.contains(el));
+          const label = pageRec
+            ? await pt.viewer.getLinkLabel(pageRec, el) : null;
+          if (label && seenLabels.has(label)) continue;
           return { x: r.left + r.width / 2, y: r.top + r.height / 2, dest };
         }
       }
@@ -298,7 +313,11 @@ async function run(): Promise<void> {
     await page.waitForTimeout(400);
     await page.mouse.down(); await page.mouse.up();
     await page.waitForTimeout(1300);
-    // 5. branch: ctrl+click a reference (the HUD shows the held key)
+    // 5. branch: ctrl+click a reference (the HUD shows the held key).
+    // findLinkInView pre-computes each candidate's label with the viewer's
+    // own extraction and skips repeats, so this single click lands on a
+    // visibly NEW reference the first time — no undo-retry choreography in
+    // the recording (owner-reported: a retry was visible in a shipped take).
     const target2 = await visibleLink();
     if (target2) {
       await glide(target2.x, target2.y, 700);
@@ -336,9 +355,17 @@ async function run(): Promise<void> {
         stacks: pt.hist.stacks.length,
         deepestLen: deepest.entries.length,
         distinctLabels: new Set(deepest.entries.map((e) => e.label)).size,
+        // Duplicate labels in ANY stack — the shipped "Definition 4.1
+        // twice" duplicate lived in the shallower FORKED stack, which the
+        // deepest-only check never saw.
+        stacksWithDupLabels: pt.hist.stacks.filter(
+          (s) => new Set(s.entries.map((e) => e.label)).size < s.entries.length,
+        ).length,
       };
     });
-    if (outcome.stacks < 2 || outcome.deepestLen < 5 || outcome.distinctLabels < 5) {
+    if (outcome.stacks < 2 || outcome.deepestLen < 5
+        || outcome.distinctLabels < outcome.deepestLen
+        || outcome.stacksWithDupLabels > 0) {
       throw new Error('recording did not demonstrate the features: '
         + JSON.stringify(outcome));
     }
