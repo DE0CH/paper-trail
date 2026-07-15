@@ -35,8 +35,9 @@ jobs:
   mac:
     # Owner-keyed like ci.yml: on the private mirror (de0ch-org) the mac
     # leg runs on Depot — GitHub's mac pool is the throttled scarce
-    # resource. Signing secrets exist only on origin, so mirror builds
-    # are UNSIGNED (dev-loop tradeoff, chosen by the owner).
+    # resource. The mac signing secrets are set on origin AND the mirror
+    # (mirror copies uploaded 2026-07-15), so dev builds are signed and
+    # notarized on both; the unsigned branch below is only a fallback.
     runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-macos-latest' || 'macos-latest' }}
     steps:
       - uses: actions/checkout@v5
@@ -99,11 +100,10 @@ jobs:
           if-no-files-found: error
 
   windows:
-    # Windows never runs on Depot (no interactive session) and the mirror
-    # cannot provision GitHub-hosted Windows — so this job exists only on
-    # origin; a mirror dispatch builds mac-only.
-    if: ${{ github.repository_owner == 'de0ch' }}
-    runs-on: windows-latest
+    # PACKAGING needs no interactive desktop, so unlike the GUI e2e jobs
+    # this one CAN run on Depot Windows (NSIS verified working there) —
+    # owner-keyed: Depot on the mirror, GitHub-hosted on origin.
+    runs-on: ${{ github.repository_owner == 'de0ch-org' && 'depot-windows-2025' || 'windows-latest' }}
     steps:
       - uses: actions/checkout@v5
         with:
