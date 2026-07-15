@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { controller, type Snapshot } from '../core/controller';
+import { effectiveDpr } from '../core/renderGeometry';
 import type { OutlineNode } from '../core/types';
 import { IconChevron, IconClose, IconCollapseAll, IconExpandAll } from './icons';
 
@@ -93,7 +94,12 @@ function Thumbnails({ snap }: { snap: Snapshot }) {
   async function renderThumb(holder: HTMLElement, pageNumber: number): Promise<void> {
     const rec = controller.viewer.pages[pageNumber - 1];
     if (!rec) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Thumbnails cap at 2x (sharp enough at 110px) — and, like the main
+    // viewer, at the platform canvas limits: an extreme aspect-ratio page
+    // (very tall for its width) would otherwise exceed the per-dimension
+    // maximum and render as a silently blank canvas.
+    const cssH = THUMB_W * (rec.vp1.height / rec.vp1.width);
+    const dpr = effectiveDpr(THUMB_W, cssH, Math.min(window.devicePixelRatio || 1, 2));
     const scale = (THUMB_W / rec.vp1.width) * dpr;
     const vp = rec.page.getViewport({ scale });
     const c = document.createElement('canvas');
