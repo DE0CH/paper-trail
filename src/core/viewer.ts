@@ -251,6 +251,7 @@ export class Viewer {
     this.fitWidth = fitWidth;
     this.viewerEl.style.setProperty('--scale-factor', String(scale));
     for (const p of this.pages) {
+      p.renderFailed = false; // a new scale is a fresh chance for a failed page
       this.markStale(p); // keep the old canvas stretched until the new render
       this.sizeShell(p);
     }
@@ -370,7 +371,12 @@ export class Viewer {
       const top = p.el.offsetTop;
       const bot = top + p.el.offsetHeight;
       if (bot >= st - RENDER_MARGIN && top <= st + ch + RENDER_MARGIN) {
-        this.ensureRendered(p);
+        // A page whose render FAILED is not retried from here: updateVisible
+        // runs on every scroll animation frame, so an unconditional retry
+        // becomes a storm of full-canvas allocations against a page that
+        // keeps failing. The flag clears on a scale change (setScale) and a
+        // document change; an explicit ensurePage() may still retry.
+        if (!p.renderFailed) this.ensureRendered(p);
       } else if (!p.pinned && (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN)) {
         this.destroyPage(p);
       }
