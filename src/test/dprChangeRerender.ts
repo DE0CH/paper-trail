@@ -4,8 +4,13 @@
 // (rendered && renderedScale === scale, so nothing invalidated them):
 // permanently soft on the sharper display, and their shells — sized with
 // the old dpr — drifted sub-pixel from freshly rendered neighbors.
-// The dpr change is driven for real through CDP display emulation, which
-// re-evaluates the `resolution` media query the viewer listens to.
+// The dpr change is driven through CDP display emulation. When the
+// environment re-evaluates `resolution` media queries under emulation the
+// viewer's listener is exercised end-to-end; headless builds that update
+// window.devicePixelRatio WITHOUT re-evaluating media queries cannot
+// deliver that OS-level signal, so the test says so and drives the
+// viewer's public refresh hook directly instead — proving the refresh
+// path (stale + reshell + re-render), not the listener wiring.
 // Run: node build-node/test/dprChangeRerender.js   (server on 8377 first)
 
 import { findBrowser } from './browsers';
@@ -50,6 +55,23 @@ async function run(): Promise<void> {
     ).then(() => true).catch(() => false);
     check('emulation raises devicePixelRatio to 2 (test premise)', dprChanged);
 
+    // Does this environment re-evaluate `resolution` media queries under
+    // emulation? Real display moves do; if it does not, the listener's
+    // signal never arrives here and the refresh hook is driven directly.
+    const mqFollows = await page.evaluate(
+      () => window.matchMedia('(resolution: 2dppx)').matches);
+    let path = 'media-query listener (end-to-end)';
+    if (!mqFollows) {
+      path = 'refreshForDprChange() driven directly — this environment does '
+        + 'not re-evaluate resolution media queries under emulation, so the '
+        + 'listener wiring itself is not exercised here';
+      console.log(`NOTE  ${path}`);
+      await page.evaluate(() => {
+        (window as unknown as (Window & { __pt: { viewer: { refreshForDprChange(): void } } }))
+          .__pt.viewer.refreshForDprChange();
+      });
+    }
+
     // The already-rendered page must become 2x-exact without any other
     // action (no scroll, no zoom).
     const rerendered = await page.waitForFunction(() => {
@@ -57,7 +79,8 @@ async function run(): Promise<void> {
       return !!c && Math.abs(c.width / parseFloat(c.style.width)
         - window.devicePixelRatio) < 1e-9 && window.devicePixelRatio === 2;
     }, undefined, { timeout: 15_000 }).then(() => true).catch(() => false);
-    check('already-rendered pages re-render at the new devicePixelRatio', rerendered);
+    check('already-rendered pages re-render at the new devicePixelRatio',
+      rerendered, `via ${path}`);
 
     // The shell was re-sized with the new dpr too, so its CSS box agrees
     // with the canvas (a mismatch shows as a hairline sliver).
