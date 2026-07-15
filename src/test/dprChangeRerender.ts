@@ -45,7 +45,20 @@ async function run(): Promise<void> {
     check('baseline renders at devicePixelRatio 1 (test premise)',
       base.dpr === 1 && Math.abs(base.ratio - 1) < 1e-9, JSON.stringify(base));
 
-    // Move the window to a "2x display" via real display emulation.
+    // Probe the exact mechanism the viewer uses: a `resolution` media-query
+    // change listener, armed BEFORE the override. Real display moves fire
+    // it; some emulated environments update devicePixelRatio (and even
+    // fresh matchMedia().matches) WITHOUT ever dispatching change events to
+    // armed listeners — in that case the OS-level signal cannot reach the
+    // viewer here, and the refresh hook is driven directly instead.
+    await page.evaluate(() => {
+      const w = window as unknown as (Window & { __mqProbe: boolean });
+      w.__mqProbe = false;
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      mq.addEventListener('change', () => { w.__mqProbe = true; }, { once: true });
+    });
+
+    // Move the window to a "2x display" via display emulation.
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: 1200, height: 800, deviceScaleFactor: 2, mobile: false,
@@ -55,16 +68,21 @@ async function run(): Promise<void> {
     ).then(() => true).catch(() => false);
     check('emulation raises devicePixelRatio to 2 (test premise)', dprChanged);
 
-    // Does this environment re-evaluate `resolution` media queries under
-    // emulation? Real display moves do; if it does not, the listener's
-    // signal never arrives here and the refresh hook is driven directly.
-    const mqFollows = await page.evaluate(
-      () => window.matchMedia('(resolution: 2dppx)').matches);
+    // Nudge a style/layout pass — media-query re-evaluation rides on it.
+    await page.evaluate(async () => {
+      void document.documentElement.offsetWidth;
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    const probeFired = await page.waitForFunction(
+      () => (window as unknown as (Window & { __mqProbe: boolean })).__mqProbe === true,
+      undefined, { timeout: 3_000 },
+    ).then(() => true).catch(() => false);
     let path = 'media-query listener (end-to-end)';
-    if (!mqFollows) {
-      path = 'refreshForDprChange() driven directly — this environment does '
-        + 'not re-evaluate resolution media queries under emulation, so the '
-        + 'listener wiring itself is not exercised here';
+    if (!probeFired) {
+      path = 'refreshForDprChange() driven directly — this environment never '
+        + 'dispatches resolution media-query change events under emulation '
+        + '(probe listener stayed silent), so the listener wiring itself is '
+        + 'not exercised here';
       console.log(`NOTE  ${path}`);
       await page.evaluate(() => {
         (window as unknown as (Window & { __pt: { viewer: { refreshForDprChange(): void } } }))
