@@ -82,6 +82,8 @@
     "test:offscreen-bounds": "electron build-node/test/restoreOffscreenBounds.js",
     "test:stdio": "node build-node/test/desktopStdioClosed.js",
     "perf": "node build-node/tools/perf.js",
+    "perf:bigpdf": "node build-node/tools/perfBigPdf.js",
+    "perf:hot": "node build-node/tools/perfHot.js",
     "media": "node build-node/tools/media.js",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never",
