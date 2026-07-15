@@ -187,7 +187,7 @@ jobs:
         # clear of the right-aligned bar, so this test doesn't run there.
         if: ${{ !cancelled() }}
         shell: bash
-        run: npx electron build-node/test/findBarWindowControls.js
+        run: node build-node/test/findBarWindowControls.js
 
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
