@@ -97,6 +97,17 @@ conditional); Mac keeps the owner-keyed `depot-macos-latest`/`macos-latest`.
 Feature branch on the mirror → Mac/Linux Depot + Windows github-hosted;
 main (de0ch, GitHub) → everything github-hosted.
 
+**Depot-mac expected noise on mirror full-CI runs (2026-07-15):**
+- The desktopSavePickerOnClose suite (real-native-dialog auto-clicker via
+  System Events) can NEVER pass on Depot mac — assistive access is denied
+  (-25211). Those steps failing on a mirror run are environment, not code;
+  judge the run by the other steps (same class as the Windows
+  runner-acquisition failures and the missing Intel-mac legs).
+- searchSelectionBox once HUNG 20+ minutes on Depot mac (run 29390318057;
+  finishes in ~30s healthy; not reproduced since). If a mirror mac leg
+  wedges >15 min on an untouched test: cancel, re-dispatch once, and only
+  then investigate.
+
 **Runner policy (owner, 2026-07-14):** DEFAULT = move as much as
 possible to DEPOT. If a job genuinely REQUIRES a GitHub-hosted runner
 and it's **Windows or Linux**, that's fine — use GitHub freely. If a mac
