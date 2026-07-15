@@ -12,15 +12,15 @@
 //     macOS composes its own, see afterPackMac). The .ptl icon is a
 //     page wearing the plated logo; the .pdf icon is the recognisable
 //     red "PDF" band with the trail badge in the corner.
-//   build/installer.ico  (the installer package icon: a kraft shipping
-//     box with the app-icon badge on its front — Windows only)
+//   build/installer.ico / build/uninstaller.ico  (the installer package
+//     icon: a kraft shipping box with the app-icon badge on its front —
+//     Windows only; the uninstaller wears the same icon so both ends of
+//     the install carry the app's branding)
 // The app icon shares the same plated trail on macOS and the web.
 // The .ico files are multi-resolution (BMP at 16-48, PNG above — the
 // png2icons `forWinExe` mix), so Explorer draws a crisp icon at every
 // view size, including the small list/details icons and the icon NSIS
 // embeds in the Setup executable.
-// NOT generated here: build/uninstaller.ico is NSIS's stock modern-
-// uninstall icon (zlib licensed), committed verbatim.
 // The .ico generation is pure JS (png2icons + a headless render), so it
 // runs on any platform; only the macOS .icns steps need a Mac. The
 // generated binaries are committed so CI never needs to regenerate them.
@@ -101,7 +101,7 @@ function winSvg(): string {
 // superimposed on its front. The box fills the canvas the way a native
 // shell icon does — only a shadow's worth of margin — so it stays legible
 // down to the small list/details sizes. Windows only; the uninstaller
-// keeps NSIS's stock icon.
+// wears the same icon.
 function installerSvg(): string {
   const art = /<g id="art">([\s\S]*?)<\/g>/.exec(fs.readFileSync(SVG, 'utf8'))?.[1];
   if (!art) throw new Error('docs/icon.svg no longer matches the art marker');
@@ -235,13 +235,16 @@ async function run(): Promise<void> {
   fs.writeFileSync(path.join(BUILD, 'icon.ico'), toIco(winPng));
   fs.writeFileSync(path.join(BUILD, 'ptl.ico'), toIco(docPng));
   fs.writeFileSync(path.join(BUILD, 'pdf.ico'), toIco(pdfPng));
-  fs.writeFileSync(path.join(BUILD, 'installer.ico'), toIco(installerPng));
+  const installerIco = toIco(installerPng);
+  fs.writeFileSync(path.join(BUILD, 'installer.ico'), installerIco);
+  fs.writeFileSync(path.join(BUILD, 'uninstaller.ico'), installerIco);
 
   // favicon: the plated icon, verbatim
   fs.mkdirSync(path.join(ROOT, 'public'), { recursive: true });
   fs.copyFileSync(SVG, path.join(ROOT, 'public', 'icon.svg'));
 
   const written = ['build/icon.ico', 'build/ptl.ico', 'build/pdf.ico',
+    'build/uninstaller.ico',
     'build/installer.ico', 'public/icon.svg'];
 
   // macOS .icns (app + document icons): needs sips/iconutil, so it only
