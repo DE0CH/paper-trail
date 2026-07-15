@@ -59,6 +59,8 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   .gitconfig) and push again.
 
 ## Topic files
+- [handoff-1.0-train](handoff-1.0-train.md) — ACTIVE session-restart handoff: 1.0 train state + post-1.0 queue
+- [draft-changelog-1.0.0](draft-changelog-1.0.0.md) — the ## 1.0.0 section to paste at bump time
 - [release-engineering](release-engineering.md) — release rules,
   signing secrets, artifact naming (NO SPACES — the update-404 bug),
   Vercel, act.
