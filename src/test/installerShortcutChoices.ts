@@ -130,8 +130,14 @@ for ($i = 0; $i -lt 400; $i++) {
         }
       }
       $byName = @{}
-      foreach ($b in $w.FindAll($descend, $btnCond)) { $byName[$b.Current.Name] = $b }
-      foreach ($name in @('Install', 'Next >', 'Finish', 'Close')) {
+      foreach ($b in $w.FindAll($descend, $btnCond)) {
+        $bn = $b.Current.Name
+        $byName[$bn] = $b
+        # log each distinct button once: a page whose forward button we
+        # do not know must show up in the output, never stall silently
+        if ($bn -and -not $seen.ContainsKey('btn:' + $bn)) { $seen['btn:' + $bn] = $true; Write-Output ('button: ' + $bn) }
+      }
+      foreach ($name in @('I Agree', 'Install', 'Next >', 'Finish', 'Close')) {
         if ($byName.ContainsKey($name) -and $byName[$name].Current.IsEnabled) {
           try {
             $byName[$name].GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
