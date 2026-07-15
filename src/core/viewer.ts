@@ -150,6 +150,10 @@ export class Viewer {
     this.doc = null;
     this.pages = [];
     this.viewerEl.replaceChildren();
+    // A close can land mid-pinch: never let the gesture's CSS transform
+    // (beginVisualZoom/applyVisualZoom) leak onto the next document.
+    this.viewerEl.style.transform = '';
+    this.viewerEl.style.willChange = '';
     this.lastPage = 0;
   }
 

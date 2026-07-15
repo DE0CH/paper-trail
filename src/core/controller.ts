@@ -610,6 +610,20 @@ export class Controller {
     }
   }
 
+  /**
+   * Forget a mid-flight pinch gesture. Called when a document swaps in
+   * under it: the armed commit timer would otherwise fire after the swap
+   * and commit the OLD gesture's scale onto the NEW document (dropping
+   * its fit-width); the viewer clears the visual transform in close().
+   */
+  private resetPinch(): void {
+    clearTimeout(this.pinchTimer);
+    this.pinchTimer = 0;
+    this.pinchStartScale = null;
+    this.pinchFactor = 1;
+    this.pinchAnchor = null;
+  }
+
   private async handleLinkClick(info: LinkInfo): Promise<void> {
     const pos = await this.viewer.resolveDest(info.dest);
     if (!pos) {
@@ -921,6 +935,7 @@ export class Controller {
     try {
       const doc = await this.viewer.open({ data });
       if (!doc) return;
+      this.resetPinch(); // the new document must not inherit a mid-flight gesture
       this.docOpen = true;
       this.currentName = name;
       this.currentSource = source ?? handle ?? null;

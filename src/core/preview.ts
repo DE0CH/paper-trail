@@ -95,7 +95,12 @@ export class Preview {
     // replace the hovered element before the timer fires, and a
     // disconnected node has no geometry left to place the popup by.
     const armedRect = linkEl.getBoundingClientRect();
+    // The timer is tied to the document it was armed against: a document
+    // swap during the hover delay must not pop the OLD link's preview
+    // over the NEW document.
+    const epoch = this.viewer.docEpoch;
     this.showTimer = setTimeout(() => {
+      if (this.viewer.docEpoch !== epoch) return;
       this.show(dest, linkEl, armedRect)
         .catch((e) => console.warn('preview failed', e));
     }, HOVER_DELAY_MS);
