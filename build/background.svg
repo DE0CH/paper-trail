@@ -13,7 +13,12 @@
        touches or decorates its area. Colors stay in the app palette
        (trail #4f8cff) at low opacity on a light neutral, and the
        instruction line uses the system font, so the window reads
-       native and quiet. -->
+       native and quiet.
+       CROP WARNING: dmgbuild sizes the whole window (title bar
+       included) from this image and anchors it to the content top, so
+       the bottom ~28px are never visible — keep everything that
+       matters above y=345 (verified against a real macOS 15 Finder
+       window on CI). -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#f7f8fa"/>
@@ -34,7 +39,7 @@
           stroke="#4f8cff" stroke-width="5" stroke-linejoin="round"/>
   </g>
 
-  <text x="270" y="349" text-anchor="middle"
+  <text x="270" y="332" text-anchor="middle"
         font-family="system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif"
         font-size="14" font-weight="500" fill="#7a7f88">Drag Paper Trail into Applications</text>
 </svg>
