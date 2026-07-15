@@ -26,7 +26,10 @@ async function main(): Promise<void> {
     let y = 740;
     for (let line = 0; line < 45; line++) {
       const words: string[] = [];
-      for (let w = 0; w < 12; w++) words.push(WORDS[(seed++ * 7) % WORDS.length]);
+      // 11 is coprime to WORDS.length (28), so the cycle visits every word
+      // (a multiplier sharing a factor with 28 would emit only 4 of them,
+      // leaving some search probes with zero matches)
+      for (let w = 0; w < 12; w++) words.push(WORDS[(seed++ * 11) % WORDS.length]);
       page.drawText(`p${p + 1} ${words.join(' ')}`,
         { x: 54, y, size: 11, font, color: rgb(0.1, 0.1, 0.12) });
       y -= 16;
