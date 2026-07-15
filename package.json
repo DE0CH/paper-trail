@@ -27,6 +27,7 @@
     "test:e2e:race": "node build-node/test/raceConditions.js",
     "test:e2e:drop-path": "node build-node/test/dropBindsSilentTarget.js",
     "test:e2e:drop-pair": "node build-node/test/dropPairSessionTarget.js",
+    "test:e2e:write-gen": "node build-node/test/writeGenerationDirty.js",
     "test:e2e:ui-align": "node build-node/test/uiAlignment.js",
     "test:desktop:edges": "electron build-node/test/desktopEdges.js",
     "test:os-open-flash": "electron build-node/test/osOpenFlash.js",

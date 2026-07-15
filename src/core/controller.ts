@@ -305,8 +305,13 @@ export class Controller {
   }
 
 
+  // Bumped on every edit; a finished write may only clear `dirty` when no
+  // edit arrived after its text was serialized (see writeProgress).
+  private dirtyGen = 0;
+
   private markDirty(): void {
     if (this.restoring || !this.docOpen) return;
+    this.dirtyGen += 1;
     if (!this.session.dirty) {
       this.session.dirty = true;
       this.notify();
@@ -465,6 +470,11 @@ export class Controller {
     this.session.saving = true;
     this.notify();
     try {
+      // Snapshot the edit generation WITH the serialized text: an edit that
+      // lands while the (async) write is in flight is NOT in these bytes, so
+      // it must stay dirty — clearing unconditionally treated it as saved,
+      // and a close could then silently discard it.
+      const gen = this.dirtyGen;
       // Line-oriented plain-text format: small, clear git diffs.
       const text = serializeProgress(this.progressFileObject());
       let ok = false;
@@ -478,11 +488,12 @@ export class Controller {
         await w.close();
         ok = true;
       }
-      // Only a SUCCESSFUL write clears dirty. A failed write — the path
-      // handler returned false, or a handle write threw (skips this line) —
-      // leaves the change dirty so it's never silently lost; the next
-      // auto-save / manual save / close-flush retries it.
-      if (ok) this.session.dirty = false;
+      // Only a SUCCESSFUL write of the NEWEST state clears dirty. A failed
+      // write — the path handler returned false, or a handle write threw
+      // (skips this line) — leaves the change dirty so it's never silently
+      // lost; the next auto-save / manual save / close-flush retries it.
+      // Likewise an edit that arrived mid-write (generation moved on).
+      if (ok && this.dirtyGen === gen) this.session.dirty = false;
     } finally {
       this.session.saving = false;
       this.notify();

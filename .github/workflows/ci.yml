@@ -161,6 +161,11 @@ jobs:
         shell: bash
         run: node build-node/test/dropPairSessionTarget.js
 
+      - name: An edit during an in-flight save is never marked saved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/writeGenerationDirty.js
+
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
         shell: bash
@@ -479,6 +484,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/dropPairSessionTarget.js
+
+      - name: An edit during an in-flight save is never marked saved
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/writeGenerationDirty.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
