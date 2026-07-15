@@ -93,13 +93,27 @@ $any = [System.Windows.Automation.Condition]::TrueCondition
 $children = [System.Windows.Automation.TreeScope]::Children
 $descend = [System.Windows.Automation.TreeScope]::Descendants
 # NSIS controls surface to (managed) UIA as bare Panes with NO patterns
-# (run 29431132327's probes), so UIA is only the finder: actions go to
-# the controls' native handles as classic Win32 button messages.
+# (run 29431132327's probes), and posted BM_CLICKs did not advance the
+# custom page (run 29432270661), so UIA is only the finder: state is
+# read via BM_GETCHECK and every action is a REAL mouse click at the
+# control's screen rectangle, exactly what a user does.
 Add-Type -Namespace PT -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
 '@
-$BM_GETCHECK = 0x00F0; $BM_SETCHECK = 0x00F1; $BM_CLICK = 0x00F5
+$BM_GETCHECK = 0x00F0
+function ClickAt([System.Windows.Automation.AutomationElement]$el) {
+  $r = $el.Current.BoundingRectangle
+  if ($r.Width -le 0 -or $r.Height -le 0) { return $false }
+  [PT.Win]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)) | Out-Null
+  Start-Sleep -Milliseconds 60
+  [PT.Win]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 30
+  [PT.Win]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+  return $true
+}
 $seen = @{}
 function Note([string]$line) {
   if (-not $script:seen.ContainsKey($line)) { $script:seen[$line] = $true; Write-Output $line }
@@ -124,11 +138,13 @@ for ($i = 0; $i -lt 400; $i++) {
       Write-Output ('probe #' + $i + ' wins=' + $wins.Count + ' top-level=' + $all.Count + ' [' + (($desc | Select-Object -First 12) -join '; ') + ']')
     }
     foreach ($w in $wins) {
-      # controls are matched by NAME + supported pattern, never by
-      # control type: NSIS/MSAA type mapping is not worth trusting
+      # controls are matched by NAME, never by control type: the
+      # NSIS-to-UIA type mapping is bare Panes and not worth trusting
+      [PT.Win]::SetForegroundWindow([IntPtr]$w.Current.NativeWindowHandle) | Out-Null
       $controls = $w.FindAll($descend, $any)
       if ($i % 15 -eq 4) { Write-Output ('  win "' + $w.Current.Name + '" descendants=' + $controls.Count) }
       $clickables = @{}
+      $toggled = $false
       foreach ($c in $controls) {
         $n = [string]$c.Current.Name
         if (-not $n) { continue }
@@ -140,27 +156,29 @@ for ($i = 0; $i -lt 400; $i++) {
           Note ('checkbox: ' + $short)
         }
         # untick the desktop shortcut (the scenario) and Run-after-finish
-        # (so the installed app does not launch and block the uninstall)
+        # (so the installed app does not launch and block the uninstall);
+        # a real click, re-verified by BM_GETCHECK on the next poll
         if ($n -match 'desktop shortcut' -or $n -match '^Run ') {
           if ([PT.Win]::SendMessage($h, $BM_GETCHECK, [IntPtr]::Zero, [IntPtr]::Zero) -ne [IntPtr]::Zero) {
-            [PT.Win]::SendMessage($h, $BM_SETCHECK, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-            Write-Output ('unticked: ' + $short)
+            if (ClickAt $c) { Write-Output ('unticked: ' + $short); $toggled = $true }
           }
         }
         # keep the default per-user install on the install-mode page
         if ($n -match 'Only for me') {
           if ([PT.Win]::SendMessage($h, $BM_GETCHECK, [IntPtr]::Zero, [IntPtr]::Zero) -eq [IntPtr]::Zero) {
-            [PT.Win]::PostMessage($h, $BM_CLICK, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-            Write-Output ('selected: ' + $short)
+            if (ClickAt $c) { Write-Output ('selected: ' + $short); $toggled = $true }
           }
         }
-        if ($c.Current.IsEnabled) { $clickables[$n] = $h }
+        if ($c.Current.IsEnabled) { $clickables[$n] = $c }
       }
-      foreach ($name in @('I Agree', 'Install', 'Next >', 'Finish', 'Close')) {
-        if ($clickables.ContainsKey($name)) {
-          [PT.Win]::PostMessage($clickables[$name], $BM_CLICK, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-          Write-Output ('clicked: ' + $name)
-          break
+      # never advance in the same poll as a toggle: the next poll first
+      # re-reads BM_GETCHECK, so the state is verified before moving on
+      if (-not $toggled) {
+        foreach ($name in @('I Agree', 'Install', 'Next >', 'Finish', 'Close')) {
+          if ($clickables.ContainsKey($name)) {
+            if (ClickAt $clickables[$name]) { Write-Output ('clicked: ' + $name) }
+            break
+          }
         }
       }
     }
