@@ -30,6 +30,18 @@ jobs:
         env:
           PT_SDC_MODE: quit
         run: npx electron build-node/test/desktopSavePickerOnClose.js
+      - name: Save picker on close (failing save keeps window)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 8
+        env:
+          PT_SDC_MODE: save-fails
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+      - name: Save picker on close (stale edited-window pruning)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 8
+        env:
+          PT_SDC_MODE: stale-edited
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
 
   windows:
     runs-on: windows-latest
@@ -53,4 +65,10 @@ jobs:
         timeout-minutes: 8
         env:
           PT_SDC_MODE: quit
+        run: npx electron build-node/test/desktopSavePickerOnClose.js
+      - name: Save picker on close (failing save keeps window)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 8
+        env:
+          PT_SDC_MODE: save-fails
         run: npx electron build-node/test/desktopSavePickerOnClose.js

@@ -9,18 +9,29 @@
 // loop, so the buggy synchronous implementation passes too — proven on CI).
 // Here the REAL native message box is shown and answered by a native
 // auto-clicker (System Events button click on macOS, a foreground ENTER on
-// Windows — ENTER hits the default button, which is "Save…"). Only the
-// save-as picker itself is stubbed, because whether that picker is ever
-// REACHED with a live window is exactly the observable under test.
+// Windows — ENTER hits the default button, which is "Save…") after the ~2.5s
+// a real user takes to read the prompt. Only the save-as picker itself is
+// stubbed, and FAITHFULLY: it "picks" the location after the ~1s a user
+// needs, and a picker whose parent window has been torn down cannot deliver
+// a choice — it cancels, exactly like the real one. Whether the picker is
+// reached, survives, and delivers is the observable under test.
 //
 // Modes (PT_SDC_MODE):
-//   close — the window-close path (X / Cmd+W): win.close()
-//   quit  — the quit path (Cmd+Q / File→Exit): app.quit(). On macOS this
-//           exercises before-quit → promptCloseAllWindows (whose per-window
-//           grace timer must not abandon the quit while the user is inside a
-//           close-flow dialog); the quit is judged by its re-entry after the
-//           save. On Windows the quit machinery closes the window through
-//           the same renderer flow and the verdict is delivered in will-quit.
+//   close        — the window-close path (X / Cmd+W): win.close(), plus a
+//                  second close mid-prompt (must not stack a second prompt).
+//   quit         — the quit path (Cmd+Q / File→Exit): app.quit(). On macOS
+//                  this exercises before-quit → promptCloseAllWindows (which
+//                  must not abandon the quit while the user sits in a
+//                  close-flow dialog); the quit is judged by its re-entry
+//                  after the save. On Windows the quit machinery closes the
+//                  window through the same renderer flow and the verdict is
+//                  delivered in will-quit.
+//   save-fails   — the bound handle's write throws: choosing "Save…" must
+//                  surface a failure toast and KEEP the window (no unhandled
+//                  rejection, no teardown, session still dirty).
+//   stale-edited — (macOS) a dirty window closed via the don't-save path
+//                  must not leave a stale edited-window entry that makes a
+//                  later quit with zero windows run a phantom close cycle.
 //
 // Run: npx electron build-node/test/desktopSavePickerOnClose.js
 
@@ -34,7 +45,9 @@ import * as os from 'node:os';
 import { spawn } from 'node:child_process';
 import { app, BrowserWindow, dialog } from 'electron';
 
-const MODE: 'close' | 'quit' = process.env.PT_SDC_MODE === 'quit' ? 'quit' : 'close';
+type Mode = 'close' | 'quit' | 'save-fails' | 'stale-edited';
+const MODE: Mode = (['close', 'quit', 'save-fails', 'stale-edited'] as const)
+  .find((m) => m === process.env.PT_SDC_MODE) ?? 'close';
 const isMac = process.platform === 'darwin';
 const t0 = Date.now();
 const log = (msg: string): void => { console.log(`[spc +${Date.now() - t0}ms] ${msg}`); };
@@ -45,9 +58,9 @@ const savePath = path.join(outDir, 'reading.ptl');
 const answeredFlag = path.join(outDir, 'answered.flg');
 
 // ---- native auto-clicker: answers the REAL confirm dialog with "Save…" ----
-// Spawned right before the real dialog opens; waits a beat (a user reading
-// the prompt — long enough to outlast promptCloseAllWindows' grace timer),
-// then presses the default "Save…" until the dialog reports answered.
+// Spawned right before the real dialog opens; waits the ~2.5s a real user
+// takes to read the prompt, then presses the default "Save…" until the
+// dialog reports answered.
 function spawnClicker(): void {
   fs.rmSync(answeredFlag, { force: true });
   if (isMac) {
@@ -106,12 +119,13 @@ function spawnClicker(): void {
   }
 }
 
-// ---- dialog instrumentation (REAL confirm, stubbed location picker) --------
+// ---- dialog instrumentation (REAL confirm, faithful location picker) ------
 const realMsgSync = dialog.showMessageBoxSync.bind(dialog);
 const realMsgAsync = dialog.showMessageBox.bind(dialog);
 let confirmShown = 0;
 let confirmAnswered = 0;
-const saveDialogCalls: { winAlive: boolean }[] = [];
+const saveDialogCalls: { aliveAtCall: boolean; aliveAtPick: boolean; delivered: boolean }[] = [];
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 type AnyWin = BrowserWindow | Electron.MessageBoxOptions;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,15 +151,23 @@ Promise<Electron.MessageBoxReturnValue> => {
   log(`confirm dialog ANSWERED (async): response=${r.response}`);
   return r;
 };
-// The location picker is the OBSERVABLE: reached-or-not (and with a live
-// window or not) is what discriminates the data loss, so a deterministic
-// stub standing in for "the user picked a location" is faithful here.
+// The location picker is the OBSERVABLE, stubbed but FAITHFUL: a user needs
+// about a second to pick a location, and a picker whose parent window has
+// been destroyed in the meantime can never deliver a choice — it cancels,
+// exactly like the real sheet/dialog would. (An instant-return stub here
+// would hide the teardown race the same way the old test's stubs did.)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (dialog as any).showSaveDialog = async (win: BrowserWindow):
 Promise<{ canceled: boolean; filePath: string }> => {
-  const winAlive = !!win && !win.isDestroyed();
-  saveDialogCalls.push({ winAlive });
-  log(`save-as picker reached: winAlive=${winAlive}`);
+  const aliveAtCall = !!win && !win.isDestroyed();
+  log(`save-as picker reached: winAlive=${aliveAtCall}`);
+  await sleep(1000); // the user picking a location
+  const aliveAtPick = !!win && !win.isDestroyed();
+  const delivered = aliveAtCall && aliveAtPick;
+  saveDialogCalls.push({ aliveAtCall, aliveAtPick, delivered });
+  log(`save-as picker ${delivered ? 'delivered a location' : 'CANCELED (window gone)'}: `
+    + `aliveAtCall=${aliveAtCall} aliveAtPick=${aliveAtPick}`);
+  if (!delivered) return { canceled: true, filePath: '' };
   return { canceled: false, filePath: savePath };
 };
 
@@ -163,34 +185,34 @@ const finish = (): void => {
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   app.exit(failed.length ? 1 : 0);
 };
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-// Common verdict: the picker was reached with a live window and the .ptl
-// landed where the user chose. FAILS on the data-loss bug (window torn down
-// after "Save…", picker never reached, nothing written).
+// Written-and-complete: the .ptl exists AND holds the unsaved change.
+const ptlComplete = (): boolean => {
+  try { return fs.readFileSync(savePath, 'utf8').includes('save-me'); } catch { return false; }
+};
+
+// Common verdict for the save paths: the picker was reached on a live window,
+// stayed live long enough for the user to pick, and the .ptl landed BEFORE
+// the window went. FAILS on the data-loss bug (teardown outruns the picker).
 function checkSaveHappened(): void {
-  check('the confirm prompt was shown', confirmShown >= 1, `confirmShown=${confirmShown}`);
+  check('the confirm prompt was shown (exactly once — no stacked prompts)',
+    confirmShown === 1, `confirmShown=${confirmShown}`);
   check('the confirm prompt was answered (auto-clicker worked)',
     confirmAnswered >= 1, `confirmAnswered=${confirmAnswered}`);
   check('choosing Save… reached the save-as location picker',
     saveDialogCalls.length >= 1, `saveDialogCalls=${saveDialogCalls.length}`);
-  check('the picker was presented on a live (not torn-down) window',
-    saveDialogCalls.length >= 1 && saveDialogCalls.every((c) => c.winAlive),
+  check('the window survived the picker and the pick was delivered',
+    saveDialogCalls.length >= 1 && saveDialogCalls.every((c) => c.delivered),
     JSON.stringify(saveDialogCalls));
-  const written = fs.existsSync(savePath);
-  check('the session .ptl was written to the chosen location', written, savePath);
-  if (written) {
-    const text = fs.readFileSync(savePath, 'utf8');
-    check('the written session holds the unsaved change',
-      text.includes('save-me'), `${text.length} bytes`);
-  }
+  check('the session .ptl was written to the chosen location, complete',
+    ptlComplete(), savePath);
 }
 
 // Windows quit path: if the quit machinery gets all the way to will-quit,
-// the app IS quitting — at that moment the save must already be on disk.
-// (On the data-loss bug the window is torn down unsaved, window-all-closed
-// quits, and this fires with nothing written.) On macOS the harness holds
-// the quit open instead and judges in run().
+// the app IS quitting — at that moment the save must already be complete on
+// disk. (On the data-loss bug the window is torn down unsaved, the picker
+// never delivers, and this fires with nothing written.) On macOS the harness
+// holds the quit open instead and judges in run().
 let beforeQuitCount = 0;
 app.on('before-quit', (e) => {
   beforeQuitCount += 1;
@@ -212,7 +234,36 @@ const pdfB64 = fs
   .readFileSync(path.resolve(__dirname, '..', '..', 'sample', 'cjk.pdf'))
   .toString('base64');
 
+async function openDirtyUnsaved(win: BrowserWindow): Promise<void> {
+  const state = await win.webContents.executeJavaScript(`(async () => {
+    const pt = window.__pt;
+    const bytes = Uint8Array.from(atob('${pdfB64}'), (c) => c.charCodeAt(0));
+    await pt.controller.openFile(new File([bytes], 'cjk.pdf'));
+    await new Promise((r) => setTimeout(r, 800));
+    pt.jumpVia({ page: 1, yRatio: 0.5 }, 'save-me');
+    await new Promise((r) => setTimeout(r, 200));
+    return { path: pt.session.path, hasHandle: !!pt.session.handle, dirty: pt.session.dirty };
+  })()`) as { path: string | null; hasHandle: boolean; dirty: boolean };
+  check('the fresh session is dirty and unbound (no path, no handle)',
+    state.path == null && !state.hasHandle && state.dirty, JSON.stringify(state));
+  await sleep(500); // let pt-document-edited reach the main process
+}
+
+async function waitFor(cond: () => boolean, halfSeconds: number, label: string): Promise<void> {
+  for (let i = 0; i < halfSeconds; i += 1) {
+    if (cond()) return;
+    if (i % 20 === 19) log(`waiting on ${label}…`);
+    await sleep(500);
+  }
+}
+
 async function run(): Promise<void> {
+  if (MODE === 'stale-edited' && !isMac) {
+    check('stale-edited mode is macOS-only (skipped)', true);
+    finish();
+    return;
+  }
+
   let win: BrowserWindow | undefined;
   for (let i = 0; i < 80 && !win; i += 1) {
     win = BrowserWindow.getAllWindows()[0];
@@ -230,49 +281,41 @@ async function run(): Promise<void> {
 
   // Event trace, so a red run shows exactly how the teardown outran the save.
   theWin.on('close', () => log('window event: close'));
-  let fileAtClosed: boolean | null = null;
+  let ptlCompleteAtClosed: boolean | null = null;
   theWin.once('closed', () => {
-    fileAtClosed = fs.existsSync(savePath);
-    log(`window event: closed (ptl on disk at that moment: ${fileAtClosed})`);
+    ptlCompleteAtClosed = ptlComplete();
+    log(`window event: closed (complete .ptl on disk at that moment: ${ptlCompleteAtClosed})`);
   });
   theWin.webContents.on('will-prevent-unload', () => log('webContents: will-prevent-unload'));
   theWin.webContents.on('destroyed', () => log('webContents: destroyed'));
   app.on('window-all-closed', () => log('app event: window-all-closed'));
 
-  // A fresh PDF, made dirty, never saved -> unbound (no path, no handle).
-  const state = await theWin.webContents.executeJavaScript(`(async () => {
-    const pt = window.__pt;
-    const bytes = Uint8Array.from(atob('${pdfB64}'), (c) => c.charCodeAt(0));
-    await pt.controller.openFile(new File([bytes], 'cjk.pdf'));
-    await new Promise((r) => setTimeout(r, 800));
-    pt.jumpVia({ page: 1, yRatio: 0.5 }, 'save-me');
-    await new Promise((r) => setTimeout(r, 200));
-    return { path: pt.session.path, hasHandle: !!pt.session.handle, dirty: pt.session.dirty };
-  })()`) as { path: string | null; hasHandle: boolean; dirty: boolean };
-  check('the fresh session is dirty and unbound (no path, no handle)',
-    state.path == null && !state.hasHandle && state.dirty, JSON.stringify(state));
-  await sleep(500); // let pt-document-edited reach the main process
+  if (MODE === 'save-fails') { await runSaveFails(theWin); return; }
+  if (MODE === 'stale-edited') { await runStaleEdited(theWin); return; }
+
+  await openDirtyUnsaved(theWin);
 
   log(`driving the ${MODE} path`);
-  if (MODE === 'close') theWin.close();
-  else app.quit();
-
-  // Wait for the flow to settle: the .ptl written AND the window gone —
-  // or a teardrown/stall timeout.
-  for (let i = 0; i < 240; i += 1) {
-    if (fs.existsSync(savePath) && theWin.isDestroyed()) break;
-    if (i % 20 === 19) {
-      log(`waiting… winDestroyed=${theWin.isDestroyed()} ptl=${fs.existsSync(savePath)} `
-        + `confirm=${confirmShown}/${confirmAnswered} picker=${saveDialogCalls.length}`);
-    }
-    await sleep(500);
+  if (MODE === 'close') {
+    theWin.close();
+    // A second close mid-prompt (the user clicks X again while the dialog is
+    // up) must not stack a second confirm prompt or break the flow.
+    setTimeout(() => {
+      if (!theWin.isDestroyed()) { log('second close mid-prompt'); theWin.close(); }
+    }, 700);
+  } else {
+    app.quit();
   }
+
+  // Let the flow settle: a complete .ptl AND the window gone.
+  await waitFor(() => ptlComplete() && theWin.isDestroyed(), 240,
+    `settle (winDestroyed=${theWin.isDestroyed()} ptl=${ptlComplete()})`);
 
   checkSaveHappened();
   check('the window closed after the save (no lingering window)',
     theWin.isDestroyed(), `destroyed=${theWin.isDestroyed()}`);
-  check('the .ptl was already on disk when the window closed',
-    fileAtClosed === true, `fileAtClosed=${fileAtClosed}`);
+  check('the complete .ptl was already on disk when the window closed',
+    ptlCompleteAtClosed === true, `ptlCompleteAtClosed=${ptlCompleteAtClosed}`);
 
   if (MODE === 'quit' && isMac) {
     // The quit must COMPLETE after the save: before-quit re-enters once every
@@ -286,11 +329,93 @@ async function run(): Promise<void> {
   finish();
 }
 
+// "Save…" on a session whose bound handle write THROWS: the failure must be
+// caught and surfaced (toast), the window must stay open, and nothing may
+// escape as an unhandled rejection. (The write failing is exactly how the
+// confirm dialog got shown in the first place.)
+async function runSaveFails(theWin: BrowserWindow): Promise<void> {
+  const state = await theWin.webContents.executeJavaScript(`(async () => {
+    const pt = window.__pt;
+    const bytes = Uint8Array.from(atob('${pdfB64}'), (c) => c.charCodeAt(0));
+    await pt.controller.openFile(new File([bytes], 'cjk.pdf'));
+    await new Promise((r) => setTimeout(r, 800));
+    // A bound handle whose write always fails (e.g. disk full / gone volume).
+    pt.session.handle = {
+      name: 'boom.ptl',
+      queryPermission: async () => 'granted',
+      createWritable: async () => { throw new Error('disk full (test)'); },
+    };
+    pt.session.path = null;
+    pt.jumpVia({ page: 1, yRatio: 0.5 }, 'save-me');
+    // Observe what the close flow does with the failure.
+    window.__spcUnhandled = 0;
+    window.addEventListener('unhandledrejection', () => { window.__spcUnhandled += 1; });
+    window.__spcToasts = [];
+    const orig = pt.controller.showToast.bind(pt.controller);
+    pt.controller.showToast = (msg, ms) => { window.__spcToasts.push(String(msg)); orig(msg, ms); };
+    await new Promise((r) => setTimeout(r, 200));
+    return { dirty: pt.session.dirty, hasHandle: !!pt.session.handle };
+  })()`) as { dirty: boolean; hasHandle: boolean };
+  check('the session is dirty and handle-bound (write will throw)',
+    state.dirty && state.hasHandle, JSON.stringify(state));
+  await sleep(500);
+
+  log('driving the close path (failing save)');
+  theWin.close();
+
+  // The confirm prompt fires (silent save failed), the clicker answers
+  // "Save…", the handle write throws again. Give the flow time to settle.
+  await waitFor(() => confirmAnswered >= 1, 60, 'the confirm prompt');
+  await sleep(3000);
+
+  check('the confirm prompt was shown and answered',
+    confirmShown >= 1 && confirmAnswered >= 1,
+    `shown=${confirmShown} answered=${confirmAnswered}`);
+  check('a failed Save… keeps the window open (no teardown, no silent loss)',
+    !theWin.isDestroyed(), `destroyed=${theWin.isDestroyed()}`);
+  if (theWin.isDestroyed()) { finish(); return; }
+  const after = await theWin.webContents.executeJavaScript(`({
+    unhandled: window.__spcUnhandled,
+    toasts: window.__spcToasts,
+    dirty: window.__pt.session.dirty,
+  })`) as { unhandled: number; toasts: string[]; dirty: boolean };
+  check('the failure did not escape as an unhandled rejection',
+    after.unhandled === 0, `unhandled=${after.unhandled}`);
+  check('the failure was surfaced to the user (a save-failed toast)',
+    after.toasts.some((tst) => /save failed/i.test(tst)), JSON.stringify(after.toasts));
+  check('the session stayed dirty (nothing pretended to save)',
+    after.dirty === true, `dirty=${after.dirty}`);
+  finish();
+}
+
+// macOS: a dirty window closed via the don't-save path (forceClose) must be
+// PRUNED from the edited-windows set — a later quit with no windows left must
+// take the nothing-unsaved fast path, not run a phantom close-all cycle.
+async function runStaleEdited(theWin: BrowserWindow): Promise<void> {
+  await openDirtyUnsaved(theWin);
+  log('closing via the don’t-save path (forceClose)');
+  await theWin.webContents.executeJavaScript(
+    '(() => { window.__pt.controller.forceClose = true; window.close(); })()');
+  await waitFor(() => theWin.isDestroyed(), 40, 'the window to close');
+  check('the window closed without a prompt', theWin.isDestroyed() && confirmShown === 0,
+    `destroyed=${theWin.isDestroyed()} confirmShown=${confirmShown}`);
+
+  log('quitting with no windows left');
+  app.quit();
+  await sleep(4000);
+  // With a stale edited-window entry, before-quit runs the close-all cycle
+  // over zero windows and re-enters (count 2). Pruned correctly, the
+  // nothing-unsaved fast path quits directly (a single before-quit, held
+  // open only by this harness).
+  check('quit with no windows takes the nothing-unsaved fast path',
+    beforeQuitCount === 1, `beforeQuitCount=${beforeQuitCount}`);
+  finish();
+}
+
 // Belt-and-suspenders: if the flow wedges with no dialog blocking the loop,
 // fail with the trace instead of hanging until the job timeout.
 setTimeout(() => {
   log('WATCHDOG: the test did not settle in time');
-  checkSaveHappened();
   check('the flow settled before the watchdog', false);
   finish();
 }, 240_000);
