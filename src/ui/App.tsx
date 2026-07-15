@@ -123,6 +123,10 @@ export default function App() {
         return;
       }
       if (!mod && e.altKey) {
+        // In a text field, Alt+arrows are the caret's own moves (word-wise
+        // on macOS) — the navigation shortcuts must not hijack them and
+        // yank the document away mid-edit.
+        if (editing) return;
         if (e.key === 'ArrowLeft') { e.preventDefault(); controller.goBack(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); controller.goForward(); }
         else if (e.code === 'BracketLeft') { e.preventDefault(); controller.stackCycle(-1); }
