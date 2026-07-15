@@ -1,0 +1,53 @@
+# TEMPORARY focus workflow: revalidate the write-path suites after merging
+# main's auto-save guards into the restructured writeProgressNow (the one
+# merge conflict). Dispatched on the mirror only; deleted before handover.
+
+name: Focus write-path suites (boundfile p2 merge)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  writepath:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+      - name: Start the web server
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          node build-node/tools/geometry.js
+      - name: Bound-file unit tests
+        run: node --test build-node/test/boundFileUnit.js
+      - name: Write-generation dirty guard
+        if: ${{ !cancelled() }}
+        run: node build-node/test/writeGenerationDirty.js
+      - name: Explicit save during auto-save (queue + failure toasts)
+        if: ${{ !cancelled() }}
+        run: node build-node/test/explicitSaveDuringAutosave.js
+      - name: Failed replace never writes the session (teardown-scroll guard)
+        if: ${{ !cancelled() }}
+        run: node build-node/test/replaceCorruptPdf.js
+      - name: Drop pair binds the .ptl handle (never the PDF)
+        if: ${{ !cancelled() }}
+        run: node build-node/test/dropPairSessionTarget.js
+      - name: Pending session survives a corrupt PDF pick
+        if: ${{ !cancelled() }}
+        run: node build-node/test/pendingSessionCorruptPdf.js
+      - name: Load session binds the silent-write path
+        if: ${{ !cancelled() }}
+        run: node build-node/test/dropBindsSilentTarget.js
+      - name: Recents merge across windows
+        if: ${{ !cancelled() }}
+        run: node build-node/test/recentsTwoWindows.js
