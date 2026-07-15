@@ -242,6 +242,11 @@ jobs:
         shell: bash
         run: node build-node/test/uiAlignment.js
 
+      - name: Alignment/typography audit sweep (headers, gutters, type roles)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/uiAlignmentAudit.js
+
       - name: Renaming a row hides its action icons (full row width)
         if: ${{ !cancelled() }}
         shell: bash
@@ -737,6 +742,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/uiAlignment.js
+
+      - name: Alignment/typography audit sweep (headers, gutters, type roles)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/uiAlignmentAudit.js
 
       - name: Renaming a row hides its action icons (full row width)
         if: ${{ !cancelled() }}

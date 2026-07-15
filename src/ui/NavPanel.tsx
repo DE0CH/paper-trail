@@ -52,9 +52,14 @@ function OutlineItem({ n, forceAll }: { n: OutlineNode; forceAll: ForceAll }) {
   );
 }
 
-function OutlineTree({ nodes, forceAll }: { nodes: OutlineNode[]; forceAll: ForceAll }) {
+// The ROOT tree carries no indent: top-level rows sit on the same panel
+// gutter as trail/history rows (the one-list left metric, symmetric with
+// the right gutter). Only NESTED trees indent, 12px per level.
+function OutlineTree({ nodes, forceAll, root = false }: {
+  nodes: OutlineNode[]; forceAll: ForceAll; root?: boolean;
+}) {
   return (
-    <ul className="outlineTree list-none m-0 pl-3">
+    <ul className={`outlineTree list-none m-0 ${root ? '' : 'pl-3'}`}>
       {nodes.map((n, i) => <OutlineItem key={i} n={n} forceAll={forceAll} />)}
     </ul>
   );
@@ -167,9 +172,12 @@ export default function NavPanel({
   // three header labels ~1px apart. A box-shadow draws the same 2px accent
   // underline without a layout box, so the tab centres in the full 36px —
   // identical to the other headers — and can't shift on active/inactive.
+  // px-1.5 (not px-2): with the header's pl-1.5 this starts the first tab
+  // label at the shared 12px inset every panel header label uses (panel
+  // p-1.5 + row px-1.5), so the three headers read as one line.
   const tabBtn = (t: NavTab, label: string) => (
     <button
-      className={`inline-flex items-center h-full px-2 text-[12px] min-w-0 shrink cursor-pointer ${tab === t ? 'text-fgapp shadow-[inset_0_-2px_0_0_var(--color-accent)]' : 'text-dim'}`}
+      className={`inline-flex items-center h-full px-1.5 text-[12px] min-w-0 shrink cursor-pointer ${tab === t ? 'text-fgapp shadow-[inset_0_-2px_0_0_var(--color-accent)]' : 'text-dim'}`}
       onClick={() => onTab(t)}
     >
       {label}
@@ -222,7 +230,7 @@ export default function NavPanel({
       {tab === 'outline' ? (
         <div id="outlinePanel" className="flex-1 overflow-auto p-1.5">
           {snap.outline.length
-            ? <OutlineTree nodes={snap.outline} forceAll={forceAll} />
+            ? <OutlineTree nodes={snap.outline} forceAll={forceAll} root />
             : <div className="text-dim text-center p-3">No outline in this document</div>}
         </div>
       ) : (

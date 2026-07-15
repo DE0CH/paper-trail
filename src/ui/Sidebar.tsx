@@ -274,8 +274,10 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden border-r border-borderapp"
         style={{ width: widths.stacks, minWidth: widths.stacks }}
       >
+        {/* px-1.5 puts the header label's text on the same x as the row
+            labels below it (panel p-1.5 + row px-1.5 = header pl-1.5 + px-1.5). */}
         <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12px] px-1">Trails</span>
+          <span className="text-dim text-[12px] px-1.5">Trails</span>
           <span className="flex-1" />
           <button
             id="btnNewTrail"
@@ -305,8 +307,9 @@ export default function Sidebar({
         className="flex flex-col overflow-hidden"
         style={{ width: widths.side, minWidth: widths.side }}
       >
+        {/* px-1.5: same shared label inset as the Trails header and rows. */}
         <div className="flex items-center h-8 flex-none border-b border-borderapp pl-1.5 pr-2">
-          <span className="text-dim text-[12px] px-1">History</span>
+          <span className="text-dim text-[12px] px-1.5">History</span>
           <span className="flex-1" />
           <button
             id="btnMark"
