@@ -57,6 +57,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
 
+      - name: Bound-file unit tests (handle/path file identity)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/boundFileUnit.js
+
       - name: Unit test coverage (src/core)
         if: ${{ !cancelled() }}
         shell: bash
@@ -390,6 +394,10 @@ jobs:
       - name: Unit edge cases (hostile session files, model invariants)
         if: ${{ !cancelled() }}
         run: node --test build-node/test/unitEdges.js
+
+      - name: Bound-file unit tests (handle/path file identity)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/boundFileUnit.js
 
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
