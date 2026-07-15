@@ -64,6 +64,7 @@
     "test:install:win": "node build-node/test/installerWin.js",
     "test:install:win:dpi": "node build-node/test/installerDpiAware.js",
     "test:install:win:close": "node build-node/test/installerCloseUnsaved.js",
+    "test:install:win:display-icon": "node build-node/test/installerDisplayIcon.js",
     "test:install:mac": "node build-node/test/installerMac.js",
     "test:doc-icons:win": "node build-node/test/winDocIcons.js",
     "test:doc-icons:mac": "node build-node/test/macDocIcons.js",
