@@ -34,6 +34,10 @@ https://github.com/user-attachments/assets/3aadfc06-6e22-42d8-8901-3a83482db277
 - **Or download the desktop app** (works offline):
   grab the `.dmg` (macOS) or `.exe` installer (Windows) from the
   [**Releases page**](https://github.com/DE0CH/paper-trail/releases).
+  macOS builds are signed and notarized with Apple. For Windows builds,
+  free code signing is provided by [SignPath.io](https://signpath.io),
+  with a certificate by the
+  [SignPath Foundation](https://signpath.org).
 
 Then open a PDF — the **Choose a PDF…** button on the welcome screen,
 `Cmd/Ctrl+O`, or just drop the file anywhere in the window. (Building

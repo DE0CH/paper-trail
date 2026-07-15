@@ -211,3 +211,27 @@ supersedes the pending replace-undo (`NavStacks.onMutate`).
 - Panels own their widths independently: resizing or closing one never
   resizes another.
 - History entry anchors change only through explicit user actions.
+
+## Code signing
+
+Every release binary is built and published by GitHub Actions from
+this repository; nothing is built or signed on developer machines.
+macOS builds are signed and notarized under an Apple Developer
+account. For Windows builds, free code signing is provided by
+[SignPath.io](https://signpath.io), with a certificate by the
+[SignPath Foundation](https://signpath.org).
+
+The team behind Paper Trail is also the team that owns this
+repository and signs its builds. Deyao Chen
+([@DE0CH](https://github.com/DE0CH)) is the author, reviewer of
+external contributions, and approver of signing requests. External
+contributions are only merged after review, and only artifacts built
+from this repository's source are ever submitted for signing.
+
+Privacy: Paper Trail does not collect or transmit user data. Reading
+sessions stay in local files the user chooses. The only network
+requests the desktop app makes are to GitHub Releases, to check for
+and download updates; the web version additionally fetches its own
+static assets from the hosting CDN. Beyond that, this program will
+not transfer any information to other networked systems unless
+specifically requested by the user.
