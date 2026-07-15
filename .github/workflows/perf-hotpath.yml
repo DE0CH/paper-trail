@@ -12,11 +12,6 @@
 name: Hot-path profiler (Depot)
 on:
   workflow_dispatch:
-  # TEMP bootstrap: GitHub only registers a workflow for API dispatch once
-  # it has run or reached the default branch; this one push trigger fires
-  # the first (validation) run and registers it. Removed right after.
-  push:
-    branches: [perf-hotpath-v2]
 jobs:
   profile:
     if: ${{ github.repository == 'de0ch-org/paper-trail-mirror' }}
