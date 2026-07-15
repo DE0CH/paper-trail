@@ -102,6 +102,57 @@ jobs:
       - name: Update-feed names match the packaged artifacts
         shell: bash
         run: node build-node/test/updateFeedNames.js dist-electron
+      # ---- Windows code signing via SignPath (SignPath Foundation OSS
+      # certificate). Inert until the secrets exist: with no
+      # SIGNPATH_API_TOKEN the detection step leaves signing disabled and
+      # the release ships exactly as before. Requires secrets:
+      #   SIGNPATH_API_TOKEN            submitter API token
+      #   SIGNPATH_ORGANIZATION_ID      SignPath organization id
+      #   SIGNPATH_PROJECT_SLUG         project slug
+      #   SIGNPATH_SIGNING_POLICY_SLUG  signing policy slug (release)
+      # Signing rewrites the installer, so latest.yml (sha512/size) and
+      # the differential-update .blockmap are regenerated afterwards.
+      - name: Detect SignPath secrets
+        env:
+          TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "SIGNPATH_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            echo "::notice::SignPath secrets absent - shipping the Windows installer unsigned"
+          fi
+      - name: Upload the unsigned installer for signing
+        id: unsigned
+        if: ${{ env.SIGNPATH_ENABLED == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: dist-electron/Paper-Trail-Setup-*.exe
+          if-no-files-found: error
+      - name: Sign the installer (SignPath)
+        if: ${{ env.SIGNPATH_ENABLED == 'true' }}
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-installer
+      - name: Swap in the signed installer and refresh the update feed
+        if: ${{ env.SIGNPATH_ENABLED == 'true' }}
+        shell: bash
+        # The packaged blockmap describes the UNSIGNED bytes; shipping it
+        # would make differential updates assemble a file whose hash fails.
+        # electron-builder 26 exposes no standalone blockmap generator, so
+        # the blockmap is dropped instead: electron-updater falls back to a
+        # plain full download when it is absent, which is always correct.
+        run: |
+          mv signed-installer/Paper-Trail-Setup-*.exe dist-electron/
+          rm -f dist-electron/Paper-Trail-Setup-*.exe.blockmap
+          python src/tools/regen_update_feed.py dist-electron
       - name: Extract the changelog section for the release notes
         if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
         shell: bash
