@@ -149,12 +149,16 @@ function spawnClicker(): void {
           }
         } catch { Write-Output ('uia-error: ' + $_.Exception.Message) }
         if (Test-Path '${answeredFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'clicked'; exit 0 }
-        # Fallback: the old foreground ENTER (default button = "Save…").
-        $act = $ws.AppActivate(${process.pid})
+        # Fallbacks: activate the DIALOG by its bare title ('Paper Trail';
+        # the app window is '<file> - Paper Trail'), else the process, then
+        # ENTER (the default button is "Save…").
+        $act = $ws.AppActivate('Paper Trail')
+        if (-not $act) { $act = $ws.AppActivate(${process.pid}) }
         Start-Sleep -Milliseconds 150
         try { $ws.SendKeys('{ENTER}') } catch {}
         if ($i % 10 -eq 9) {
-          Write-Output ('clicker probe #' + $i + ' appActivate=' + $act + ' buttons=[' + ($seen -join '; ') + ']')
+          $head = @($seen | Select-Object -First 12)
+          Write-Output ('clicker probe #' + $i + ' appActivate=' + $act + ' buttons(' + $seen.Count + ')=[' + ($head -join '; ') + ']')
           # Diagnosis: what top-level windows does this PROCESS have (any
           # class), and can UIA see the desktop at all? Distinguishes a
           # dialog under another class / a dialog never created / a blind
@@ -254,17 +258,31 @@ function spawnCanaryClicker(): void {
     $btnCond = New-Object System.Windows.Automation.PropertyCondition(
       [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
       [System.Windows.Automation.ControlType]::Button)
+    $ws = New-Object -ComObject WScript.Shell
     for ($i = 0; $i -lt 25; $i++) {
       if (Test-Path '${canaryFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'canary-clicked'; exit 0 }
       try {
         $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond)
         foreach ($w in $wins) {
+          # The canary is the process's only native (#32770) window; any
+          # button inside it is the canary button — invoke whatever is there
+          # and LOG the names, so a mismatch is visible in the transcript.
+          if ($w.Current.ClassName -ne '#32770') { continue }
           $btns = $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
+          $names = @(); foreach ($b in $btns) { $names += $b.Current.Name }
+          Write-Output ('canary dialog buttons=[' + ($names -join '; ') + ']')
           foreach ($b in $btns) {
-            if ($b.Current.Name -eq 'CanaryOK') {
+            try {
               $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-              Write-Output ('canary-invoked in ' + $w.Current.ClassName)
-            }
+              Write-Output ('canary-invoked: ' + $b.Current.Name)
+            } catch { Write-Output ('canary-invoke-error: ' + $_.Exception.Message) }
+          }
+          # Foreground fallback aimed at the DIALOG title (the main window
+          # is 'cjk.pdf - Paper Trail'; the dialog is plain 'Paper Trail').
+          if ($btns.Count -eq 0) {
+            $null = $ws.AppActivate('Paper Trail')
+            Start-Sleep -Milliseconds 100
+            try { $ws.SendKeys('{ENTER}') } catch {}
           }
         }
       } catch { Write-Output ('canary-uia-error: ' + $_.Exception.Message) }
@@ -421,7 +439,10 @@ async function run(): Promise<void> {
 
   // close / quit / save-fails all hinge on answering the REAL confirm
   // dialog; prove the environment can show one first (see dialogEnvCanary).
-  if (MODE !== 'stale-edited' && !(await dialogEnvCanary())) {
+  // PT_SPC_NO_SKIP: diagnostic override — log the canary verdict but run
+  // the real flow anyway (used to probe the parented-dialog behavior).
+  if (MODE !== 'stale-edited' && !(await dialogEnvCanary())
+      && !process.env.PT_SPC_NO_SKIP) {
     check('SKIPPED: this runner cannot display native dialogs '
       + '(no window materialized for a parentless canary)', true);
     finish();
