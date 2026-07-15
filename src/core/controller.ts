@@ -465,9 +465,27 @@ export class Controller {
     };
   }
 
-  async writeProgress(): Promise<void> {
-    if (this.session.saving || !this.docOpen) return;
-    if (!this.session.handle && !this.session.path) return;
+  // Tail of the write queue (see writeProgress). Failures are swallowed
+  // HERE only so the chain survives; each caller still sees its own result.
+  private saveChain: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Write the session to its bound target. Concurrent calls QUEUE behind
+   * the in-flight write instead of being dropped (an explicit Save during
+   * an auto-save was silently skipped, and the desktop path branch even
+   * ran two whole-file writes at once) — each queued write serializes the
+   * state as of ITS turn. Returns true only when this call's write ran
+   * and succeeded; a thrown handle write propagates to the caller.
+   */
+  async writeProgress(): Promise<boolean> {
+    const task = this.saveChain.then(() => this.writeProgressNow());
+    this.saveChain = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  private async writeProgressNow(): Promise<boolean> {
+    if (!this.docOpen) return false;
+    if (!this.session.handle && !this.session.path) return false;
     this.session.saving = true;
     this.notify();
     try {
@@ -495,6 +513,7 @@ export class Controller {
       // lost; the next auto-save / manual save / close-flush retries it.
       // Likewise an edit that arrived mid-write (generation moved on).
       if (ok && this.dirtyGen === gen) this.session.dirty = false;
+      return ok;
     } finally {
       this.session.saving = false;
       this.notify();
@@ -510,13 +529,20 @@ export class Controller {
     let boundHandle = this.session.handle;
     let boundPath = this.session.path;
     let alreadyWritten = false;
+    let savedViaQueue = false; // the queued writer manages `dirty` itself
 
-    // Desktop: a session already bound to a path writes straight back, no dialog.
+    // Desktop: a session already bound to a path writes straight back, no
+    // dialog — through the QUEUED writer, so it can never overlap an
+    // in-flight auto-save (two concurrent whole-file IPC writes), and a
+    // failed write says so instead of silently leaving the change unsaved.
     if (this.session.path && window.ptDesktop?.saveSessionToPath) {
-      const ok = await window.ptDesktop.saveSessionToPath(
-        this.session.path, serializeProgress(this.progressFileObject()));
-      if (!ok) return; // write failed — leave the session dirty
+      const ok = await this.writeProgress();
+      if (!ok) {
+        this.showToast(`Couldn’t write to ${this.session.path}`);
+        return; // write failed — leave the session dirty
+      }
       alreadyWritten = true;
+      savedViaQueue = true;
     }
     if (this.session.handle) {
       // User-initiated save: the right moment for a permission prompt if
@@ -573,13 +599,26 @@ export class Controller {
       }
     }
 
-    // ---- Single convergence point: bind, write if not already, clear dirty,
-    // and record the recent for EVERY first-save path (handle OR path). No
-    // acquisition branch above may skip this — that was the missed-case bug.
+    // ---- Single convergence point: bind, write if not already, and record
+    // the recent for EVERY first-save path (handle OR path). No acquisition
+    // branch above may skip this — that was the missed-case bug.
     this.session.handle = boundHandle;
     this.session.path = boundPath;
-    if (!alreadyWritten) await this.writeProgress();
-    this.session.dirty = false;
+    if (!alreadyWritten) {
+      // The queued writer clears dirty itself (generation-aware: an edit
+      // arriving mid-write must stay dirty), so no blanket clear here.
+      const ok = await this.writeProgress();
+      if (!ok) {
+        this.showToast(boundPath
+          ? `Couldn’t write to ${boundPath}`
+          : 'Session not saved — the write failed');
+        return;
+      }
+    } else if (!savedViaQueue) {
+      // The shell save dialog wrote the bytes itself (outside the queued
+      // writer, which otherwise manages dirty).
+      this.session.dirty = false;
+    }
     if (this.freshSession) {
       this.freshSession = false;
       void this.recordRecent(

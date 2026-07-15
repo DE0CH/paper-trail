@@ -185,6 +185,11 @@ jobs:
         shell: bash
         run: node build-node/test/recentsTwoWindows.js
 
+      - name: An explicit save queues behind an in-flight auto-save
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/explicitSaveDuringAutosave.js
+
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
         shell: bash
@@ -527,6 +532,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/recentsTwoWindows.js
+
+      - name: An explicit save queues behind an in-flight auto-save
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/explicitSaveDuringAutosave.js
 
       - name: Toolbar controls + list rows stay aligned (measured)
         if: ${{ !cancelled() }}
