@@ -52,9 +52,16 @@ function previewHtml(iconSize: number, contents: DmgContent[]): string {
 <img class="bg" src="background.png" width="${WIDTH}" height="${HEIGHT}">
 <img class="icon" src="icon.svg" style="${box(app)}">
 <svg class="icon" style="${box(link)}" viewBox="0 0 128 128">
-  <!-- a rough macOS folder stand-in, preview only -->
-  <path d="M14 34 a10 10 0 0 1 10 -10 h24 a10 10 0 0 1 7 3 l7 7 h52 a10 10 0 0 1 10 10 v56 a10 10 0 0 1 -10 10 h-90 a10 10 0 0 1 -10 -10 z" fill="#4aa3ee"/>
-  <path d="M14 46 h100 v54 a10 10 0 0 1 -10 10 h-80 a10 10 0 0 1 -10 -10 z" fill="#6cb9f5"/>
+  <!-- a rough macOS 15 folder stand-in (soft sky-blue gradient, tab
+       peeking behind the front panel) — preview only, never shipped -->
+  <defs>
+    <linearGradient id="folder-front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fb6f8"/>
+      <stop offset="1" stop-color="#3e8ee6"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 32 a8 8 0 0 1 8 -8 h29 a8 8 0 0 1 6 2.6 l6 6.4 h51 a8 8 0 0 1 8 8 v4 h-108 z" fill="#3d84d6"/>
+  <rect x="10" y="38" width="108" height="68" rx="9" fill="url(#folder-front)"/>
 </svg>
 <div class="label" style="${label(app)}">Paper Trail</div>
 <div class="label" style="${label(link)}">Applications</div>
