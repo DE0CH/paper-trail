@@ -92,9 +92,14 @@ $root = $auto::RootElement
 $any = [System.Windows.Automation.Condition]::TrueCondition
 $children = [System.Windows.Automation.TreeScope]::Children
 $descend = [System.Windows.Automation.TreeScope]::Descendants
-$invokeP = [System.Windows.Automation.InvokePattern]::Pattern
-$toggleP = [System.Windows.Automation.TogglePattern]::Pattern
-$selectP = [System.Windows.Automation.SelectionItemPattern]::Pattern
+# NSIS controls surface to (managed) UIA as bare Panes with NO patterns
+# (run 29431132327's probes), so UIA is only the finder: actions go to
+# the controls' native handles as classic Win32 button messages.
+Add-Type -Namespace PT -Name Win -MemberDefinition @'
+[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+'@
+$BM_GETCHECK = 0x00F0; $BM_SETCHECK = 0x00F1; $BM_CLICK = 0x00F5
 $seen = @{}
 function Note([string]$line) {
   if (-not $script:seen.ContainsKey($line)) { $script:seen[$line] = $true; Write-Output $line }
@@ -129,29 +134,32 @@ for ($i = 0; $i -lt 400; $i++) {
         if (-not $n) { continue }
         $short = $n.Substring(0, [Math]::Min(40, $n.Length))
         Note ('control: ' + $c.Current.ControlType.ProgrammaticName + ':' + $short)
+        $h = [IntPtr]$c.Current.NativeWindowHandle
+        if ($h -eq [IntPtr]::Zero) { continue }
         if ($n -match 'desktop shortcut' -or $n -match 'start menu shortcut' -or $n -match '^Run ') {
           Note ('checkbox: ' + $short)
         }
         # untick the desktop shortcut (the scenario) and Run-after-finish
         # (so the installed app does not launch and block the uninstall)
-        $tp = $null
-        if (($n -match 'desktop shortcut' -or $n -match '^Run ') -and $c.TryGetCurrentPattern($toggleP, [ref]$tp)) {
-          if ($tp.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On) {
-            $tp.Toggle(); Write-Output ('unticked: ' + $short)
+        if ($n -match 'desktop shortcut' -or $n -match '^Run ') {
+          if ([PT.Win]::SendMessage($h, $BM_GETCHECK, [IntPtr]::Zero, [IntPtr]::Zero) -ne [IntPtr]::Zero) {
+            [PT.Win]::SendMessage($h, $BM_SETCHECK, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            Write-Output ('unticked: ' + $short)
           }
         }
         # keep the default per-user install on the install-mode page
-        $sp = $null
-        if ($n -match 'Only for me' -and $c.TryGetCurrentPattern($selectP, [ref]$sp)) {
-          if (-not $sp.Current.IsSelected) { $sp.Select(); Write-Output ('selected: ' + $short) }
+        if ($n -match 'Only for me') {
+          if ([PT.Win]::SendMessage($h, $BM_GETCHECK, [IntPtr]::Zero, [IntPtr]::Zero) -eq [IntPtr]::Zero) {
+            [PT.Win]::PostMessage($h, $BM_CLICK, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            Write-Output ('selected: ' + $short)
+          }
         }
-        $ip = $null
-        if ($c.Current.IsEnabled -and $c.TryGetCurrentPattern($invokeP, [ref]$ip)) { $clickables[$n] = $ip }
+        if ($c.Current.IsEnabled) { $clickables[$n] = $h }
       }
       foreach ($name in @('I Agree', 'Install', 'Next >', 'Finish', 'Close')) {
         if ($clickables.ContainsKey($name)) {
-          try { $clickables[$name].Invoke(); Write-Output ('clicked: ' + $name) }
-          catch { Write-Output ('click-error: ' + $name + ' ' + $_.Exception.Message) }
+          [PT.Win]::PostMessage($clickables[$name], $BM_CLICK, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+          Write-Output ('clicked: ' + $name)
           break
         }
       }
