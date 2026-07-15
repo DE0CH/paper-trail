@@ -1,0 +1,34 @@
+# TEMP focus workflow for the fix-display-icon TDD cycle — packages the
+# Windows app and runs only the installerDisplayIcon test. Deleted
+# before the branch is finished; the lasting step lives in ci.yml.
+name: tmp-arp-icon
+
+on:
+  push:
+    branches: [fix-display-icon, fix-display-icon-red]
+  workflow_dispatch: {}
+
+jobs:
+  win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Package the Windows app (unsigned, NSIS x64 only)
+        env:
+          # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
+          # which the NSIS extractor plugin can't decode. BCJ2 is understood.
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Installed-apps list shows the app icon (DisplayIcon)
+        shell: bash
+        run: node build-node/test/installerDisplayIcon.js
