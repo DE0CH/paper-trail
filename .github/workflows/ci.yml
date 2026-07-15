@@ -258,6 +258,31 @@ jobs:
         shell: bash
         run: npx electron build-node/test/jumpListRegistration.js
 
+      - name: Shell helper unit tests (bounds placement, argv resolution)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node --test build-node/test/desktopShellUnit.js
+
+      - name: Two quick OS opens land in two windows, one doc each
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/osOpenTwoQuick.js
+
+      - name: A relative CLI path resolves against the caller's directory
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/secondInstanceCwd.js
+
+      - name: A second-instance file open restores a minimized window
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/secondInstanceReveal.js
+
+      - name: Off-screen remembered bounds land back on a real display
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/restoreOffscreenBounds.js
+
       - name: Package the Windows app (unsigned)
         env:
           # 7-Zip ≥22 applies the ARM64 branch filter to arm64 binaries,
@@ -563,6 +588,26 @@ jobs:
       - name: Jump List New Window task opens a fresh window
         if: ${{ !cancelled() }}
         run: npx electron build-node/test/newWindowTask.js
+
+      - name: Shell helper unit tests (bounds placement, argv resolution)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/desktopShellUnit.js
+
+      - name: Two quick OS opens land in two windows, one doc each
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/osOpenTwoQuick.js
+
+      - name: A relative CLI path resolves against the caller's directory
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/secondInstanceCwd.js
+
+      - name: A second-instance file open restores a minimized window
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/secondInstanceReveal.js
+
+      - name: Off-screen remembered bounds land back on a real display
+        if: ${{ !cancelled() }}
+        run: npx electron build-node/test/restoreOffscreenBounds.js
 
       - name: Package the macOS app (unsigned)
         env:
