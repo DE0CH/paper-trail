@@ -1,0 +1,46 @@
+# TEMPORARY focus workflow: revalidate pinchDocSwap on the leg that failed
+# (macos-15-intel, gate run 29417407885, both attempts) plus one
+# windows-latest leg for cross-platform cover. Deleted before handover.
+
+name: Focus pinchDocSwap (intel mac regression)
+
+on:
+  push:
+    branches: [fix-pinch-swap-intel]
+  workflow_dispatch: {}
+
+jobs:
+  pinch:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Generate the test-fixture PDFs
+        run: node build-node/tools/fixture.js
+
+      - name: Start the web server
+        shell: bash
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+          node build-node/tools/geometry.js
+
+      - name: Pinch-gesture state does not survive a document swap
+        shell: bash
+        run: node build-node/test/pinchDocSwap.js
