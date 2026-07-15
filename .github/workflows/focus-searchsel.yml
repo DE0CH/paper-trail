@@ -1,0 +1,44 @@
+# TEMPORARY focused workflow for the searchSelectionBox CI-wedge
+# investigation (task #38). Runs ONLY the deterministic wedge repro on
+# windows-latest (the platform of run 29441373885's hang), in both modes
+# at once per the parallel-TDD practice:
+#   red   — sync-only dialog stub (what searchSelectionBox.ts installs):
+#           expected to FAIL fast on the bug (watchdog, not a wedge).
+#   green — async close prompt stubbed too: expected to PASS.
+# Delete this file from the branch tip once the evidence is captured.
+
+name: Focus searchsel wedge
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [searchsel-wedge]
+
+jobs:
+  wedge-red-sync-only-stub:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Wedge repro — sync-only stub (expected FAIL on the bug)
+        shell: bash
+        run: PT_REPRO_STUB=sync-only node build-node/test/searchSelWedgeRepro.js
+
+  control-green-both-stubs:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: Wedge repro — async prompt stubbed (expected PASS)
+        shell: bash
+        run: PT_REPRO_STUB=both node build-node/test/searchSelWedgeRepro.js
