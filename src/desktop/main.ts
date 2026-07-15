@@ -17,12 +17,14 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, protocol, screen, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
 import { autoUpdater } from 'electron-updater';
 import { MIME } from '../node/server';
 import { popupWin32, type WinMenuItem } from './winMenu';
 import { blockShutdown, unblockShutdown } from './winShutdown';
+import { placeWindow } from './windowPlacement';
+import { resolveFileArgs } from './openArgs';
 
 // Apps launched by Finder/LaunchServices can get stdio pipes whose
 // other end is already closed; a console write (electron-updater logs
@@ -80,7 +82,12 @@ function loadBounds(): { width: number; height: number; x?: number; y?: number }
     const s = JSON.parse(fs.readFileSync(stateFile(), 'utf8')) as {
       width: number; height: number; x?: number; y?: number;
     };
-    if (s.width > 300 && s.height > 200) return s;
+    // The remembered position is only trusted while it still lands on a
+    // connected display: after a monitor unplug, verbatim x/y would
+    // restore the window fully off-screen. The size survives either way.
+    if (s.width > 300 && s.height > 200) {
+      return placeWindow(s, screen.getAllDisplays().map((d) => d.workArea));
+    }
   } catch { /* first launch */ }
   return { width: 1440, height: 940 };
 }
@@ -257,6 +264,13 @@ function createWindow({ showWhenLoaded = false } = {}): BrowserWindow {
     if (!process.env.PT_NO_SAFETY_REVEAL) setTimeout(reveal, 4000);
   }
 
+  // A dispatched file claims this window (see openPath); the claim
+  // lifts once a document's title lands, or with the window itself.
+  win.webContents.on('page-title-updated', (_event, title, explicitSet) => {
+    if (explicitSet && title !== 'Paper Trail') claimed.delete(win.id);
+  });
+  win.on('closed', () => { claimed.delete(win.id); });
+
   win.on('close', () => saveBounds(win));
 
   // Windows OS shutdown/logout: the vetoable query-session-end. A window with
@@ -283,6 +297,21 @@ const readyWindows = new Set<number>();  // renderer listener registered
 /** A file to deliver: a path on disk, or bytes handed over from a renderer. */
 type QueuedFile = string | { name: string; data: ArrayBuffer };
 const queuedFiles = new Map<number, QueuedFile[]>();
+
+// Deliveries in flight per window (by kind), until the document's title
+// lands. A dispatched file claims its window IMMEDIATELY: routing by
+// title alone let two quick opens hit the same still-empty window, and
+// the renderer's racing opens silently lost one of them. A pending .ptl
+// still accepts one PDF (and vice versa) — the seamless session+PDF
+// pair, either order.
+type ClaimKind = 'pdf' | 'ptl';
+const claimed = new Map<number, Set<ClaimKind>>();
+
+function claimWindow(win: BrowserWindow, kind: ClaimKind): void {
+  const kinds = claimed.get(win.id) ?? new Set<ClaimKind>();
+  kinds.add(kind);
+  claimed.set(win.id, kinds);
+}
 
 function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
   dbg('sendFileTo', typeof item === 'string' ? item : item.name,
@@ -324,27 +353,33 @@ function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
  * empty (its title is the bare app name), and into a new window
  * otherwise. At launch the file goes into the first window (`target`).
  */
-function openPath(filePath: string, target?: BrowserWindow): void {
+function openPath(filePath: string, target?: BrowserWindow): BrowserWindow | null {
   if (!app.isReady()) {
     pendingPaths.push(filePath);
-    return;
+    return null;
   }
-  const empty = (w: BrowserWindow | null): boolean => {
-    if (!w || w.isDestroyed()) return false;
+  const kind: ClaimKind = /\.ptl$/i.test(filePath) ? 'ptl' : 'pdf';
+  // Empty AND not already spoken for by a same-kind file in flight.
+  const canTake = (w: BrowserWindow | null): w is BrowserWindow => {
+    if (!w || w.isDestroyed() || claimed.get(w.id)?.has(kind)) return false;
     const t = w.getTitle();
     return w.webContents.isLoading() || t === 'Paper Trail' || t === '';
   };
-  let win = target && !target.isDestroyed() ? target : null;
+  let win = target && !target.isDestroyed() && !claimed.get(target.id)?.has(kind)
+    ? target : null;
   // ANY empty window takes the file — focused first, but an idle empty
   // window elsewhere beats spawning an offset new one.
   if (!win) {
     const focused = focusedWindow();
-    if (empty(focused)) win = focused;
-    else win = BrowserWindow.getAllWindows().find(empty) ?? null;
+    if (canTake(focused)) win = focused;
+    else win = BrowserWindow.getAllWindows().find(canTake) ?? null;
   }
   // A brand-new window stays hidden until the document is showing: no
   // flash of an empty window on OS opens.
-  sendFileTo(win ?? createWindow({ showWhenLoaded: true }), filePath);
+  win ??= createWindow({ showWhenLoaded: true });
+  claimWindow(win, kind);
+  sendFileTo(win, filePath);
+  return win;
 }
 
 // macOS: Open With…, drag onto the Dock icon, recent documents.
@@ -353,13 +388,31 @@ app.on('open-file', (event, filePath) => {
   openPath(filePath);
 });
 
-// Windows: the file path arrives in a second process's argv. The
-// taskbar Jump List's "New Window" task arrives the same way, as a
-// second process launched with --new-window.
-app.on('second-instance', (_event, argv) => {
-  const files = argv.filter((a) => /\.(pdf|ptl)$/i.test(a) && fs.existsSync(a));
-  if (files.length) files.forEach((f) => openPath(f));
-  else if (argv.includes('--new-window')) createWindow();
+// Windows: the file path arrives in a second process's argv, together
+// with THAT process's working directory — relative CLI paths must
+// resolve against it, not our own cwd (resolveFileArgs). The taskbar
+// Jump List's "New Window" task arrives the same way, as a second
+// process launched with --new-window.
+app.on('second-instance', (_event, argv, workingDirectory) => {
+  const files = resolveFileArgs(argv, workingDirectory);
+  if (files.length) {
+    const targets = new Set<BrowserWindow>();
+    for (const f of files) {
+      const win = openPath(f);
+      if (win) targets.add(win);
+    }
+    // Bring the receiving window forward: an Explorer double-click while
+    // the app is minimized or behind must not load the file invisibly.
+    // A brand-new still-hidden window is left alone — it reveals itself
+    // once its document is showing (no empty-window flash).
+    for (const win of targets) {
+      if (win.isDestroyed()) continue;
+      if (win.isMinimized()) win.restore();
+      else if (!win.isVisible()) continue;
+      win.show();
+      win.focus();
+    }
+  } else if (argv.includes('--new-window')) createWindow();
   else {
     const win = focusedWindow();
     if (win) { win.show(); win.focus(); }
@@ -810,7 +863,11 @@ ipcMain.on('pt-document-edited', (event, edited: boolean) => {
 
 // A PDF picked in an occupied window opens in a window of its own.
 ipcMain.on('pt-open-new-window', (_event, file: { name: string; data: ArrayBuffer }) => {
-  sendFileTo(createWindow(), file);
+  const win = createWindow();
+  // The handed-over PDF is in flight: a racing OS open must not treat
+  // this window as empty and pile a second document into it.
+  claimWindow(win, 'pdf');
+  sendFileTo(win, file);
 });
 
 ipcMain.on('pt-open-file-ready', (event) => {
