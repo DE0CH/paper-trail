@@ -240,10 +240,18 @@ async function main(): Promise<void> {
       idle08.curRm && idle08.othersRm);
     await shoot(page, '08-history-many-unhovered-current-midlist');
 
-    // Hover a LONG-labeled non-current entry (idx 3 is long by construction:
-    // entries are Start, Theorem 4.2, then short/long alternating from idx 2).
-    await page.hover('.histItem[data-idx="3"]');
-    const p09 = await probeRow(page, '.histItem[data-idx="3"]');
+    // Hover a LONG-labeled non-current entry. Found by TEXT, not by a
+    // hard-coded index: forks clone the source trail's entries, so the
+    // list layout depends on the fork implementation, not this script.
+    const longIdx = await page.evaluate((long) => {
+      const rows = [...document.querySelectorAll('.histItem')] as HTMLElement[];
+      const row = rows.find((r) => !r.classList.contains('current')
+        && (r.querySelector('.lbl')?.textContent ?? '').startsWith(long.slice(0, 24)));
+      return row ? Number(row.dataset.idx) : -1;
+    }, LONG_ENTRY);
+    check('09: found a long-labeled non-current entry', longIdx >= 0, `idx=${longIdx}`);
+    await page.hover(`.histItem[data-idx="${longIdx}"]`);
+    const p09 = await probeRow(page, `.histItem[data-idx="${longIdx}"]`);
     checkHoveredTools('09 long history entry hovered', p09);
     check('09: hovered entry is long (ellipsized even while hovered)', p09.labelEllipsized);
     await shoot(page, '09-history-hover-long-entry');
@@ -254,10 +262,10 @@ async function main(): Promise<void> {
     await shoot(page, '13-history-hover-current-midlist');
 
     // ---- Phase E: edit mode on a long-labeled entry.
-    await page.dblclick('.histItem[data-idx="3"] .lbl');
-    await page.waitForSelector('.histItem[data-idx="3"] input.rename', { timeout: 5_000 });
-    const edit = await page.evaluate(() => {
-      const row = document.querySelector('.histItem[data-idx="3"]') as HTMLElement;
+    await page.dblclick(`.histItem[data-idx="${longIdx}"] .lbl`);
+    await page.waitForSelector(`.histItem[data-idx="${longIdx}"] input.rename`, { timeout: 5_000 });
+    const edit = await page.evaluate((idx) => {
+      const row = document.querySelector(`.histItem[data-idx="${idx}"]`) as HTMLElement;
       const inp = row.querySelector('input.rename') as HTMLElement;
       const rr = row.getBoundingClientRect();
       const padR = parseFloat(getComputedStyle(row).paddingRight) || 0;
@@ -265,28 +273,33 @@ async function main(): Promise<void> {
         short: rr.right - padR - inp.getBoundingClientRect().right,
         tools: row.querySelectorAll('.tools > button').length,
       };
-    });
+    }, longIdx);
     check(`10: rename input reaches the row edge (short by ${edit.short.toFixed(1)}px)`,
       edit.short <= 1);
     check('10: zero tool buttons mounted in edit mode', edit.tools === 0);
     await shoot(page, '10-edit-mode-long-entry');
     await page.keyboard.press('Escape');
-    await page.waitForSelector('.histItem[data-idx="3"] input.rename',
+    await page.waitForSelector(`.histItem[data-idx="${longIdx}"] input.rename`,
       { state: 'detached', timeout: 5_000 });
 
-    // ---- Phase F: narrow Trails panel, long label hovered.
-    const before = await page.evaluate(() =>
+    // ---- Phase F: narrow Trails panel (moderate), long label hovered.
+    // Three w-5 buttons + two 6px gaps need 72px; at ~110px panel width
+    // they fit and the label keeps a clickable sliver.
+    const drag = async (dx: number): Promise<void> => {
+      const h = (await page.locator('#resizeStacks').boundingBox())!;
+      await page.mouse.move(h.x + h.width / 2, h.y + 300);
+      await page.mouse.down();
+      await page.mouse.move(h.x + h.width / 2 + dx, h.y + 300, { steps: 8 });
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+    };
+    const width = () => page.evaluate(() =>
       document.getElementById('stacksCol')!.getBoundingClientRect().width);
-    const h = (await page.locator('#resizeStacks').boundingBox())!;
-    await page.mouse.move(h.x + h.width / 2, h.y + 300);
-    await page.mouse.down();
-    await page.mouse.move(h.x + h.width / 2 - 80, h.y + 300, { steps: 8 });
-    await page.mouse.up();
-    await page.waitForTimeout(200);
-    const after = await page.evaluate(() =>
-      document.getElementById('stacksCol')!.getBoundingClientRect().width);
+    const before = await width();
+    await drag(-40);
+    const after = await width();
     check(`11: panel narrowed (${before.toFixed(0)} → ${after.toFixed(0)}px)`,
-      before - after >= 40);
+      before - after >= 30);
     await page.hover('.stackRow');
     const p11 = await probeRow(page, '.stackRow');
     checkHoveredTools('11 narrow panel, long label hovered', p11);
@@ -294,6 +307,24 @@ async function main(): Promise<void> {
       .every((b) => b.right <= p11.rowRight + 0.5));
     await shoot(page, '11-narrow-panel-long-hovered');
     await unhover(page);
+
+    // 14 — EXTREME narrowness (the panel's drag minimum): the 72px tool
+    // block no longer fits the row's content width, so the hovered tools
+    // OVERFLOW the row and the label collapses. Captured deliberately as
+    // a design edge for the owner to rule on (not asserted as good).
+    await drag(-200); // slam into the panel's minimum width
+    const minW = await width();
+    await page.hover('.stackRow');
+    const p14 = await probeRow(page, '.stackRow');
+    const vis14 = p14.buttons.filter(shown);
+    check(`14: at the ${minW.toFixed(0)}px minimum all 3 tools still render`,
+      vis14.length === 3);
+    const overflow = Math.max(...vis14.map((b) => b.right)) - p14.rowRight;
+    console.log(`14: documented edge — tools overflow the row by ${overflow.toFixed(1)}px `
+      + `at the ${minW.toFixed(0)}px panel minimum (owner decision pending)`);
+    await shoot(page, '14-min-width-panel-hovered-tools-overflow-edge');
+    await unhover(page);
+    await drag(before - minW); // restore for the final wide shot
 
     // 01 — short-label unhovered NON-current rows (trails have a short
     // non-current row, history has short non-current entries).
