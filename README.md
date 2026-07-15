@@ -71,7 +71,8 @@ the sidebar.
   button above the history list (or `Cmd/Ctrl+D`) — recorded like a
   link jump.
 - **Hover a link** for a moment to preview its destination in a panel the
-  width of the page: scroll inside it, drag its bottom edge to resize.
+  width of the page: scroll inside it, drag its top or bottom edge to
+  resize.
 - **Undo** (`Cmd/Ctrl+Z`) reverts history changes — an overwritten
   forward tail, a new trail, a closed or renamed trail, even a
   replaced PDF.
@@ -90,9 +91,15 @@ diffs cleanly, so versioning it in git alongside the paper works well.
 
 - Once saved, the session **auto-saves continuously**; a dot on the Save
   button means unsaved changes.
-- Got a revised version of the paper? **⇄ Replace PDF** swaps the file
-  and keeps your whole reading history.
-- To restore a session after closing the app, click **Load session…**.
+- Closing the desktop app with unsaved changes doesn't nag: it saves in
+  the background and only asks if that save fails.
+- Got a revised version of the paper? The **⇄** button next to the file
+  name swaps in the new PDF and keeps your whole reading history.
+- To pick your reading back up later, use the **Recent** list on the
+  welcome screen — it reopens the PDF together with its session — or
+  click **Load session…** in the toolbar.
+- Session files are made to last: every future version of Paper Trail
+  opens sessions saved by this one.
 
 ## Keyboard shortcuts
 
