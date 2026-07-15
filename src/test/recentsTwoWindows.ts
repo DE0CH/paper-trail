@@ -19,16 +19,17 @@ function check(name: string, ok: boolean, detail = ''): void {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 }
 
-// Open a PDF in this page under `name` with a fake (inert) handle, and wait
-// until its recent has been recorded and SAVED to IndexedDB.
+// Open a PDF in this page keyed by an on-disk PATH (a path ref is a plain
+// string, so it survives IndexedDB's structured clone — a fake handle object
+// with function properties would make the store write throw), and wait until
+// its recent has been recorded and SAVED to IndexedDB.
 async function openAndRecord(page: Page, name: string): Promise<void> {
   await page.evaluate(async (pdfName) => {
     /* eslint-disable @typescript-eslint/no-explicit-any */
     const c = (window as any).__pt.controller;
     const bytes = new Uint8Array(
       await (await fetch('sample/WStarCats.pdf')).arrayBuffer());
-    const handle = { kind: 'file', name: pdfName, isSameEntry: async () => false };
-    await c.openFile(new File([bytes], pdfName), handle);
+    await c.openFile(new File([bytes], pdfName), null, '/tmp/pt-recents/' + pdfName);
     /* eslint-enable @typescript-eslint/no-explicit-any */
   }, name);
   await page.waitForFunction((pdfName) => {
