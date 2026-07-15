@@ -1043,10 +1043,17 @@ export class Controller {
       pdfRef = null, progress = null, sessionFile = null, source = null,
     } = opts;
     this.showToast(`Loading \u201c${name}\u201d\u2026`, 1500);
+    // Kill any mid-flight pinch SYNCHRONOUSLY, before the first await: the
+    // armed 180ms commit timer keeps counting through the open below, and
+    // on a slow machine the parse outlasts it \u2014 the timer then commits the
+    // OLD gesture's scale onto the half-open NEW document, dropping its
+    // fit-width. (The old document is already gone either way: viewer.open
+    // tears it down before parsing.)
+    this.resetPinch();
     try {
       const doc = await this.viewer.open({ data });
       if (!doc) return false; // superseded by a newer open
-      this.resetPinch(); // the new document must not inherit a mid-flight gesture
+      this.resetPinch(); // again: a wheel arriving DURING the parse must not leak either
       this.docOpen = true;
       this.currentName = name;
       this.currentSource = source ?? (pdfRef && isHandle(pdfRef) ? pdfRef : null);
