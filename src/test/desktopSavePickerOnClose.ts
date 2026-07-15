@@ -236,16 +236,19 @@ Promise<{ canceled: boolean; filePath: string }> => {
 };
 
 // ---- environment canary ----------------------------------------------
-// The windows-11-arm runner never CREATES a native message-box window at
-// all: UIA showed the process keeping exactly one top-level window for
-// the whole life of a pending showMessageBox promise (probe runs
-// 29411888604 / 29412677536), so no clicker of any kind can answer it.
-// Before judging the save flow, prove the environment can display and
-// answer a native dialog: show a parentless canary and auto-answer it.
-// No dialog window in 10s ⇒ the runner cannot display native dialogs
-// (the Depot-mac assistive-access analog) and the mode SELF-SKIPS with
-// an explicit reason. If the canary works, a later unanswered real
-// dialog is a genuine defect and the assertions stand.
+// On the windows-11-arm runner Electron's native message box comes up
+// INERT: the #32770 window exists but its UIA subtree is empty, a
+// foreground ENTER (AppActivate=True) does nothing, and the
+// showMessageBox promise never settles — even for a parentless,
+// app-agnostic dialog (probe runs 29411888604 / 29412677536 /
+// 29413858685), so no clicker of any kind can answer it and no
+// product-side call shape could dodge it. Before judging the save flow,
+// prove the environment can display AND answer a native dialog: show a
+// parentless canary and auto-answer it. Unanswered in 10s ⇒ native
+// dialogs don't work here (the Depot-mac assistive-access analog) and
+// the mode SELF-SKIPS with an explicit reason. If the canary works, a
+// later unanswered real dialog is a genuine defect and the assertions
+// stand.
 const canaryFlag = path.join(outDir, 'canary.flg');
 function spawnCanaryClicker(): void {
   if (isMac) return;
@@ -313,8 +316,8 @@ async function dialogEnvCanary(): Promise<boolean> {
   const ok = await Promise.race([shown, sleep(10_000).then(() => false as const)]);
   fs.writeFileSync(canaryFlag, '1');
   log(`dialog canary: ${ok
-    ? 'answered — this environment displays native dialogs'
-    : 'NO dialog window materialized in 10s — native dialogs unavailable here'}`);
+    ? 'answered — this environment displays working native dialogs'
+    : 'unanswered after 10s — native dialogs are inert or missing here'}`);
   return ok;
 }
 
@@ -443,8 +446,8 @@ async function run(): Promise<void> {
   // the real flow anyway (used to probe the parented-dialog behavior).
   if (MODE !== 'stale-edited' && !(await dialogEnvCanary())
       && !process.env.PT_SPC_NO_SKIP) {
-    check('SKIPPED: this runner cannot display native dialogs '
-      + '(no window materialized for a parentless canary)', true);
+    check('SKIPPED: native dialogs do not work on this runner '
+      + '(a parentless canary dialog was never answerable)', true);
     finish();
     return;
   }
