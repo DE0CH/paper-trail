@@ -1333,6 +1333,10 @@ export class Controller {
   /** Remove one entry from the active trail (its × button). */
   entryRemove(i: number): void {
     if (!this.docOpen) return;
+    // The × renders even on a single-entry history (visual consistency);
+    // a trail always keeps at least one entry, so clicking it there is a
+    // designed no-op — bail before any side effect (search commit, rerender).
+    if (this.hist.active.entries.length <= 1) return;
     this.commitSearch(); // mutating the history the entry lives in
     this.hist.removeEntry(i);
     this.notify();

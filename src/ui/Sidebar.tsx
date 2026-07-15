@@ -21,16 +21,22 @@ const rowBase = 'flex items-center gap-1.5 h-6 px-1.5 rounded-md cursor-pointer 
 // text 1px right and eat 1px of height).
 const renameCls = 'rename flex-1 min-w-0 leading-[1.4] px-1 -mx-1 bg-inputbg text-fgapp text-[12px] ring-1 ring-inset ring-accent rounded outline-none';
 const rowActive = 'bg-accentsoft text-fgapp outline outline-1 outline-[rgba(79,140,255,0.45)]';
-// One shape for every small row button; the close button additionally
-// keeps a permanent (opacity-hidden) flex slot so all rows align on it.
-const toolBtn = 'inline-flex items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer';
+// One shape for every small row button. The close button is always laid
+// out (`inline-flex`; opacity carries its visibility so its slot holds
+// every row's alignment), while the other tools are display-hidden until
+// the row is hovered — hover-only on EVERY row, current or not. The two
+// display treatments must stay in SEPARATE class strings: Tailwind v4
+// orders `.inline-flex` after `.hidden` in the compiled sheet, so a
+// button carrying both is always visible (the preview-review bug).
+const toolShape = 'items-center justify-center w-5 h-5 rounded text-dim hover:bg-[#45474e] hover:text-fgapp cursor-pointer';
+const toolBtn = `inline-flex ${toolShape}`;
+const hoverTool = `hidden group-hover:inline-flex ${toolShape}`;
 // All of a row's tool buttons live in ONE flex container with the row's
 // standard 6px gap, so every inter-button gap is equal by construction —
-// no absolute anchors, no overlay. The hover-only tools are display-hidden
-// until the row is hovered; when they join the flex flow the label shrinks
-// to make room (owner decision: these rows may reflow on hover).
+// no absolute anchors, no overlay. When the hover-only tools join the
+// flex flow the label shrinks to make room (owner decision: these rows
+// may reflow on hover).
 const toolsBox = 'tools flex flex-none items-center gap-1.5';
-const hoverTool = 'hidden group-hover:inline-flex';
 
 function StackRow({ snap, id, name }: {
   snap: Snapshot; id: number; name: string;
@@ -86,7 +92,7 @@ function StackRow({ snap, id, name }: {
       {!editing && (
         <span className={toolsBox}>
           <button
-            className={`editName ${toolBtn} ${hoverTool}`}
+            className={`editName ${hoverTool}`}
             title="Rename this trail"
             onClick={(e) => {
               e.stopPropagation();
@@ -96,7 +102,7 @@ function StackRow({ snap, id, name }: {
             <IconEdit />
           </button>
           <button
-            className={`dup ${toolBtn} ${hoverTool}`}
+            className={`dup ${hoverTool}`}
             title="Duplicate this trail"
             onClick={(e) => {
               e.stopPropagation();
@@ -121,8 +127,8 @@ function StackRow({ snap, id, name }: {
   );
 }
 
-function HistRow({ label, page, current, index, removable }: {
-  label: string; page: number; current: boolean; index: number; removable: boolean;
+function HistRow({ label, page, current, index }: {
+  label: string; page: number; current: boolean; index: number;
 }) {
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -186,7 +192,7 @@ function HistRow({ label, page, current, index, removable }: {
       {!editing && (
         <span className={toolsBox}>
           <button
-            className={`editName ${toolBtn} ${hoverTool}`}
+            className={`editName ${hoverTool}`}
             title="Rename this entry"
             onClick={(e) => {
               e.stopPropagation();
@@ -196,7 +202,7 @@ function HistRow({ label, page, current, index, removable }: {
             <IconEdit />
           </button>
           <button
-            className={`setPos ${toolBtn} ${hoverTool}`}
+            className={`setPos ${hoverTool}`}
             title="Set this entry to the current position"
             onClick={(e) => {
               e.stopPropagation();
@@ -205,18 +211,16 @@ function HistRow({ label, page, current, index, removable }: {
           >
             <IconAnchor />
           </button>
-          {removable && (
-            <button
-              className={`rmEntry ${toolBtn} ${current ? '' : 'opacity-0'} group-hover:opacity-100`}
-              title="Remove this entry from the trail"
-              onClick={(e) => {
-                e.stopPropagation();
-                controller.entryRemove(index);
-              }}
-            >
-              <IconClose />
-            </button>
-          )}
+          <button
+            className={`rmEntry ${toolBtn} ${current ? '' : 'opacity-0'} group-hover:opacity-100`}
+            title="Remove this entry from the trail"
+            onClick={(e) => {
+              e.stopPropagation();
+              controller.entryRemove(index);
+            }}
+          >
+            <IconClose />
+          </button>
         </span>
       )}
     </div>
@@ -334,7 +338,6 @@ export default function Sidebar({
                   page={entry.pos.page}
                   current={i === snap.activeIndex}
                   index={i}
-                  removable={(active?.entries.length ?? 0) > 1}
                 />
               </li>
             ))}

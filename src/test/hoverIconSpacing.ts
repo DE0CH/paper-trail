@@ -12,6 +12,9 @@
 // and, without hover:
 //   (4) the close/remove ✕ is visible on the CURRENT/active row only,
 //       while the hover-only tools take no layout space on any row.
+// Also pins the single-entry history semantics: the remove ✕ renders for
+// visual consistency even when the trail has only one entry, and clicking
+// it there is a designed (silent) no-op.
 // Run: node build-node/test/hoverIconSpacing.js   (server on 8377 first)
 
 import { findBrowser } from './browsers';
@@ -104,7 +107,28 @@ async function run(): Promise<void> {
     // Trail row: tools are ✎ (.editName), ⧉ (.dup), ✕ (.x).
     await probeHovered(page, 'trail', '.stackRow');
 
-    // History row: needs >1 entry for the remove ✕ to render; mark one.
+    // Single-entry history: the remove ✕ renders for visual consistency
+    // (same slot semantics as everywhere else) and clicking it is a no-op.
+    await page.mouse.move(700, 450); // measure without hover first
+    await page.waitForTimeout(200);
+    const single = await page.evaluate(() => {
+      const rm = document.querySelector('.histItem.current .rmEntry') as HTMLElement | null;
+      const st = rm ? getComputedStyle(rm) : null;
+      return {
+        entries: document.querySelectorAll('.histItem').length,
+        rmShown: !!rm && !!st && st.display !== 'none' && st.opacity !== '0'
+          && rm.getBoundingClientRect().width > 0,
+      };
+    });
+    check('single-entry history: the ✕ renders on the unhovered current row',
+      single.entries === 1 && single.rmShown, JSON.stringify(single));
+    await probeHovered(page, 'history (single entry)', '.histItem.current');
+    await page.click('.histItem.current .rmEntry');
+    await page.waitForTimeout(150);
+    check('single-entry history: clicking the ✕ is a silent no-op',
+      await page.evaluate(() => document.querySelectorAll('.histItem').length === 1));
+
+    // Multi-entry history row: mark a spot so a second entry exists.
     await page.click('#btnMark');
     await page.waitForFunction(
       () => document.querySelectorAll('.histItem').length > 1,
