@@ -5,24 +5,22 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
 ~/paper-trail-main (this 4GB orchestrator box). The PAPER stayed at
 ~/Downloads/arXiv-2411.01678v1 (not a git repo; see paper-build.md).
 
-## Current state (2026-07-13, session 4)
-- **v0.5.13 SHIPPED+verified** (latest release): Sparkle-style native
-  Software Update WINDOW + interruptable Cancel, mac/win update-
-  resilience tests, .ptl-then-PDF save-binding fix, native doc/app/
-  installer icons, native scrollbars, no-flash windows. History +
-  per-version detail: [shipped-versions](shipped-versions.md).
-- v0.5.12 SKIPPED (release startup_failure: caller release.yml lacked
-  id-token:write that reusable ci.yml requests for Codecov OIDC).
-- Two mac update videos (finished + canceled) DELIVERED to the owner
-  (run 29230642699, watched frames back: canceled ends back at the offer,
-  not "Ready to update"). Getting the canceled take right needed three
-  recorder fixes on main: clearUpdaterCache() before each launch (the
-  finished run's cached 0.6.0 download — in ~/Library/Caches, NOT under
-  PT_USERDATA — made canceled hit 'downloaded' before Cancel), a feed
-  that stalls ~65% and never completes so the download stays 'downloading'
-  for Cancel, and a retry of the Check-for-Updates menu gesture.
-- update-flash-close DEFERRED (cut from v0.5.13; held fix skips the
-  update — docs/flash-close-finding.md; needs owner decision).
+## Current state (2026-07-15, end of session 4)
+- **v1.0.0 SHIPPED+verified** (latest release; tag 9b4edf4, run
+  29444069461, 10 assets). The 1.0 format policy is ACTIVE: strict
+  .ptl backward compatibility + migrations for every change. History
+  + per-version detail: [shipped-versions](shipped-versions.md).
+- NEXT (owner-requested): work on the searchSelectionBox wedge
+  root-cause TOGETHER with the owner (task #38; 3 CI hangs — Depot
+  mac, GitHub windows ×2, last one on the 1.0 gate; suspected real
+  deadlock in the right-click "Search for this" flow).
+- README video: frame-verified take live at README.md:22
+  (user-attachments URL via Chrome issue-draft flow, session 4).
+- Vercel preview pipeline live: vercel-preview.yml on every main push
+  + manual branch dispatch; uses VERCEL_* secrets already in GitHub.
+- Owner repo subscription flipped to watch-all (subscribed:true).
+- update-flash-close DEFERRED (held fix skips the update —
+  docs/flash-close-finding.md; needs owner decision).
 - tauri-experiment branch = separate Linux-box session; hands off
   (src-tauri/, src/test/tauriE2ePage.ts sit untracked here — leftovers,
   they break local tsc; not mine).
@@ -83,6 +81,8 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   MathJax), WStarCats.tex fixes; `./build-html.sh`; PDF: pdflatex x2.
 
 ## Workflow preferences
+- [continuous-dev-builds](continuous-dev-builds.md) — one signed+notarized
+  mac dev build (5 artifacts) + phone notify per feature/fix that lands.
 - Correcting a record (memory, docs, comments): DELETE the wrong
   statement and state only the current truth — never keep the error and
   annotate it "this was wrong, now it's X" (owner rule 2026-07-13).

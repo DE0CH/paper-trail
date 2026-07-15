@@ -1,15 +1,29 @@
 ---
 name: shipped-versions
-description: "Release history v0.3.4 → v0.5.13 — what each version shipped, skipped versions, verification results"
+description: "Release history v0.3.4 → v1.0.0 — what each version shipped, skipped versions, verification results"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 66ac1584-fe1c-41ef-b7ba-6a616f203268
 ---
 
-Latest released: **v0.5.13**. All releases verified post-publish:
+Latest released: **v1.0.0**. All releases verified post-publish:
 dash-named assets, updater URLs 200, deploy-web green.
 
+- v1.0.0 PUBLISHED+verified 2026-07-15 (10 assets, run 29444069461,
+  tag 9b4edf4): the 1.0 milestone — .ptl format STABLE from here on
+  (strict backward compatibility + migrations for every change).
+  Shipped on top of 0.5.21: worker/streaming search, close-save
+  reliability, session-binding fixes, row tools in one flex layout
+  (hover reflow, ✕ always on the active row), DMG window design
+  (centered icons + dotted arrow, macOS-15-verified), branded
+  uninstaller icon, Windows installer shortcut checkboxes, UI
+  alignment pass, fresh README video. Full user-facing list:
+  CHANGELOG.md ## 1.0.0. Release gate wedged once on
+  searchSelectionBox (3rd occurrence — see task #38), green on rerun.
+- v0.5.14 → v0.5.21 shipped across sessions 3-4 (per-version detail:
+  CHANGELOG.md and git tags; v0.5.19 anomaly + v0.5.20 blocker notes
+  further down this file).
 - v0.5.13 PUBLISHED+verified (10 assets): Sparkle-style native
   "Software Update" WINDOW (offer "A new version…available" → Update
   Now → progress bar → "Ready to update" → Restart to Update) with an
