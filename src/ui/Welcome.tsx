@@ -54,7 +54,8 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
 
         {snap.recents.length > 0 && (
           <div id="recent" className="mt-5 text-left">
-            <h3 className="text-dim text-xs uppercase tracking-wider mb-1">Recent</h3>
+            {/* px-2.5: the heading starts on the same x as the rows' text. */}
+            <h3 className="text-dim text-xs uppercase tracking-wider mb-1 px-2.5">Recent</h3>
             {snap.recents.map((d) => (
               <div
                 key={`${d.entry.timestamp}|${d.entry.pdfName}|${d.entry.sessionFileName}`}
