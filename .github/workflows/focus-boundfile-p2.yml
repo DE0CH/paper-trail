@@ -5,6 +5,8 @@
 name: Focus write-path suites (boundfile p2 merge)
 
 on:
+  push:
+    branches: [refactor-boundfile-p2]
   workflow_dispatch: {}
 
 jobs:
