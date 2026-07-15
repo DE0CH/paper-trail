@@ -469,6 +469,12 @@ jobs:
         shell: bash
         run: node build-node/test/installerDisplayIcon.js
 
+      - name: Installer shortcut choices (silent defaults, assisted untick)
+        # installs the packaged Setup exe like the tests above, so it
+        # must also skip when packaging did
+        shell: bash
+        run: node build-node/test/installerShortcutChoices.js
+
   # Update tests live in their own job so their two packaging runs
   # (current version + next-version feed) don't serialize behind the
   # main job's steps — jobs run in parallel, steps within one don't.

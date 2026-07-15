@@ -1,0 +1,33 @@
+# TEMPORARY focused dev workflow for the installer shortcut-choices
+# feature: packages the installer and runs only its regression test —
+# much faster than the full ci.yml pyramid while iterating.
+# DELETE THIS FILE before the branch is merged.
+name: Installer shortcut choices (focused, temporary)
+
+on:
+  push:
+    branches: [installer-shortcut-choices]
+  workflow_dispatch: {}
+
+jobs:
+  shortcuts:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Package the Windows app (installer only)
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ2
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Installer shortcut choices (silent defaults, assisted untick)
+        shell: bash
+        run: node build-node/test/installerShortcutChoices.js
