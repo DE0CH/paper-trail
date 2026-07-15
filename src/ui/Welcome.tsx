@@ -54,8 +54,10 @@ export default function Welcome({ snap }: { snap: Snapshot }) {
 
         {snap.recents.length > 0 && (
           <div id="recent" className="mt-5 text-left">
-            {/* px-2.5: the heading starts on the same x as the rows' text. */}
-            <h3 className="text-dim text-xs uppercase tracking-wider mb-1 px-2.5">Recent</h3>
+            {/* px-2.5: the heading starts on the same x as the rows' text.
+                11px: the uppercase tracked section-label role has ONE size
+                app-wide (the shortcut-help group titles set it). */}
+            <h3 className="text-dim text-[11px] uppercase tracking-wider mb-1 px-2.5">Recent</h3>
             {snap.recents.map((d) => (
               <div
                 key={`${d.entry.timestamp}|${d.entry.pdfName}|${d.entry.sessionFileName}`}
