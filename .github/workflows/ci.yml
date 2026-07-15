@@ -141,6 +141,11 @@ jobs:
         shell: bash
         run: node build-node/test/searchCommitState.js
 
+      - name: Search streams partial results from the worker while indexing
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchWorkerStream.js
+
       - name: The rename input never shifts the text (no-jank)
         if: ${{ !cancelled() }}
         shell: bash
@@ -454,6 +459,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/searchCommitState.js
+
+      - name: Search streams partial results from the worker while indexing
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/searchWorkerStream.js
 
       - name: The rename input never shifts the text (no-jank)
         if: ${{ !cancelled() }}

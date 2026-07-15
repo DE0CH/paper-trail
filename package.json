@@ -23,6 +23,7 @@
     "test:e2e:ghost-page": "node build-node/test/ghostPageAfterFit.js",
     "test:e2e:zoom-center": "node build-node/test/offCenterZoom.js",
     "test:e2e:search-commit": "node build-node/test/searchCommitState.js",
+    "test:e2e:search-stream": "node build-node/test/searchWorkerStream.js",
     "test:e2e:rename-shift": "node build-node/test/renameNoShift.js",
     "test:e2e:race": "node build-node/test/raceConditions.js",
     "test:e2e:drop-path": "node build-node/test/dropBindsSilentTarget.js",

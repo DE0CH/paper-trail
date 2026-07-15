@@ -4,8 +4,17 @@
 // which matches exactly what the rendered text layer contains — so char
 // offsets can be mapped onto the text layer's text nodes with a TreeWalker
 // and turned into precise highlight rectangles via Range.getClientRects().
+//
+// The COMPUTE half (concatenation, case folding, match finding) runs in a
+// dedicated Web Worker (searchWorker.ts). This thread streams each page's
+// text-item strings to the worker as pdf.js extracts them, and the worker
+// streams matches back — so a query issued while the index is still
+// building shows the matches found so far and fills in as pages arrive.
+// Only the DOM work stays here: highlight drawing and the current-match
+// handoff. Match offsets are original text-layer offsets throughout.
 
 import type { Viewer, PageRec } from './viewer';
+import type { FromWorker, ToWorker } from './searchWorker';
 
 export interface Match {
   page: number;
@@ -24,59 +33,124 @@ export class SearchController {
   query = '';
   matches: Match[] = [];
   index = -1;
-  private pageTexts: string[] | null = null;
-  private buildPromise: Promise<void> | null = null;
+  /** Set by the app controller: fired whenever streamed results change. */
+  onUpdate: (() => void) | null = null;
+
+  private worker: Worker | null = null;
+  private gen = 0; // document generation; bumped by reset()
+  private qid = 0; // query generation; bumped by setQuery()
+  private settled = true; // the current query has its complete result set
+  private extracting = false; // page-text streaming to the worker has started
+  private waiters: Array<() => void> = []; // setQuery completion resolvers
+  private refreshScheduled = false;
 
   constructor(viewer: Viewer) {
     this.viewer = viewer;
   }
 
   reset(): void {
+    this.gen++;
+    this.qid++;
     this.query = '';
     this.matches = [];
     this.index = -1;
-    this.pageTexts = null;
-    this.buildPromise = null;
+    this.settled = true;
+    this.extracting = false;
+    this.worker?.postMessage({ type: 'reset', gen: this.gen } satisfies ToWorker);
+    this.releaseWaiters();
   }
 
-  private async buildText(): Promise<void> {
-    if (this.pageTexts) return;
-    if (!this.buildPromise) {
-      this.buildPromise = (async () => {
-        const doc = this.viewer.doc;
-        if (!doc) return;
-        const texts: string[] = [];
-        for (let i = 1; i <= doc.numPages; i++) {
+  private ensureWorker(): Worker {
+    if (!this.worker) {
+      this.worker = new Worker(new URL('./searchWorker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = (e: MessageEvent<FromWorker>) => this.onWorkerMessage(e.data);
+      this.worker.postMessage({ type: 'reset', gen: this.gen } satisfies ToWorker);
+    }
+    return this.worker;
+  }
+
+  private releaseWaiters(): void {
+    const ws = this.waiters;
+    this.waiters = [];
+    for (const w of ws) w();
+  }
+
+  private onWorkerMessage(msg: FromWorker): void {
+    if (msg.gen !== this.gen || msg.qid !== this.qid) return; // stale batch
+    if (msg.type === 'matches') {
+      for (const m of msg.matches) this.matches.push(m);
+    } else {
+      this.settled = true;
+      this.releaseWaiters();
+    }
+    this.onUpdate?.();
+    this.scheduleRefresh();
+  }
+
+  /** Coalesce mid-stream highlight redraws to one per frame. */
+  private scheduleRefresh(): void {
+    if (this.refreshScheduled) return;
+    this.refreshScheduled = true;
+    requestAnimationFrame(() => {
+      this.refreshScheduled = false;
+      void this.refreshHighlights();
+    });
+  }
+
+  // Stream every page's text-item strings to the worker, in page order —
+  // so match batches arrive already sorted. The per-page extraction is
+  // pdf.js-worker I/O; nothing here scans text on the main thread.
+  private startExtraction(): void {
+    if (this.extracting) return;
+    this.extracting = true;
+    const gen = this.gen;
+    const doc = this.viewer.doc;
+    const worker = this.ensureWorker();
+    void (async () => {
+      if (!doc) return;
+      for (let i = 1; i <= doc.numPages; i++) {
+        const items: string[] = [];
+        try {
           const page = await doc.getPage(i);
           const tc = await page.getTextContent();
-          let s = '';
           for (const item of tc.items) {
-            if ('str' in item && typeof item.str === 'string') s += item.str;
+            if ('str' in item && typeof item.str === 'string') items.push(item.str);
           }
-          texts.push(s);
+        } catch {
+          // a corrupt (or destroyed-mid-swap) page contributes no text;
+          // indexing continues, and the empty page is still sent so page
+          // numbering stays aligned. Nothing is memoized on failure, so a
+          // reopen retries from scratch.
         }
-        this.pageTexts = texts;
-      })();
-    }
-    await this.buildPromise;
+        if (gen !== this.gen) return; // document changed mid-extraction
+        worker.postMessage({ type: 'page', gen, items } satisfies ToWorker);
+      }
+      // always close out the index so pending queries settle
+      if (gen === this.gen) worker.postMessage({ type: 'done', gen } satisfies ToWorker);
+    })();
   }
 
+  /**
+   * Set the active query. Resolves once the result set is COMPLETE (or
+   * the query was superseded, cleared, or reset). Partial matches stream
+   * into `matches` while this is pending, firing onUpdate per batch.
+   */
   async setQuery(q: string): Promise<void> {
     this.query = q;
     this.matches = [];
     this.index = -1;
-    if (!q || !this.viewer.doc) return;
-    await this.buildText();
-    if (this.query !== q || !this.pageTexts) return; // superseded while building
-    const nq = q.toLowerCase();
-    this.pageTexts.forEach((t, pi) => {
-      const lt = t.toLowerCase();
-      let i = 0;
-      while ((i = lt.indexOf(nq, i)) !== -1) {
-        this.matches.push({ page: pi + 1, start: i, end: i + nq.length });
-        i += nq.length;
-      }
-    });
+    this.qid++;
+    this.releaseWaiters(); // supersede any pending query
+    if (!q || !this.viewer.doc) {
+      this.settled = true;
+      // stop the worker scanning for a query nobody wants anymore
+      this.worker?.postMessage({ type: 'query', gen: this.gen, qid: this.qid, q: '' } satisfies ToWorker);
+      return;
+    }
+    this.settled = false;
+    this.ensureWorker().postMessage({ type: 'query', gen: this.gen, qid: this.qid, q } satisfies ToWorker);
+    this.startExtraction();
+    await new Promise<void>((resolve) => this.waiters.push(resolve));
   }
 
   step(dir: 1 | -1): Match | null {
@@ -95,8 +169,9 @@ export class SearchController {
 
   countLabel(): string {
     if (!this.query) return '';
-    if (!this.matches.length) return '0 / 0';
-    return `${this.index + 1} / ${this.matches.length}`;
+    const label = !this.matches.length ? '0 / 0' : `${this.index + 1} / ${this.matches.length}`;
+    // an ellipsis marks a count that is still streaming in
+    return this.settled ? label : label + '…';
   }
 
   private textNodeMap(textLayerDiv: HTMLElement): NodeSpan[] {
