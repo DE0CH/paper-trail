@@ -71,8 +71,11 @@ metadata:
   11025254-570b-463b-af34-00bf6b0e151e). Cert "Developer ID
   Application: Deyao Chen (S64YL394S3)" expires 2031-07-11. GH secrets:
   MAC_CERT_P12 (base64), MAC_CERT_PASSWORD, APPLE_API_KEY_P8,
-  APPLE_API_KEY_ID, APPLE_API_ISSUER, VERCEL_*. Notarization via
-  electron-builder mac.notarize:true + APPLE_API_* env.
+  APPLE_API_KEY_ID, APPLE_API_ISSUER, VERCEL_*. The five mac signing
+  secrets are ALSO set on the private mirror de0ch-org/paper-trail-mirror
+  (2026-07-15), so Depot dev builds sign+notarize; VERCEL_* stay
+  origin-only. Notarization via electron-builder mac.notarize:true +
+  APPLE_API_* env.
 - Auto-update live since 0.5.0 (electron-updater, GitHub provider;
   release assets must include latest*.yml + *.blockmap). Test seams:
   PT_UPDATE_URL (generic feed + forceDevUpdateConfig),
