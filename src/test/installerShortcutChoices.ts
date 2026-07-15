@@ -78,7 +78,10 @@ async function uninstall(): Promise<void> {
 // Walks the ASSISTED installer via UI Automation: keeps the per-user
 // install mode, records every checkbox it sees, unticks the desktop
 // shortcut checkbox and the finish page's Run option, and advances with
-// Next/Install/Finish until the installer process exits.
+// Next/Install/Finish until the installer process exits. The Setup
+// window is matched by process id OR by its dialog class + title (the
+// savePickerOnClose clicker's lesson: never assume, and log what UIA
+// can see so a blind run is distinguishable from a click that missed).
 const DRIVER_PS1 = `
 param([Parameter(Mandatory=$true)][int]$InstallerPid)
 $ErrorActionPreference = 'Continue'
@@ -86,7 +89,6 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 $auto = [System.Windows.Automation.AutomationElement]
 $root = $auto::RootElement
-$pidCond = New-Object System.Windows.Automation.PropertyCondition($auto::ProcessIdProperty, $InstallerPid)
 $boxCond = New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::CheckBox)
 $radCond = New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::RadioButton)
 $btnCond = New-Object System.Windows.Automation.PropertyCondition($auto::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
@@ -96,7 +98,17 @@ $seen = @{}
 for ($i = 0; $i -lt 400; $i++) {
   if (-not (Get-Process -Id $InstallerPid -ErrorAction SilentlyContinue)) { Write-Output 'installer-exited'; exit 0 }
   try {
-    $wins = $root.FindAll($children, $pidCond)
+    $all = $root.FindAll($children, [System.Windows.Automation.Condition]::TrueCondition)
+    $wins = @()
+    foreach ($w in $all) {
+      if ($w.Current.ProcessId -eq $InstallerPid) { $wins += $w; continue }
+      if ($w.Current.ClassName -eq '#32770' -and $w.Current.Name -like 'Paper Trail*') { $wins += $w }
+    }
+    if ($wins.Count -eq 0 -and $i % 15 -eq 14) {
+      $desc = @()
+      foreach ($w in $all) { $desc += ('' + $w.Current.ProcessId + ':' + $w.Current.ClassName + ':' + $w.Current.Name) }
+      Write-Output ('probe #' + $i + ' setup window not found; top-level=' + $all.Count + ' [' + (($desc | Select-Object -First 15) -join '; ') + ']')
+    }
     foreach ($w in $wins) {
       # keep the default per-user install on the install-mode page
       foreach ($r in $w.FindAll($descend, $radCond)) {
@@ -197,6 +209,11 @@ async function run(): Promise<void> {
       new Promise<boolean>((r) => setTimeout(() => r(false), 120_000)),
     ]);
     check('the assisted install completes', finished === true);
+    if (!finished) {
+      // never leave a stuck Setup window behind for the next CI step
+      spawnSync('taskkill', ['/PID', String(child.pid), '/F', '/T'],
+        { encoding: 'utf8' });
+    }
 
     // shortcut creation can trail the process exit by a moment; give the
     // Start Menu link the same grace the silent path gets, THEN judge

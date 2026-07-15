@@ -59,10 +59,15 @@ notRunning_${PT_UID}:
 ; callbacks, so both choice variables stay empty there and the stock
 ; behavior - both shortcuts created on install, kept on update - is
 ; untouched. The choices are honored in customInstall below.
+; (Installer compile only: the uninstaller pass never inserts the page,
+; and declaring vars it can't reference is a makensis warning, which
+; electron-builder's default -WX turns into a build failure.)
+!ifndef BUILD_UNINSTALLER
 Var /GLOBAL ptDesktopShortcutBox
 Var /GLOBAL ptStartMenuShortcutBox
 Var /GLOBAL ptDesktopShortcutChoice
 Var /GLOBAL ptStartMenuShortcutChoice
+!endif
 
 !macro customPageAfterChangeDir
   !ifndef NSD_Check
