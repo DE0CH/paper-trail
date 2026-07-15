@@ -526,7 +526,13 @@ export class Controller {
   }
 
   private async writeProgressNow(): Promise<boolean> {
-    if (!this.docOpen) return false;
+    // Never serialize a viewer that holds no document: after a failed
+    // open/replace `docOpen` still describes the torn-down document (and
+    // during a slow open the old document is already gone), so
+    // currentPosition() would fabricate {page:1, yRatio:0} — writing that
+    // overwrites the real reading position on disk. Refusing keeps the
+    // session dirty and honest; the next save with a real document writes.
+    if (!this.docOpen || this.viewer.numPages === 0) return false;
     const file = this.session.file;
     if (!file) return false;
     this.session.saving = true;
@@ -920,7 +926,13 @@ export class Controller {
     this.preview.hide(); // don't leave a stale popup while scrolling
     clearTimeout(this.scrollTimer);
     this.scrollTimer = setTimeout(() => {
-      if (!this.docOpen || this.viewer.isTrackingSuppressed()) return;
+      // A scroll with no pages is teardown noise — viewer.open/close
+      // emptying the container clamps scrollTop to 0 — never a reading-
+      // position change. After a FAILED open `docOpen` still describes the
+      // torn-down document, and marking dirty here armed the auto-save
+      // that overwrote the session file with a fabricated page-1 position.
+      if (!this.docOpen || this.viewer.numPages === 0
+        || this.viewer.isTrackingSuppressed()) return;
       // Note: scrolling never moves history entries — their positions only
       // change through explicit actions (following a link, back/forward,
       // or the re-anchor button). Only the session's view position updates.

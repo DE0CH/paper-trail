@@ -39,6 +39,13 @@ async function run(): Promise<void> {
 
       // A real reading position, then a clean, bound session.
       pt.jumpVia({ page: 3, yRatio: 0.25 }, 'reading spot');
+      // Make the teardown-scroll race DETERMINISTIC: jumpVia's programmatic
+      // scroll suppresses position tracking for 600ms, and on fast machines
+      // the failed replace's teardown scroll (viewer.close emptying the
+      // container clamps scrollTop to 0) landed inside that window — hiding
+      // the bug except on slow/loaded runners. A real user replaces the PDF
+      // more than a moment after their last jump, so wait the window out.
+      await sleep(700);
       const writes: string[] = [];
       c.session.handle = {
         kind: 'file', name: 's.ptl',

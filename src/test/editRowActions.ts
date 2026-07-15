@@ -86,6 +86,17 @@ async function run(): Promise<void> {
     const page: Page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
     page.on('dialog', (d) => void d.accept());
     await page.goto(BASE + '/?file=sample/WStarCats.pdf');
+    // Readiness must be the DOCUMENT, not the rows: trail/history rows
+    // render before the PDF finishes opening (browsing trails pre-open is
+    // a feature), but #btnMark's markPosition is docOpen-gated — a mark
+    // clicked in that pre-open window is a designed no-op, so no second
+    // row could ever appear. On slow runners the whole rename prelude fit
+    // inside that window (proven by instrumentation: markPosition ran with
+    // docOpen=false), which is exactly how this test starved for 15s.
+    await page.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => !!(window as any).__pt?.controller?.getSnapshot().docOpen,
+      undefined, { timeout: 20_000 });
     await page.waitForSelector('.stackRow .name', { timeout: 20_000 });
     await page.waitForSelector('.histItem .lbl', { timeout: 20_000 });
 
