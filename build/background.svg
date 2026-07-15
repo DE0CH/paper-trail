@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380">
+  <!-- The dmg installer-window background (the drag-to-Applications
+       window). Drawn at the window size configured in package.json
+       build.dmg (540x380, icons 128px centered at 135,205 and 405,205);
+       src/tools/dmgBackground.ts renders it to build/background.png and
+       build/background@2x.png, which electron-builder pairs into the
+       HiDPI tiff the Finder window shows.
+       The decoration is the app's own trail motif from docs/icon.svg —
+       a faint dotted trail that emerges from behind the app icon, arcs
+       toward Applications with one small branch, and lands on the
+       target ring — so the brand mark itself is the drag hint. Colors
+       stay in the app palette (trail #4f8cff, branch #8fb3ff) at low
+       opacity on a light neutral, and the instruction line uses the
+       system font, so the window reads native and quiet. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f8fa"/>
+      <stop offset="1" stop-color="#e9ebf0"/>
+    </linearGradient>
+  </defs>
+  <rect width="540" height="380" fill="url(#bg)"/>
+
+  <g opacity="0.38">
+    <!-- the trail: starts under the app icon, arcs over, lands at
+         Applications (dot size and spacing echo docs/icon.svg) -->
+    <path d="M 135 165 C 185 95, 350 88, 405 152"
+          fill="none" stroke="#4f8cff" stroke-width="9"
+          stroke-linecap="round" stroke-dasharray="0.1 21"/>
+    <!-- one small branch forking off near the apex -->
+    <path d="M 272 104 C 300 106, 322 114, 338 126"
+          fill="none" stroke="#8fb3ff" stroke-width="6"
+          stroke-linecap="round" stroke-dasharray="0.1 15"/>
+    <circle cx="342" cy="129" r="5" fill="#8fb3ff"/>
+    <!-- the target ring where the trail arrives -->
+    <circle cx="405" cy="152" r="12.5" fill="#4f8cff"/>
+    <circle cx="405" cy="152" r="6" fill="none" stroke="#eef0f4" stroke-width="3.5"/>
+  </g>
+
+  <text x="270" y="349" text-anchor="middle"
+        font-family="system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif"
+        font-size="14" font-weight="500" fill="#7a7f88">Drag Paper Trail into Applications</text>
+</svg>

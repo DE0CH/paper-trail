@@ -91,6 +91,7 @@
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never",
     "icons": "node build-node/tools/icons.js",
+    "dmg:background": "node build-node/tools/dmgBackground.js",
     "pretest": "node build-node/tools/fixture.js"
   },
   "devDependencies": {
@@ -158,7 +159,26 @@
       ]
     },
     "dmg": {
-      "artifactName": "Paper-Trail-${version}-${arch}.${ext}"
+      "artifactName": "Paper-Trail-${version}-${arch}.${ext}",
+      "background": "build/background.png",
+      "iconSize": 128,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 135,
+          "y": 205,
+          "type": "file"
+        },
+        {
+          "x": 405,
+          "y": 205,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "nsis": {
       "artifactName": "Paper-Trail-Setup-${version}.${ext}",
