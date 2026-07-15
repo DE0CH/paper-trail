@@ -58,7 +58,10 @@ async function renameProbe(
     return { inputRight: ir.right, rowRight: rr.right - padR, buttons };
   }, { rowSel, actionSels });
   await page.keyboard.press('Escape');
-  await input.waitFor({ state: 'detached', timeout: 5_000 }).catch(() => { /* fine */ });
+  // HARD precondition, not best-effort: the next step clicks a toolbar
+  // button, and on slow runners that click raced a still-mounted editor
+  // (the mark landed in the editor's blur/re-render and no row appeared).
+  await input.waitFor({ state: 'detached', timeout: 15_000 });
   return data;
 }
 
@@ -95,8 +98,12 @@ async function run(): Promise<void> {
     // History row: the remove (✕) button only renders with >1 entry, so add
     // a second entry (Mark this spot) to make the row removable first.
     await page.click('#btnMark');
+    // waitForFunction(fn, ARG, options) — the options object must be the
+    // THIRD argument (a prior version passed it second, where Playwright
+    // reads it as the function's arg and applies the 30s default timeout).
     await page.waitForFunction(
-      () => document.querySelectorAll('.histItem').length > 1, { timeout: 5_000 });
+      () => document.querySelectorAll('.histItem').length > 1,
+      undefined, { timeout: 15_000 });
     const hist = await renameProbe(page, '.histItem', '.lbl',
       ['.editName', '.setPos', '.rmEntry']);
     assertRow('history', hist);
