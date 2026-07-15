@@ -1,0 +1,40 @@
+# Deploys a Vercel PREVIEW of the web app — the fast visual-review loop.
+# Runs on every push to main, and can be dispatched manually on any
+# branch (Actions > "Vercel preview" > Run workflow, pick the branch) to
+# put in-progress UI work in front of the owner before it merges.
+# Production deploys stay where they are: the release workflow only.
+#
+# The preview URL lands in the run's summary (and the deploy log).
+
+name: Vercel preview
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm i -g vercel
+      - name: Deploy a preview
+        run: |
+          url=$(vercel deploy --yes --token=${{ secrets.VERCEL_TOKEN }})
+          echo "preview: $url"
+          echo "## Vercel preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url  (branch: ${{ github.ref_name }})" >> "$GITHUB_STEP_SUMMARY"
