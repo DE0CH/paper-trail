@@ -1,0 +1,40 @@
+# TEMP focused runner for the overlay-clearance fix (delete before merge).
+# Runs the three tests df187c1 broke plus the spacing guard.
+name: Focus clearance
+
+on:
+  push:
+    branches: ['fix-hover-overlay-clearance']
+
+permissions:
+  contents: read
+
+jobs:
+  clearance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: node build-node/tools/fixture.js
+      - name: Start the web server
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+      - name: Hover tools never bleed into the close/remove button
+        run: node build-node/test/hoverIconSpacing.js
+      - name: The rename input never shifts the text (no-jank)
+        if: ${{ !cancelled() }}
+        run: node build-node/test/renameNoShift.js
+      - name: Renaming a row hides its action icons (full row width)
+        if: ${{ !cancelled() }}
+        run: node build-node/test/editRowActions.js
+      - name: Rapid-action race conditions stay consistent
+        if: ${{ !cancelled() }}
+        run: node build-node/test/raceConditions.js

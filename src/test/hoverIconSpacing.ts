@@ -12,7 +12,12 @@ import { findBrowser } from './browsers';
 import { chromium, type Page } from 'playwright-core';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:8377';
-const MIN_GAP = 4;
+// The overlay sits FLUSH against the ✕ slot (gap >= 0, never overlapping):
+// the w-5 buttons carry ~3px of internal glyph padding each side, so flush
+// boxes still read as spaced. A larger box-gap is NOT wanted — pushing the
+// overlay further left eclipsed the label's click center and broke
+// double-click-to-rename (the df187c1 regression).
+const MIN_GAP = 0;
 
 interface Result { name: string; ok: boolean; detail: string }
 const results: Result[] = [];
@@ -29,17 +34,25 @@ async function probe(page: Page, kind: string, rowSel: string,
     const row = document.querySelector(rowSel) as HTMLElement;
     const a = row.querySelector(overlayLastSel) as HTMLElement | null;
     const b = row.querySelector(trailingSel) as HTMLElement | null;
-    if (!a || !b) return null;
+    const label = row.querySelector('.name, .lbl') as HTMLElement | null;
+    if (!a || !b || !label) return null;
     const ra = a.getBoundingClientRect();
     const rb = b.getBoundingClientRect();
-    return { aRight: ra.right, bLeft: rb.left, aW: ra.width, bW: rb.width };
+    // The label's click center must belong to the label, not the overlay —
+    // double-click-to-rename lands there (the df187c1 regression).
+    const lr = label.getBoundingClientRect();
+    const at = document.elementFromPoint(lr.x + lr.width / 2, lr.y + lr.height / 2);
+    const centerIsLabel = at === label || label.contains(at);
+    return { aRight: ra.right, bLeft: rb.left, centerIsLabel };
   }, { rowSel, overlayLastSel, trailingSel });
-  if (!m) { check(`${kind}: probe found both buttons`, false, 'missing element'); return; }
+  if (!m) { check(`${kind}: probe found the buttons and label`, false, 'missing element'); return; }
   const gap = m.bLeft - m.aRight;
   check(`${kind}: the overlay's last icon stays out of the trailing button's box`,
     gap >= 0, `overlap=${(-gap).toFixed(1)}px`);
   check(`${kind}: at least ${MIN_GAP}px between them (row gap consistency)`,
     gap >= MIN_GAP, `gap=${gap.toFixed(1)}px`);
+  check(`${kind}: the hovered overlay leaves the label's click center clickable`,
+    m.centerIsLabel, `elementAtCenter=${m.centerIsLabel ? 'label' : 'NOT the label'}`);
 }
 
 async function run(): Promise<void> {
