@@ -1,0 +1,30 @@
+# TEMP focused runner for the hover-icon-spacing red/green (delete before merge).
+name: Focus hover spacing
+
+on:
+  push:
+    branches: ['fix-hover-icon-spacing', 'fix-hover-icon-spacing-red']
+
+permissions:
+  contents: read
+
+jobs:
+  spacing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: node build-node/tools/fixture.js
+      - name: Start the web server
+        run: |
+          node build-node/node/server.js 8377 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:8377/ && break
+            sleep 0.5
+          done
+      - name: Hover tools never bleed into the close/remove button
+        run: node build-node/test/hoverIconSpacing.js
