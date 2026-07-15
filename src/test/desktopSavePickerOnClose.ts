@@ -101,14 +101,57 @@ function spawnClicker(): void {
       end run`;
     spawn('osascript', ['-e', script, answeredFlag], { stdio: 'inherit' });
   } else {
+    // The dialog is Electron's native TaskDialog. A foreground ENTER
+    // (AppActivate + SendKeys) needs the dialog to actually HOLD the
+    // foreground, which the windows-11-arm runner's session never grants
+    // to the showInactive()-launched test app — 100 ENTERs landed nowhere
+    // and the prompt sat unanswered. UI Automation invokes the "Save…"
+    // button directly, no foreground required; the ENTER stays as a
+    // fallback and the loop logs what it can see, so a run where the
+    // dialog never materializes is distinguishable from a click that
+    // cannot land.
     const ps = `
       Start-Sleep -Milliseconds 2500
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
       $ws = New-Object -ComObject WScript.Shell
+      $root = [System.Windows.Automation.AutomationElement]::RootElement
+      $pidCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, ${process.pid})
+      # Native dialogs only (MessageBox/TaskDialog both use class #32770):
+      # scanning the app window would reach the renderer's accessibility
+      # tree, whose toolbar has its own "Save" button — invoking that would
+      # drive the app, not the prompt.
+      $clsCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ClassNameProperty, '#32770')
+      $winCond = New-Object System.Windows.Automation.AndCondition($pidCond, $clsCond)
+      $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button)
       for ($i = 0; $i -lt 100; $i++) {
         if (Test-Path '${answeredFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'clicked'; exit 0 }
+        $seen = @()
+        try {
+          $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winCond)
+          foreach ($w in $wins) {
+            $btns = $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
+            foreach ($b in $btns) {
+              $name = $b.Current.Name
+              $seen += $name
+              if ($name -like 'Save*') {
+                $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                Write-Output ('uia-invoked: ' + $name)
+                Start-Sleep -Milliseconds 500
+              }
+            }
+          }
+        } catch { Write-Output ('uia-error: ' + $_.Exception.Message) }
+        if (Test-Path '${answeredFlag.replace(/\\/g, '\\\\').replace(/'/g, "''")}') { Write-Output 'clicked'; exit 0 }
+        # Fallback: the old foreground ENTER (default button = "Save…").
         $null = $ws.AppActivate(${process.pid})
         Start-Sleep -Milliseconds 150
-        $ws.SendKeys('{ENTER}')
+        try { $ws.SendKeys('{ENTER}') } catch {}
+        if ($i % 10 -eq 9) { Write-Output ('clicker probe #' + $i + ' buttons=[' + ($seen -join '; ') + ']') }
         Start-Sleep -Milliseconds 350
       }
       Write-Output 'gave-up'`;
