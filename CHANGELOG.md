@@ -3,6 +3,27 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 0.5.21
+
+- Saving a reading session into your Documents folder no longer makes
+  macOS ask for permission to access the folder. The system-managed
+  "Open Recent" menu was removed as part of this; the Recent list on
+  the welcome screen is the place to reopen your reading.
+- The Recent list now remembers files however they were opened — a
+  double-click from the Finder or Explorer, a drag onto the window, or
+  the file picker all count — and saving a session for the first time
+  updates its PDF's entry instead of adding a duplicate.
+- Clicking Fit (or making a large zoom jump) no longer leaves a stray
+  ghost of a page floating at the wrong place.
+- Zooming with the buttons or keyboard keeps the page centered instead
+  of pinning it to the left edge.
+- Renaming a trail or history entry now gives the text box the full
+  row; the row's action icons no longer sit on top of it.
+- On Windows, the find bar no longer overlaps the window's
+  minimize/maximize/close buttons.
+- The app icon now sits on Apple's standard icon grid, so it no longer
+  looks oversized next to other apps in the Dock.
+
 ## 0.5.20
 
 - Opening a reading session now works the same however you open it —
