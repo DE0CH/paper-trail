@@ -298,9 +298,15 @@ async function run(): Promise<void> {
     await page.waitForTimeout(400);
     await page.mouse.down(); await page.mouse.up();
     await page.waitForTimeout(1300);
-    // 5. branch: ctrl+click a reference (the HUD shows the held key)
-    const target2 = await visibleLink();
-    if (target2) {
+    // 5. branch: ctrl+click a reference (the HUD shows the held key).
+    // The page filter alone is not enough here: two citations of the same
+    // result can anchor to different pages, so the forked entry could
+    // repeat a label already in the history ("Definition 4.1" twice —
+    // owner-reported). Verify the LABEL after the fork and, like the hop
+    // loop, undo and pick a different reference when it repeats.
+    for (let forkTries = 0; forkTries < 3; forkTries++) {
+      const target2 = await visibleLink();
+      if (!target2) break;
       await glide(target2.x, target2.y, 700);
       await page.waitForTimeout(350);
       await page.keyboard.down('Control');
@@ -309,6 +315,11 @@ async function run(): Promise<void> {
       await page.waitForTimeout(500);
       await page.keyboard.up('Control');
       await page.waitForTimeout(1400);
+      if (await lastLabelIsFresh()) break;
+      // lastLabelIsFresh already undid the duplicate fork; steer the next
+      // attempt away from that link's destination and re-scan.
+      avoidPages.push(target2.dest);
+      await page.waitForTimeout(600);
     }
     // 6. glide over the inherited deep history of the new trail
     const hist = (await page.locator('#historyPanel').boundingBox())!;
@@ -336,9 +347,17 @@ async function run(): Promise<void> {
         stacks: pt.hist.stacks.length,
         deepestLen: deepest.entries.length,
         distinctLabels: new Set(deepest.entries.map((e) => e.label)).size,
+        // Duplicate labels in ANY stack — the shipped "Definition 4.1
+        // twice" duplicate lived in the shallower FORKED stack, which the
+        // deepest-only check never saw.
+        stacksWithDupLabels: pt.hist.stacks.filter(
+          (s) => new Set(s.entries.map((e) => e.label)).size < s.entries.length,
+        ).length,
       };
     });
-    if (outcome.stacks < 2 || outcome.deepestLen < 5 || outcome.distinctLabels < 5) {
+    if (outcome.stacks < 2 || outcome.deepestLen < 5
+        || outcome.distinctLabels < outcome.deepestLen
+        || outcome.stacksWithDupLabels > 0) {
       throw new Error('recording did not demonstrate the features: '
         + JSON.stringify(outcome));
     }
