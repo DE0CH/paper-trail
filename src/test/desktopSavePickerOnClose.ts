@@ -298,10 +298,16 @@ async function run(): Promise<void> {
   log(`driving the ${MODE} path`);
   if (MODE === 'close') {
     theWin.close();
-    // A second close mid-prompt (the user clicks X again while the dialog is
-    // up) must not stack a second confirm prompt or break the flow.
+    // A second close mid-prompt (the user hits Cmd+W again while the dialog
+    // is up) must not stack a second confirm prompt. Drive it from the
+    // RENDERER (window.close → beforeunload), the way a real second close
+    // arrives — a second main-process win.close() would instead cancel the
+    // macOS window-modal sheet, which is a harness artifact, not the flow.
     setTimeout(() => {
-      if (!theWin.isDestroyed()) { log('second close mid-prompt'); theWin.close(); }
+      if (!theWin.isDestroyed()) {
+        log('second close mid-prompt (renderer window.close)');
+        theWin.webContents.executeJavaScript('window.close()').catch(() => { /* closing */ });
+      }
     }, 700);
   } else {
     app.quit();
