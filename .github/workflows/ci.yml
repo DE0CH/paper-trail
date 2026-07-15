@@ -181,6 +181,11 @@ jobs:
         shell: bash
         run: npx electron build-node/test/desktopSave.js
 
+      - name: Saving a session never registers it with the OS Open-Recent (TCC prompt)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopNoRecentDoc.js
+
       - name: Desktop offline regression (no network requests at all)
         if: ${{ !cancelled() }}
         shell: bash
@@ -489,6 +494,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: npx electron build-node/test/desktopSave.js
+
+      - name: Saving a session never registers it with the OS Open-Recent (TCC prompt)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: npx electron build-node/test/desktopNoRecentDoc.js
 
       - name: Desktop offline regression (no network requests at all)
         if: ${{ !cancelled() }}

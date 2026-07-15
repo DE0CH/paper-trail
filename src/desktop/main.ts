@@ -310,7 +310,6 @@ function sendFileTo(win: BrowserWindow, item: QueuedFile): void {
       // FileSystemFileHandle for a file the shell handed us).
       path: filePath,
     });
-    app.addRecentDocument(filePath);
     // macOS: title-bar proxy for the real file behind this window.
     if (isMac && /\.pdf$/i.test(filePath)) win.setRepresentedFilename(filePath);
   }).catch((e) => {
@@ -531,11 +530,6 @@ function buildMenu(): void {
         { type: 'separator' },
         // Opens in a new window (unless the current one is still empty).
         { label: 'Open\u2026', accelerator: 'CmdOrCtrl+O', click: () => openDialog() },
-        ...(isMac ? [{
-          label: 'Open Recent',
-          role: 'recentDocuments' as const,
-          submenu: [{ role: 'clearRecentDocuments' as const }],
-        }] : []),
         { type: 'separator' },
         { label: 'Save Reading Session', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
         { label: 'Load Reading Session\u2026', accelerator: 'CmdOrCtrl+Shift+O', click: () => loadSessionDialog() },
@@ -713,7 +707,6 @@ ipcMain.handle('pt-save-session', async (event, req: { text: string; suggestedNa
   });
   if (canceled || !filePath) return null;
   await fs.promises.writeFile(filePath, req.text, 'utf8');
-  app.addRecentDocument(filePath);
   return filePath;
 });
 
@@ -734,7 +727,6 @@ ipcMain.handle('pt-open-session-dialog', async (event) => {
   if (canceled || !filePath) return null;
   try {
     const text = await fs.promises.readFile(filePath, 'utf8');
-    app.addRecentDocument(filePath);
     return { name: path.basename(filePath), text, path: filePath };
   } catch (e) {
     console.warn('could not read session', filePath, e);
