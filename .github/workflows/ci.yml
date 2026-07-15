@@ -199,6 +199,11 @@ jobs:
         shell: bash
         run: node build-node/test/uiAlignment.js
 
+      - name: Renaming a row hides its action icons (full row width)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/editRowActions.js
+
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
         shell: bash
@@ -213,6 +218,14 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/searchSelectionBox.js
+
+      - name: The find bar never overlaps the native window controls
+        # Windows-only: reads the titlebar-area-* env vars the Windows
+        # titleBarOverlay sets. macOS keeps its traffic lights top-left,
+        # clear of the right-aligned bar, so this test doesn't run there.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/findBarWindowControls.js
 
       - name: Desktop save regression (menu actions without user activation)
         if: ${{ !cancelled() }}
@@ -575,6 +588,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/uiAlignment.js
+
+      - name: Renaming a row hides its action icons (full row width)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/editRowActions.js
 
       - name: Desktop e2e suite (Electron shell, fully offline)
         if: ${{ !cancelled() }}
