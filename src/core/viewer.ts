@@ -101,6 +101,39 @@ export class Viewer {
         this.onScrollEvent();
       });
     });
+
+    // Re-render when the window moves to a display with a different
+    // devicePixelRatio (1x <-> 2x): already-rendered pages would otherwise
+    // stay at the old density forever (nothing else invalidates them), and
+    // shells sized with the old dpr would drift sub-pixel from canvases
+    // rendered at the new one. A `resolution` media query fires exactly on
+    // that change; it must be re-armed for each new ratio.
+    const watchDpr = (): void => {
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      const onChange = (): void => {
+        mq.removeEventListener('change', onChange);
+        this.refreshForDprChange();
+        watchDpr();
+      };
+      mq.addEventListener('change', onChange);
+    };
+    watchDpr();
+  }
+
+  /**
+   * Invalidate every page for a new devicePixelRatio: re-size the shells
+   * (their CSS box depends on the dpr) and mark the mounted canvases stale
+   * — kept stretched as placeholders, exactly like a zoom — then re-render
+   * the visible ones crisply at the new density.
+   */
+  refreshForDprChange(): void {
+    if (!this.pages.length) return;
+    for (const p of this.pages) {
+      p.renderFailed = false; // the failure may have been density-related
+      this.markStale(p);
+      this.sizeShell(p);
+    }
+    this.updateVisible();
   }
 
   private loadingTask: ReturnType<typeof getDocument> | null = null;
