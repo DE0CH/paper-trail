@@ -51,7 +51,7 @@ void app.whenReady().then(() => {
     })()`).then((toast: string) => {
       const exists = fs.existsSync(target);
       const header = exists ? fs.readFileSync(target, 'utf8').split('\n')[0] : null;
-      const wrote = exists && header === 'paper-trail-session v1';
+      const wrote = exists && header === 'paper-trail-session v2';
 
       const ok = wrote && recentCalls.length === 0;
       console.log(`${ok ? 'PASS' : 'FAIL'}  save writes the .ptl without any OS Open-Recent registration`,

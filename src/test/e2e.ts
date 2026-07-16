@@ -715,7 +715,7 @@ async function run(): Promise<void> {
       JSON.stringify(autoSave.saved));
     check('save writes line-oriented progress file and clears dirty',
       st4.dirtyAfterSave === false
-        && st4.savedJson!.type === 'paper-trail-session v1'
+        && st4.savedJson!.type === 'paper-trail-session v2'
         && st4.savedJson!.name === 'WStarCats.pdf'
         && st4.savedJson!.stacks === 2,
       JSON.stringify(st4.savedJson));

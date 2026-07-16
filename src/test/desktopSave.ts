@@ -36,7 +36,7 @@ void app.whenReady().then(() => {
     })()`).then((toast: string) => {
       const exists = fs.existsSync(target);
       const header = exists ? fs.readFileSync(target, 'utf8').split('\n')[0] : null;
-      const ok = exists && header === 'paper-trail-session v1';
+      const ok = exists && header === 'paper-trail-session v2';
       console.log(`${ok ? 'PASS' : 'FAIL'}  menu save without user activation writes the session`,
         JSON.stringify({ toast, exists, header }));
       try { fs.rmSync(target, { force: true }); } catch { /* fine */ }
