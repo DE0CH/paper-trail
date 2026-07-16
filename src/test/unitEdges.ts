@@ -10,6 +10,7 @@ import * as assert from 'node:assert/strict';
 import { NavStacks } from '../core/history';
 import {
   parseProgress, serializeProgress, progressVersion, PROGRESS_HEADER,
+  PROGRESS_VERSION,
 } from '../core/progressFormat';
 import type { ProgressFile, SerializedState } from '../core/types';
 
@@ -175,10 +176,12 @@ test('non-numeric entry fields are rejected', () => {
 
 test('a newer format version is refused but still identifies itself', () => {
   const h = new NavStacks();
-  const v2 = serializeProgress(fileFor(h))
-    .replace(`${PROGRESS_HEADER}`, 'paper-trail-session v2');
-  assert.equal(parseProgress(v2), null);
-  assert.equal(progressVersion(v2), 2);
+  // Version-relative: "one past current" stays the future through every
+  // format bump (the original hardcoded v2, which v2 itself invalidated).
+  const newer = serializeProgress(fileFor(h))
+    .replace(`${PROGRESS_HEADER}`, `paper-trail-session v${PROGRESS_VERSION + 1}`);
+  assert.equal(parseProgress(newer), null);
+  assert.equal(progressVersion(newer), PROGRESS_VERSION + 1);
 });
 
 test('progressVersion on non-session text says "not a session file"', () => {

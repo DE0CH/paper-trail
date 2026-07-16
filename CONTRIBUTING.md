@@ -122,8 +122,7 @@ diff. Internal ids never appear in the file; stacks are an ordered
 list, and `active` is a 0-based position into it.
 
 ```
-paper-trail-session v1
-saved 2026-07-10T12:34:56.000Z
+paper-trail-session v2
 pdf.name WStarCats.pdf
 view.scale 1.27
 view.fitWidth true
@@ -156,6 +155,13 @@ format is strictly backward compatible, so every later version of the
 app reads files written by every earlier one, migrating older formats
 on load, while a file from a newer major version is refused with a
 clear message rather than misread.
+
+Version 2 removed v1's `saved <date>` line: a timestamp that changed on
+every save put churn into otherwise clean git diffs, so the file
+records no time at all. A file loaded as v1 keeps its version and its
+recorded time when saved back — the `saved` line round-trips verbatim
+(and a v1 file without one does not gain one), so saving never edits
+the time.
 
 ## pdf.js v6 embedding notes
 

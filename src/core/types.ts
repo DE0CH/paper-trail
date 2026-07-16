@@ -46,8 +46,19 @@ export interface SerializedState {
 
 export interface ProgressFile {
   type: 'pdf-stack-reader-progress';
-  v: 1;
+  /** The file format version this object was parsed from. Constructed
+      objects serialize as the current version regardless; only keepV1
+      (set by the parser alone) pins a file to v1 on save. */
+  v: 1 | 2;
+  /** Set by parseProgress on files LOADED as v1: the file keeps its v1
+      header and its recorded time untouched when saved back. */
+  keepV1?: true;
+  /** Epoch of the v1 `saved` line; v2 records no time, so for v2 files
+      this is just the parse moment and never reaches the file. */
   savedAt: number;
+  /** v1 only: the `saved` line's value verbatim, so saving a v1 file
+      back never edits its recorded time. */
+  savedRaw?: string;
   // Deliberately just the name: the session file must be fully
   // transparent to the user — no hidden identifiers, no paths. PDFs are
   // matched by a simple name comparison, with a visible warning banner
