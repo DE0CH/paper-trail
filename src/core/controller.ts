@@ -494,11 +494,20 @@ export class Controller {
 
   // ---------- reading-progress session files ----------
 
+  /**
+   * The format the current session saves back as: new sessions write the
+   * current version; a session loaded from a v1 file stays v1, with its
+   * recorded time frozen (v2 records no time — see progressFormat.ts).
+   */
+  private sessionOrigin: { v: 1 | 2; savedRaw?: string } = { v: PROGRESS_VERSION };
+
   progressFileObject(): ProgressFile {
     return {
       type: 'pdf-stack-reader-progress',
-      v: 1,
+      v: this.sessionOrigin.v,
       savedAt: Date.now(),
+      ...(this.sessionOrigin.savedRaw !== undefined
+        ? { savedRaw: this.sessionOrigin.savedRaw } : {}),
       // Only the name: session files are fully transparent (no hidden
       // identifiers); PDFs are matched by name with a visible warning.
       pdf: { name: this.currentName },
@@ -1062,6 +1071,9 @@ export class Controller {
       document.title = `${name} \u2014 Paper Trail`;
 
       this.preview.clear();
+      this.sessionOrigin = progress
+        ? { v: progress.v, ...(progress.savedRaw !== undefined ? { savedRaw: progress.savedRaw } : {}) }
+        : { v: PROGRESS_VERSION };
       this.restoring = true;
       try {
         this.search.reset();
@@ -1262,6 +1274,10 @@ export class Controller {
     const cs = this.confirmSession;
     if (!cs || !this.docOpen) return;
     this.confirmSession = null;
+    this.sessionOrigin = {
+      v: cs.json.v,
+      ...(cs.json.savedRaw !== undefined ? { savedRaw: cs.json.savedRaw } : {}),
+    };
     this.restoring = true;
     try {
       this.searchEntry = null;

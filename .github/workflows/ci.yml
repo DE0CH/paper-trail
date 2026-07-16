@@ -73,6 +73,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/progressBomUnit.js
 
+      - name: Session format v2 (no timestamp; v1 time frozen verbatim)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/progressV2Unit.js
+
       - name: Unit test coverage (src/core)
         if: ${{ !cancelled() }}
         shell: bash
@@ -598,6 +602,10 @@ jobs:
       - name: BOM-prefixed session files parse
         if: ${{ !cancelled() }}
         run: node --test build-node/test/progressBomUnit.js
+
+      - name: Session format v2 (no timestamp; v1 time frozen verbatim)
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/progressV2Unit.js
 
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own

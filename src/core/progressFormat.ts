@@ -2,8 +2,7 @@
 // to produce small, semantically clear git diffs (one history entry per
 // line; appending an entry is a one-line diff). Example:
 //
-//   paper-trail-session v1
-//   saved 2026-07-10T12:34:56.000Z
+//   paper-trail-session v2
 //   pdf.name WStarCats.pdf
 //   view.scale 1.2745098
 //   view.fitWidth true
@@ -25,19 +24,28 @@
 // of the active one. Free-text values (stack names, entry labels) go last on
 // their line so no escaping is needed; newlines are flattened on save.
 // Internal ids are assigned on load — they never appear in the file.
+//
+// v2 records no time: v1's `saved <ISO date>` line changed on every save
+// and polluted git diffs with timestamp churn. Files loaded as v1 are
+// saved back as v1 with their recorded time untouched (frozen verbatim,
+// or still absent if the file never had one) — the time is never edited.
 
 import type { HistStack, ProgressFile } from './types';
 
-export const PROGRESS_HEADER = 'paper-trail-session v1';
+export const PROGRESS_HEADER = 'paper-trail-session v2';
+const PROGRESS_HEADER_V1 = 'paper-trail-session v1';
 export const PROGRESS_EXT = '.ptl';
 
 /**
- * The format version this build reads and writes. The header line
+ * The format version this build writes for new sessions. The header line
  * (`paper-trail-session v<N>`) exists so the format can evolve: files
  * from a newer major are refused with a clear message instead of being
- * misread, and older ones can be migrated.
+ * misread, and older ones stay readable — every version from
+ * PROGRESS_VERSION_MIN on parses, and a file keeps the version it was
+ * loaded with when saved back.
  */
-export const PROGRESS_VERSION = 1;
+export const PROGRESS_VERSION = 2;
+export const PROGRESS_VERSION_MIN = 1;
 
 /**
  * The version a session file declares in its header, or null when the
@@ -56,8 +64,15 @@ export function serializeProgress(p: ProgressFile): string {
     p.state.hist.stacks.findIndex((s) => s.id === p.state.hist.activeId),
   );
   const out: string[] = [];
-  out.push(PROGRESS_HEADER);
-  out.push(`saved ${new Date(p.savedAt).toISOString()}`);
+  if (p.v === 1) {
+    // A file loaded as v1 is saved back as v1, and its recorded time is
+    // never edited: the loaded value round-trips verbatim, and a v1 file
+    // that never had a saved line doesn't gain one.
+    out.push(PROGRESS_HEADER_V1);
+    if (p.savedRaw !== undefined) out.push(`saved ${p.savedRaw}`);
+  } else {
+    out.push(PROGRESS_HEADER); // v2 records no time at all
+  }
   out.push(`pdf.name ${line(p.pdf.name)}`);
   out.push(`view.scale ${p.state.scale}`);
   out.push(`view.fitWidth ${p.state.fitWidth}`);
@@ -86,7 +101,8 @@ export function parseProgress(text: string): ProgressFile | null {
   // non-string) must come back as null, never as a throw.
   try {
     const lines = text.split(/\r?\n/);
-    if (progressVersion(text) !== PROGRESS_VERSION) return null;
+    const ver = progressVersion(text);
+    if (ver === null || ver < PROGRESS_VERSION_MIN || ver > PROGRESS_VERSION) return null;
 
     for (const raw of lines.slice(1)) {
       if (!raw.trim()) continue;
@@ -134,8 +150,11 @@ export function parseProgress(text: string): ProgressFile | null {
     }
     return {
       type: 'pdf-stack-reader-progress',
-      v: 1,
+      v: ver as 1 | 2,
       savedAt: Date.parse(kv['saved'] ?? '') || Date.now(),
+      // v1's recorded time, kept verbatim so saving the file back never
+      // edits it (v2 files carry none; a stray `saved` line is ignored).
+      ...(ver === 1 && kv['saved'] !== undefined ? { savedRaw: kv['saved'] } : {}),
       // Older files carry pdf.relPath / pdf.fingerprint / pdf.size lines;
       // they land in kv and are deliberately ignored.
       pdf: { name: kv['pdf.name'] ?? '' },
