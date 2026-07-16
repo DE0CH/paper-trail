@@ -64,10 +64,11 @@ export function serializeProgress(p: ProgressFile): string {
     p.state.hist.stacks.findIndex((s) => s.id === p.state.hist.activeId),
   );
   const out: string[] = [];
-  if (p.v === 1) {
-    // A file loaded as v1 is saved back as v1, and its recorded time is
+  if (p.keepV1) {
+    // A file LOADED as v1 is saved back as v1, and its recorded time is
     // never edited: the loaded value round-trips verbatim, and a v1 file
-    // that never had a saved line doesn't gain one.
+    // that never had a saved line doesn't gain one. Everything else —
+    // including constructed objects — writes the current version.
     out.push(PROGRESS_HEADER_V1);
     if (p.savedRaw !== undefined) out.push(`saved ${p.savedRaw}`);
   } else {
@@ -151,6 +152,7 @@ export function parseProgress(text: string): ProgressFile | null {
     return {
       type: 'pdf-stack-reader-progress',
       v: ver as 1 | 2,
+      ...(ver === 1 ? { keepV1: true as const } : {}),
       savedAt: Date.parse(kv['saved'] ?? '') || Date.now(),
       // v1's recorded time, kept verbatim so saving the file back never
       // edits it (v2 files carry none; a stray `saved` line is ignored).

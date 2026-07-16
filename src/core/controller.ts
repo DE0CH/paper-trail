@@ -499,12 +499,13 @@ export class Controller {
    * current version; a session loaded from a v1 file stays v1, with its
    * recorded time frozen (v2 records no time — see progressFormat.ts).
    */
-  private sessionOrigin: { v: 1 | 2; savedRaw?: string } = { v: PROGRESS_VERSION };
+  private sessionOrigin: { keepV1?: true; savedRaw?: string } = {};
 
   progressFileObject(): ProgressFile {
     return {
       type: 'pdf-stack-reader-progress',
-      v: this.sessionOrigin.v,
+      v: this.sessionOrigin.keepV1 ? 1 : PROGRESS_VERSION,
+      ...(this.sessionOrigin.keepV1 ? { keepV1: true as const } : {}),
       savedAt: Date.now(),
       ...(this.sessionOrigin.savedRaw !== undefined
         ? { savedRaw: this.sessionOrigin.savedRaw } : {}),
@@ -1071,9 +1072,9 @@ export class Controller {
       document.title = `${name} \u2014 Paper Trail`;
 
       this.preview.clear();
-      this.sessionOrigin = progress
-        ? { v: progress.v, ...(progress.savedRaw !== undefined ? { savedRaw: progress.savedRaw } : {}) }
-        : { v: PROGRESS_VERSION };
+      this.sessionOrigin = progress?.keepV1
+        ? { keepV1: true, ...(progress.savedRaw !== undefined ? { savedRaw: progress.savedRaw } : {}) }
+        : {};
       this.restoring = true;
       try {
         this.search.reset();
@@ -1274,10 +1275,9 @@ export class Controller {
     const cs = this.confirmSession;
     if (!cs || !this.docOpen) return;
     this.confirmSession = null;
-    this.sessionOrigin = {
-      v: cs.json.v,
-      ...(cs.json.savedRaw !== undefined ? { savedRaw: cs.json.savedRaw } : {}),
-    };
+    this.sessionOrigin = cs.json.keepV1
+      ? { keepV1: true, ...(cs.json.savedRaw !== undefined ? { savedRaw: cs.json.savedRaw } : {}) }
+      : {};
     this.restoring = true;
     try {
       this.searchEntry = null;
