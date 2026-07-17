@@ -30,6 +30,21 @@ const RENDER_MARGIN = 900; // px beyond viewport to pre-render
 const DESTROY_MARGIN = 3200; // px beyond viewport to tear pages down
 const PROBE_OFFSET = 8; // px used to define "current position"
 const DEST_TOP_MARGIN = 48; // px of context above a jump target (at scale 1)
+// Smooth progressive rendering: a page entering the window with no canvas
+// at all paints a quick pass at 1/LOW_RES_FACTOR of the device resolution
+// (1/9 of the pixels), CSS-stretched over the full page box, before the
+// crisp render replaces it atomically. Scrolling counts as active until
+// SCROLL_SETTLE_MS after the last scroll event; while it is, pages outside
+// the viewport keep their cheap low-res canvases and the heavy
+// device-pixel-exact renders wait for the settle.
+const LOW_RES_FACTOR = 3;
+const SCROLL_SETTLE_MS = 200;
+// Above this scroll speed (px per ms — ~a viewport height every 35ms) no
+// render can land while its page is still relevant: every started pass is
+// obsolete before it paints and only steals frame time (measured on the
+// fling profile). Such fling frames start no renders; rendering resumes
+// as soon as the speed drops (momentum tail) or scrolling settles.
+const FLING_PX_PER_MS = 25;
 
 export interface PageRec {
   page: PDFPageProxy;
@@ -47,6 +62,9 @@ export interface PageRec {
   stale: boolean;
   renderedScale: number;
   rendering: Promise<void> | null;
+  // In-flight quick low-resolution pass (separate from `rendering` so the
+  // crisp render's guards keep working; only one of the two mounts).
+  lowResRendering: Promise<void> | null;
   renderFailed?: boolean;
   textReady: Promise<void> | null;
   pinned: number;
@@ -88,6 +106,16 @@ export class Viewer {
   private suppressUntil = 0;
   private lastPage = 0;
   private scrollRaf = 0;
+  private lastScrollTs = -Infinity;
+  private lastScrollTop = 0;
+  private scrollVelocity = 0; // px per ms between the last two scroll frames
+  private settleTimer = 0;
+  /**
+   * Rolling log of canvas mounts: 'low' for the quick low-resolution pass,
+   * 'full' for the crisp device-pixel-exact render. Observability for
+   * tests and tooling (window.__pt.viewer.renderLog); newest last.
+   */
+  renderLog: { page: number; res: 'low' | 'full' }[] = [];
 
   constructor(container: HTMLElement, viewerEl: HTMLElement, callbacks: ViewerCallbacks = {}) {
     this.container = container;
@@ -166,6 +194,7 @@ export class Viewer {
         stale: false,
         renderedScale: 0,
         rendering: null,
+        lowResRendering: null,
         textReady: null,
         pinned: 0,
       });
@@ -188,6 +217,11 @@ export class Viewer {
     this.viewerEl.style.transform = '';
     this.viewerEl.style.willChange = '';
     this.lastPage = 0;
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = 0;
+    }
+    this.renderLog = [];
   }
 
   get numPages(): number {
@@ -401,6 +435,23 @@ export class Viewer {
   // ----- rendering -----
 
   private onScrollEvent(): void {
+    // Scrolling itself moves already-rendered pages by compositing only —
+    // nothing below writes styles or touches a crisp canvas. This handler
+    // just marks scrolling active and re-windows the render work; the
+    // settle timer runs updateVisible once more after the last scroll
+    // event, which is when deferred full-resolution upgrades happen.
+    const now = performance.now();
+    const st = this.container.scrollTop;
+    const dt = now - this.lastScrollTs;
+    // A first event after an idle gap is a fresh gesture, not a fling.
+    this.scrollVelocity = dt > 0 && dt < 500 ? Math.abs(st - this.lastScrollTop) / dt : 0;
+    this.lastScrollTop = st;
+    this.lastScrollTs = now;
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = window.setTimeout(() => {
+      this.settleTimer = 0;
+      this.updateVisible();
+    }, SCROLL_SETTLE_MS + 40);
     this.updateVisible();
     const cur = this.currentPosition();
     if (cur.page !== this.lastPage) {
@@ -410,10 +461,16 @@ export class Viewer {
     this.cb.onScroll?.();
   }
 
+  private isScrolling(): boolean {
+    return performance.now() - this.lastScrollTs < SCROLL_SETTLE_MS;
+  }
+
   private updateVisible(): void {
     if (!this.pages.length) return;
     const st = this.container.scrollTop;
     const ch = this.container.clientHeight;
+    const scrolling = this.isScrolling();
+    const flinging = scrolling && this.scrollVelocity > FLING_PX_PER_MS;
     for (const p of this.pages) {
       const top = p.el.offsetTop;
       const bot = top + p.el.offsetHeight;
@@ -423,9 +480,32 @@ export class Viewer {
         // becomes a storm of full-canvas allocations against a page that
         // keeps failing. The flag clears on a scale change (setScale) and a
         // document change; an explicit ensurePage() may still retry.
-        if (!p.renderFailed) this.ensureRendered(p);
+        if (p.renderFailed) continue;
+        if (flinging) continue; // start nothing mid-fling (see FLING_PX_PER_MS)
+        if (!p.rendered) {
+          // A blank shell entering the window (scroll or zoom-out) paints
+          // the quick low-res pass first; its completion re-runs this and
+          // the branches below take over the crisp upgrade.
+          this.ensureLowRes(p);
+        } else if (bot >= st && top <= st + ch) {
+          // Intersects the viewport: always upgrade to crisp promptly.
+          this.ensureRendered(p);
+        } else if (!scrolling) {
+          // Margin prefetch goes crisp only once scrolling settles (the
+          // settle timer re-runs this); mid-scroll the cheap stretched
+          // canvas is enough, and full renders would eat the frames.
+          this.ensureRendered(p);
+        }
       } else if (!p.pinned && (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN)) {
         this.destroyPage(p);
+      } else if (!scrolling && !p.rendered && !p.renderFailed) {
+        // Between the render and destroy margins: while idle, pre-paint the
+        // cheap low-res pass so the next scroll reveals content instead of
+        // blank shells. Only while idle — doing this mid-scroll renders
+        // every page a fast fling passes over (measured: it more than
+        // doubled the janky-frame share on the fling profile), while the
+        // pages the fling lands on are covered by the render-window pass.
+        this.ensureLowRes(p);
       }
     }
   }
@@ -451,6 +531,73 @@ export class Viewer {
     return p.rendering;
   }
 
+  private logRender(p: PageRec, res: 'low' | 'full'): void {
+    this.renderLog.push({ page: this.pages.indexOf(p) + 1, res });
+    if (this.renderLog.length > 400) this.renderLog.splice(0, this.renderLog.length - 400);
+  }
+
+  private ensureLowRes(p: PageRec): void {
+    if (p.rendered || p.rendering || p.lowResRendering || p.renderFailed) return;
+    p.lowResRendering = this.renderLowRes(p)
+      .catch((e) => {
+        p.renderFailed = true; // same retry-storm protection as the full pass
+        console.warn('low-res render failed', e);
+      })
+      .finally(() => {
+        p.lowResRendering = null;
+        // The mounted canvas is only a placeholder — let the windowing
+        // logic decide the upgrade (viewport pages go crisp at once,
+        // margin pages once scrolling settles).
+        if (!p.renderFailed) queueMicrotask(() => this.updateVisible());
+      });
+  }
+
+  /**
+   * The quick pass of the two-pass scroll/zoom-out rendering: a small
+   * canvas (deliberately NOT device-pixel exact — 1/LOW_RES_FACTOR of the
+   * device resolution, inside the same backing caps) CSS-stretched over
+   * the full page box. Marked stale exactly like a smooth-zoom
+   * placeholder, so every existing path (destroy, re-shell, crisp
+   * upgrade) treats it as "mounted but awaiting the real render".
+   */
+  private async renderLowRes(p: PageRec): Promise<void> {
+    const epoch = this.epoch;
+    const scale = this.scale;
+    const vp = p.page.getViewport({ scale });
+    const { cssW, cssH } = this.pageGeometry(p);
+    const low = backingGeometry(cssW, cssH, (window.devicePixelRatio || 1) / LOW_RES_FACTOR);
+    const canvas = document.createElement('canvas');
+    canvas.width = low.backingW;
+    canvas.height = low.backingH;
+    canvas.style.display = 'block';
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    canvas.dataset.res = 'low';
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) throw new Error('2d canvas context unavailable');
+    await p.page.render({
+      canvas,
+      canvasContext: ctx,
+      viewport: vp,
+      transform: [low.backingW / vp.width, 0, 0, low.backingH / vp.height, 0, 0],
+    }).promise;
+    if (epoch !== this.epoch || scale !== this.scale) return;
+    if (p.rendered || p.rendering) return; // a crisp render won the race
+    // The page can leave the keep-alive window mid-render (fast fling);
+    // mounting it would only be torn down again on the next pass.
+    const st = this.container.scrollTop;
+    const ch = this.container.clientHeight;
+    const top = p.el.offsetTop;
+    const bot = top + p.el.offsetHeight;
+    if (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN) return;
+    p.el.replaceChildren(canvas); // atomic mount: never a canvasless flash
+    p.canvas = canvas;
+    p.rendered = true;
+    p.stale = true; // a placeholder awaiting the crisp render (see markStale)
+    p.renderedScale = 0;
+    this.logRender(p, 'low');
+  }
+
   private async render(p: PageRec): Promise<void> {
     const epoch = this.epoch;
     const scale = this.scale;
@@ -468,6 +615,7 @@ export class Viewer {
     canvas.style.display = 'block';
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
+    canvas.dataset.res = 'full';
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('2d canvas context unavailable');
     await p.page.render({
@@ -491,6 +639,7 @@ export class Viewer {
     p.rendered = true;
     p.stale = false;
     p.renderedScale = scale;
+    this.logRender(p, 'full');
 
     p.textReady = (async () => {
       const tl = new TextLayer({
