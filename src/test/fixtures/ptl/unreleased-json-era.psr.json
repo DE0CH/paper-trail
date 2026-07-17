@@ -1,0 +1,35 @@
+{
+ "type": "pdf-stack-reader-progress",
+ "v": 1,
+ "savedAt": 1752115200000,
+ "pdf": {
+  "name": "WStarCats.pdf",
+  "relPath": "WStarCats.pdf",
+  "fingerprint": "dcc474819b461982e1882557a8baa4fa",
+  "size": 547247
+ },
+ "state": {
+  "v": 1,
+  "name": "WStarCats.pdf",
+  "scale": 1.2745098039215685,
+  "fitWidth": true,
+  "pos": { "page": 17, "yRatio": 0.42021803766105054 },
+  "hist": {
+   "v": 1,
+   "activeId": 1,
+   "nameCounter": 2,
+   "stacks": [
+    {
+     "id": 1,
+     "name": "RoundTrip",
+     "index": 1,
+     "entries": [
+      { "label": "Start", "pos": { "page": 8, "yRatio": 0.2998017839444995 } },
+      { "label": "Lemma test-marker", "pos": { "page": 17, "yRatio": 0.42 } }
+     ]
+    }
+   ]
+  },
+  "ts": 1752115200000
+ }
+}

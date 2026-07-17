@@ -1,0 +1,4 @@
+# These files are byte-exact regression fixtures for the session-file
+# parser: line endings (CRLF), the UTF-8 BOM, and every other byte are
+# the payload under test. Git must never normalize or diff-mangle them.
+* -text

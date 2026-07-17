@@ -77,6 +77,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/progressV2Unit.js
 
+      - name: Back-compat corpus — every shipped session-file variant still opens
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/formatCorpusUnit.js
+
       - name: Unit test coverage (src/core)
         if: ${{ !cancelled() }}
         shell: bash
@@ -215,6 +219,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/dropPairSessionTarget.js
+
+      - name: The oldest shipped session file restores through the real UI
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/formatCorpusE2e.js
 
       - name: An edit during an in-flight save is never marked saved
         if: ${{ !cancelled() }}
@@ -612,6 +621,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/progressV2Unit.js
 
+      - name: Back-compat corpus — every shipped session-file variant still opens
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/formatCorpusUnit.js
+
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
       # pass/fail row while sharing one server.
@@ -730,6 +743,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/dropPairSessionTarget.js
+
+      - name: The oldest shipped session file restores through the real UI
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/formatCorpusE2e.js
 
       - name: An edit during an in-flight save is never marked saved
         if: ${{ !cancelled() }}
