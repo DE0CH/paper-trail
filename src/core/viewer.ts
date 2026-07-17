@@ -39,6 +39,12 @@ const DEST_TOP_MARGIN = 48; // px of context above a jump target (at scale 1)
 // device-pixel-exact renders wait for the settle.
 const LOW_RES_FACTOR = 3;
 const SCROLL_SETTLE_MS = 200;
+// Above this scroll speed (px per ms — ~a viewport height every 35ms) no
+// render can land while its page is still relevant: every started pass is
+// obsolete before it paints and only steals frame time (measured on the
+// fling profile). Such fling frames start no renders; rendering resumes
+// as soon as the speed drops (momentum tail) or scrolling settles.
+const FLING_PX_PER_MS = 25;
 
 export interface PageRec {
   page: PDFPageProxy;
@@ -101,6 +107,8 @@ export class Viewer {
   private lastPage = 0;
   private scrollRaf = 0;
   private lastScrollTs = -Infinity;
+  private lastScrollTop = 0;
+  private scrollVelocity = 0; // px per ms between the last two scroll frames
   private settleTimer = 0;
   /**
    * Rolling log of canvas mounts: 'low' for the quick low-resolution pass,
@@ -432,7 +440,13 @@ export class Viewer {
     // just marks scrolling active and re-windows the render work; the
     // settle timer runs updateVisible once more after the last scroll
     // event, which is when deferred full-resolution upgrades happen.
-    this.lastScrollTs = performance.now();
+    const now = performance.now();
+    const st = this.container.scrollTop;
+    const dt = now - this.lastScrollTs;
+    // A first event after an idle gap is a fresh gesture, not a fling.
+    this.scrollVelocity = dt > 0 && dt < 500 ? Math.abs(st - this.lastScrollTop) / dt : 0;
+    this.lastScrollTop = st;
+    this.lastScrollTs = now;
     if (this.settleTimer) clearTimeout(this.settleTimer);
     this.settleTimer = window.setTimeout(() => {
       this.settleTimer = 0;
@@ -456,6 +470,7 @@ export class Viewer {
     const st = this.container.scrollTop;
     const ch = this.container.clientHeight;
     const scrolling = this.isScrolling();
+    const flinging = scrolling && this.scrollVelocity > FLING_PX_PER_MS;
     for (const p of this.pages) {
       const top = p.el.offsetTop;
       const bot = top + p.el.offsetHeight;
@@ -466,6 +481,7 @@ export class Viewer {
         // keeps failing. The flag clears on a scale change (setScale) and a
         // document change; an explicit ensurePage() may still retry.
         if (p.renderFailed) continue;
+        if (flinging) continue; // start nothing mid-fling (see FLING_PX_PER_MS)
         if (!p.rendered) {
           // A blank shell entering the window (scroll or zoom-out) paints
           // the quick low-res pass first; its completion re-runs this and

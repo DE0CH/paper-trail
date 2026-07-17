@@ -196,9 +196,10 @@ the time.
   device-pixel-exact render replaces it atomically. While scrolling is
   active, only pages intersecting the viewport upgrade to the exact
   render; pages in the prefetch margins keep the cheap canvas until
-  scrolling settles. Zoom-out reveals pages through the same two-pass
-  path. Already-crisp pages are never touched by scrolling — they move
-  purely by compositing.
+  scrolling settles, and a fling too fast for any render to land starts
+  no renders at all until it slows. Zoom-out reveals pages through the
+  same two-pass path. Already-crisp pages are never touched by
+  scrolling — they move purely by compositing.
 
 ## Undo design and performance
 
