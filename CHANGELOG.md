@@ -3,6 +3,20 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 1.1.0
+
+- Scrolling is much smoother: pages coming into view appear instantly
+  as a quick preview and sharpen moment later, instead of the app
+  pausing to draw them at full quality mid-scroll. During a fast fling
+  the viewer never stutters, and pages you have already read glide by
+  without being redrawn. Zooming out gets the same treatment for the
+  pages it reveals.
+- Session files no longer record a save time. The timestamp changed on
+  every save, which made otherwise-identical files look different to
+  git; files now only change when your reading actually changes.
+  Existing session files keep working exactly as before — and if an
+  older file has a recorded time, saving never alters it.
+
 ## 1.0.0
 
 Paper Trail 1.0. From this release on, session files are stable: every
