@@ -1,0 +1,22 @@
+paper-trail-session v1
+saved 2026-07-10T18:00:00.000Z
+pdf.name WStarCats.pdf
+pdf.relPath ../papers/WStarCats.pdf
+pdf.fingerprint dcc474819b461982e1882557a8baa4fa
+pdf.size 547247
+view.scale 1.2745098039215685
+view.fitWidth true
+view.page 17
+view.yRatio 0.42021803766105054
+active 1
+
+stack RoundTrip
+cursor 1
+entry 8 0.2998017839444995 Start
+entry 17 0.42 Lemma test-marker
+
+stack Détour — §3 examples
+cursor 2
+entry 1 0 Start
+entry 5 0.25 Example 3.7
+entry 9 0.6180339887498949 Corollary 3.12

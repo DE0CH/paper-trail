@@ -1,0 +1,17 @@
+paper-trail-session v2
+pdf.name WStarCats.pdf
+view.scale 1.2745098039215685
+view.fitWidth true
+view.page 17
+view.yRatio 0.42021803766105054
+active 1
+
+stack RoundTrip
+cursor 1
+entry 8 0.2998017839444995 Start
+named 17 0.42 Lemma test-marker
+
+stack Séance №2 — 圏論
+cursor 0
+entry 1 0 Start
+entry 22 0.9 Definition 4.1
