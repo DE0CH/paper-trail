@@ -482,10 +482,13 @@ export class Viewer {
         }
       } else if (!p.pinned && (bot < st - DESTROY_MARGIN || top > st + ch + DESTROY_MARGIN)) {
         this.destroyPage(p);
-      } else if (!p.rendered && !p.renderFailed) {
-        // Between the render and destroy margins: pre-paint the cheap
-        // low-res pass so a fast scroll reveals content instead of blank
-        // shells. It upgrades only after reaching the render window.
+      } else if (!scrolling && !p.rendered && !p.renderFailed) {
+        // Between the render and destroy margins: while idle, pre-paint the
+        // cheap low-res pass so the next scroll reveals content instead of
+        // blank shells. Only while idle — doing this mid-scroll renders
+        // every page a fast fling passes over (measured: it more than
+        // doubled the janky-frame share on the fling profile), while the
+        // pages the fling lands on are covered by the render-window pass.
         this.ensureLowRes(p);
       }
     }

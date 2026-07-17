@@ -190,6 +190,15 @@ the time.
   `--scale-factor` so that the transform and the committed layout agree
   exactly; fixed-size gaps make the document jump when the gesture
   ends.
+- Scrolling renders progressively: a page entering the window with no
+  canvas first paints a quick pass at a third of the device resolution
+  (stretched over the page box and marked `data-res="low"`), and the
+  device-pixel-exact render replaces it atomically. While scrolling is
+  active, only pages intersecting the viewport upgrade to the exact
+  render; pages in the prefetch margins keep the cheap canvas until
+  scrolling settles. Zoom-out reveals pages through the same two-pass
+  path. Already-crisp pages are never touched by scrolling — they move
+  purely by compositing.
 
 ## Undo design and performance
 
