@@ -46,6 +46,10 @@ async function run(): Promise<void> {
         .forEach((k) => localStorage.removeItem(k));
       indexedDB.deleteDatabase('paper-trail');
     });
+    await page.waitForFunction(
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+      () => !!(window as any).__pt?.controller,
+      undefined, { timeout: 20000 });
     await page.evaluate(async (text) => {
       /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       const pt = (window as any).__pt;
