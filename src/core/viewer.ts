@@ -726,6 +726,15 @@ export class Viewer {
     p.textLayerDiv = null;
     p.annotDiv = null;
     p.textReady = null;
+    // Release pdf.js's decoded-image cache for the evicted page. For text
+    // pages this is negligible, but a scanned page retains ~35MB of decoded
+    // RGBA — a cover-to-cover read of a 50-page scan held 1.7GB. Skipped
+    // while a render is in flight (cleanup would throw mid-render; the
+    // page will be destroyed again by windowing once it settles), and
+    // guarded because cleanup can reject on a closing document.
+    if (!p.rendering && !p.lowResRendering) {
+      try { p.page.cleanup(); } catch { /* mid-teardown: nothing to free */ }
+    }
   }
 
   /**
