@@ -3,6 +3,20 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 1.1.1
+
+- Scanned PDFs now render. Pages compressed with CCITT fax — what most
+  scanners produce — previously showed as blank, because the app did
+  not ship the pdf.js image decoders; the same was true of JBIG2 and
+  JPEG 2000 images. The decoders are now bundled and load fully
+  offline.
+- Reading a long scanned document no longer accumulates memory: pages
+  scrolled out of view release their decoded image data (previously up
+  to ~35MB per page was kept for the whole session).
+- Session files saved by every previous version are now covered by a
+  permanent compatibility test suite, down to the very first release's
+  format.
+
 ## 1.1.0
 
 - Scrolling is much smoother: pages coming into view appear instantly
