@@ -55,8 +55,11 @@ jobs:
           from pathlib import Path
           p = Path('src/core/viewer.ts')
           t = p.read_text()
-          start = t.index('    // Release pdf.js\'s decoded-image cache')
-          end = t.index('  }', t.index('p.page.cleanup()'))
+          start = t.index("    // Release pdf.js's decoded-image cache")
+          # The hunk ends at the `    }` line closing the if-block that
+          # wraps the try/catch around page.cleanup().
+          close = t.index('    }\n', t.index('p.page.cleanup()', start))
+          end = close + len('    }\n')
           t = t[:start] + t[end:]
           assert 'page.cleanup()' not in t
           p.write_text(t)
