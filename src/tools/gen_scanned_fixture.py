@@ -45,41 +45,66 @@ CELL_X0, CELL_STEP, CELL_W = 124, 372, 248
 BITS = 6
 
 
-def pattern(page_number: int) -> Image.Image:
-    """1-bit page image: white background, black anchor + binary cells."""
-    img = Image.new("1", (W, H), 1)  # 1 = white
+def pattern(page_number: int, invert: bool = False) -> Image.Image:
+    """1-bit page image: white background, black anchor + binary cells.
+
+    With invert=True the same pattern is drawn with flipped bits (black
+    background, white marks) — used when Pillow's G4 packing polarity
+    requires encoding the inverse (see g4_stream).
+    """
+    bg, ink = (0, 1) if invert else (1, 0)
+    img = Image.new("1", (W, H), bg)
     d = ImageDraw.Draw(img)
-    d.rectangle(ANCHOR, fill=0)
+    d.rectangle(ANCHOR, fill=ink)
     for i in range(BITS):
         if (page_number >> i) & 1:
             x0 = CELL_X0 + i * CELL_STEP
-            d.rectangle((x0, CELL_Y[0], x0 + CELL_W, CELL_Y[1]), fill=0)
+            d.rectangle((x0, CELL_Y[0], x0 + CELL_W, CELL_Y[1]), fill=ink)
     return img
 
 
-def g4_stream(img: Image.Image) -> bytes:
+def g4_stream(img: Image.Image, img_inverted: Image.Image) -> bytes:
     """Raw single-block CCITT G4 payload for a 1-bit image, verified.
 
     Pillow has no bare-G4 encoder, so encode via a TIFF container forced
     to a single strip (a G4 coder restarts per strip, so only a single
     strip is a valid PDF CCITTFaxDecode payload) and extract the strip.
+
+    Polarity: a G4 stream codes "white" and "black" RUNS; PDF's
+    CCITTFaxDecode (BlackIs1 absent, like the mirrored file) emits white
+    as 1, which /DeviceGray displays as white. libtiff's fax coder always
+    treats raster 0-bits as CCITT-white, so the stream polarity depends
+    on how Pillow packed the raster, which its PhotometricInterpretation
+    tag records: MinIsWhite (0) means stored 0 = white = CCITT-white
+    (matches PDF); MinIsBlack (1) means the stream came out inverted, so
+    encode the inverted image instead.
     """
-    TiffImagePlugin.STRIP_SIZE = 1 << 30  # force one strip
-    buf = io.BytesIO()
-    img.save(buf, format="TIFF", compression="group4")
-    buf.seek(0)
-    tif = Image.open(buf)
-    offsets = tif.tag_v2[273]  # StripOffsets
-    counts = tif.tag_v2[279]  # StripByteCounts
-    if len(offsets) != 1:
-        raise SystemExit(f"expected a single G4 strip, got {len(offsets)}")
-    if tif.tag_v2[262] != 0:  # PhotometricInterpretation: MinIsWhite
-        raise SystemExit("G4 TIFF is not MinIsWhite; PDF default mapping breaks")
-    # Bit-exact round trip through Pillow's G4 decoder.
-    if tif.convert("1").tobytes() != img.tobytes():
-        raise SystemExit("G4 round-trip mismatch")
-    data = buf.getvalue()
-    return data[offsets[0]:offsets[0] + counts[0]]
+
+    def encode(im: Image.Image) -> tuple[bytes, int]:
+        TiffImagePlugin.STRIP_SIZE = 1 << 30  # force one strip
+        buf = io.BytesIO()
+        im.save(buf, format="TIFF", compression="group4")
+        buf.seek(0)
+        tif = Image.open(buf)
+        offsets = tif.tag_v2[273]  # StripOffsets
+        counts = tif.tag_v2[279]  # StripByteCounts
+        if len(offsets) != 1:
+            raise SystemExit(f"expected a single G4 strip, got {len(offsets)}")
+        # Bit-exact round trip through Pillow's own G4 decoder.
+        if tif.convert("1").tobytes() != im.tobytes():
+            raise SystemExit("G4 round-trip mismatch")
+        data = buf.getvalue()
+        return data[offsets[0]:offsets[0] + counts[0]], int(tif.tag_v2[262])
+
+    stream, photometric = encode(img)
+    if photometric == 0:  # MinIsWhite: stream already PDF-polarity
+        return stream
+    if photometric == 1:  # MinIsBlack: re-encode inverted for PDF
+        stream, photometric = encode(img_inverted)
+        if photometric != 1:
+            raise SystemExit(f"unstable photometric {photometric} on re-encode")
+        return stream
+    raise SystemExit(f"unexpected G4 photometric {photometric}")
 
 
 def jpeg_stream(img: Image.Image) -> bytes:
@@ -125,7 +150,7 @@ def build_pdf() -> bytes:
                 b" /Length " + str(len(data)).encode() + b" >>"
             )
         else:
-            data = g4_stream(img)
+            data = g4_stream(img, pattern(n, invert=True))
             image_dict = (
                 b"<< /Type /XObject /Subtype /Image"
                 b" /Width 2480 /Height 3508 /BitsPerComponent 1"
