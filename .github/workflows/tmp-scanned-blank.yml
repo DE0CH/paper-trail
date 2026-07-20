@@ -5,6 +5,12 @@
 name: tmp-scanned-blank
 
 on:
+  # Push-triggered on the working branches (a dispatch-only workflow that
+  # never existed on the default branch cannot be dispatched at all).
+  # Iteration runs on ubuntu; the mac confirmation runs come from
+  # workflow_dispatch with runner=macos-latest once registered.
+  push:
+    branches: [scanned-blank, scanned-blank-red]
   workflow_dispatch:
     inputs:
       runner:
@@ -17,7 +23,7 @@ on:
 
 jobs:
   scanned:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v5
 
