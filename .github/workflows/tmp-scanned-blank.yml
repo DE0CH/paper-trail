@@ -54,3 +54,8 @@ jobs:
             sleep 0.5
           done
           node build-node/test/scannedBlank.js
+
+      - name: Desktop shell renders the scanned document (mac only)
+        if: ${{ !cancelled() && inputs.runner == 'macos-latest' }}
+        shell: bash
+        run: node build-node/test/desktopScannedBlank.js
