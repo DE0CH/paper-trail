@@ -205,6 +205,11 @@ jobs:
         shell: bash
         run: node build-node/test/scannedBlank.js
 
+      - name: Evicted scan pages release their decoded-image memory
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/scannedRetention.js
+
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}
         shell: bash
@@ -748,6 +753,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/scannedBlank.js
+
+      - name: Evicted scan pages release their decoded-image memory
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/scannedRetention.js
 
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}
