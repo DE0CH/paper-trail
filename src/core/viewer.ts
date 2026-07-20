@@ -18,12 +18,18 @@ GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 // pdf.js side data, bundled with the app (see vite.config.ts) so that
-// CID-encoded (CJK) text and the 14 standard fonts work without any
-// network access — the desktop app must run entirely offline.
+// CID-encoded (CJK) text, the 14 standard fonts AND the wasm image
+// codecs work without any network access — the desktop app must run
+// entirely offline. `wasmUrl` is where pdf.js v6 loads its CCITT
+// fax/JBIG2/JPEG 2000/ICC decoders from; without it every
+// CCITTFaxDecode image (i.e. every page of a typical scanned PDF)
+// fails to decode and its page paints permanently blank — render()
+// still resolves, so no error surfaces and nothing retries.
 const PDF_ASSETS = {
   cMapUrl: new URL('pdfjs/cmaps/', document.baseURI).href,
   cMapPacked: true,
   standardFontDataUrl: new URL('pdfjs/standard_fonts/', document.baseURI).href,
+  wasmUrl: new URL('pdfjs/wasm/', document.baseURI).href,
 };
 
 const RENDER_MARGIN = 900; // px beyond viewport to pre-render

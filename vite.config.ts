@@ -8,12 +8,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
     // pdf.js side data, shipped with the app so CJK-encoded PDFs (CID
-    // fonts need the cMaps) and PDFs using the 14 standard fonts render
-    // fully offline.
+    // fonts need the cMaps), PDFs using the 14 standard fonts, and
+    // image-compressed (scanned) PDFs render fully offline: the wasm
+    // directory holds pdf.js's CCITT fax/JBIG2/JPEG 2000/ICC decoders,
+    // without which every scanned page paints blank.
     viteStaticCopy({
       targets: [
         { src: 'node_modules/pdfjs-dist/cmaps/*', dest: 'pdfjs/cmaps', rename: { stripBase: true } },
         { src: 'node_modules/pdfjs-dist/standard_fonts/*', dest: 'pdfjs/standard_fonts', rename: { stripBase: true } },
+        { src: 'node_modules/pdfjs-dist/wasm/*', dest: 'pdfjs/wasm', rename: { stripBase: true } },
       ],
     }),
   ],

@@ -10,6 +10,8 @@ __pycache__/
 dist-electron/
 dist-update-feed/
 coverage/
+# generated on the fly by src/tools/gen_scanned_fixture.py (CI + local)
+sample/scanned.pdf
 
 # Claude Code working dir: fork worktrees + local/transient files.
 # Keep the shared project settings tracked; ignore everything else.
