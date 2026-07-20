@@ -5,15 +5,19 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
 ~/paper-trail-main (this 4GB orchestrator box). The PAPER stayed at
 ~/Downloads/arXiv-2411.01678v1 (not a git repo; see paper-build.md).
 
-## Current state (2026-07-17, session 4 continued)
-- **v1.1.0 SHIPPED+verified** (latest release; bump 01bff2b, run
-  29595691829, 10 assets): smooth progressive scrolling (low-res pass
-  → crisp on settle, flings pure compositing; fling jank 28.9%→0% in
-  perfScroll) + session format v2 (no timestamp; v1 files keep theirs
-  verbatim via the keepV1 parser marker). On main POST-tag: the .ptl
-  back-compat corpus (10 byte-exact fixtures incl. v0.2.0-era legacy
-  lines, BOM, CRLF + 2 negative never-shipped fixtures;
-  formatCorpusUnit/E2e in ci.yml) — rides the next release.
+## Current state (2026-07-20, session 4 continued)
+- **v1.1.1 SHIPPED+verified** (latest release; run 29755128509 green
+  after the documented intel close-save flake rerun-once, 10 assets):
+  scanned PDFs render (pdf.js wasm decoders were never bundled —
+  wasmUrl unset ⇒ every CCITT/JBIG2/JPX image decoded to blank; now
+  shipped offline via PDF_ASSETS) + evicted scan pages release decoded
+  RGBA (destroyPage page.cleanup(): 1726MB→199MB on the 52-page scan;
+  REVERSES the text-fixture plateau verdict — scans made it unbounded,
+  owner's standing "if it is a leak, fix it" applied) + the .ptl
+  back-compat corpus. Permanent tests: scannedBlank/desktopScannedBlank
+  (offline)/scannedRetention. Owner's private scan never left the box.
+- v1.1.0 shipped earlier same arc: progressive scrolling (fling jank
+  28.9%→0%) + session format v2 (no timestamp; keepV1 verbatim).
 - The 1.0 format policy is ACTIVE: strict .ptl backward compatibility
   + migrations for every change. History + per-version detail:
   [shipped-versions](shipped-versions.md).
