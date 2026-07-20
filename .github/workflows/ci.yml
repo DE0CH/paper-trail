@@ -50,6 +50,16 @@ jobs:
       - name: Generate the test-fixture PDFs
         run: node build-node/tools/fixture.js
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate the scanned-document fixture (full-page G4/JPEG scans)
+        shell: bash
+        run: |
+          python -m pip install --quiet pillow
+          python src/tools/gen_scanned_fixture.py
+
       - name: Unit tests
         run: node --test build-node/test/unit.js
 
@@ -189,6 +199,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/smoothScroll.js
+
+      - name: A scanned document reads cover to cover with no blank pages
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/scannedBlank.js
 
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}
@@ -594,6 +609,16 @@ jobs:
       - name: Generate the test-fixture PDFs
         run: node build-node/tools/fixture.js
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate the scanned-document fixture (full-page G4/JPEG scans)
+        shell: bash
+        run: |
+          python -m pip install --quiet pillow
+          python src/tools/gen_scanned_fixture.py
+
       - name: Unit tests
         run: node --test build-node/test/unit.js
 
@@ -713,6 +738,11 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node build-node/test/smoothScroll.js
+
+      - name: A scanned document reads cover to cover with no blank pages
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node build-node/test/scannedBlank.js
 
       - name: Search entries commit on the right actions and only those
         if: ${{ !cancelled() }}

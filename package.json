@@ -33,6 +33,7 @@
     "test:e2e:pinch-swap": "node build-node/test/pinchDocSwap.js",
     "test:e2e:dpr-change": "node build-node/test/dprChangeRerender.js",
     "test:e2e:smooth-scroll": "node build-node/test/smoothScroll.js",
+    "test:e2e:scanned-blank": "node build-node/test/scannedBlank.js",
     "test:e2e:search-commit": "node build-node/test/searchCommitState.js",
     "test:e2e:search-stream": "node build-node/test/searchWorkerStream.js",
     "test:e2e:rename-shift": "node build-node/test/renameNoShift.js",
