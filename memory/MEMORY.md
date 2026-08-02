@@ -63,7 +63,10 @@ project dir symlinks here. Repos: ~/Documents/cs/paper-trail (mac box),
   (.claude/settings.json deny rules + hook enforce it).
 - [Tests are IMMUTABLE contracts](test-immutability.md) — never edit
   test code without permission; "Test Deletion" commit protocol.
-- NEVER run tests locally — ALL tests on GitHub runners only.
+- NEVER run tests locally — ALL tests on GitHub runners only. Same for
+  diagnostics: never probe/sample the running app or its processes on
+  the owner's machines (owner rule 2026-08-03) — investigate via
+  runners, code reading, and logs the owner volunteers.
 - [Orchestrator-only machine](orchestrator-only-machine.md) — this 4GB
   box: git/gh/edits only; no builds, no app runs, no media processing
   (OOM-crashed); ALL computation via GitHub Actions.
