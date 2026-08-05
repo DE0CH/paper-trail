@@ -660,6 +660,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: node --test build-node/test/formatCorpusUnit.js
 
+      # ptopen is macOS-only (open -a), so its unit test lives in the mac
+      # job; the test itself is headless (--dry-run, no app launch).
+      - name: ptopen pairs a lone .ptl with its named PDF
+        if: ${{ !cancelled() }}
+        run: node --test build-node/test/ptopenPairUnit.js
+
       # The server outlives its step (runners keep background processes
       # until the job ends), so every browser suite below gets its own
       # pass/fail row while sharing one server.

@@ -1,0 +1,26 @@
+# Focused single-test witness for the ptopen lone-.ptl pairing fix: the
+# CLI, given only a session file, must hand the session's named PDF to
+# the app alongside the .ptl (the app deliberately never guesses paths,
+# so a lone session otherwise opens with no PDF showing). Headless via
+# --dry-run — no app launch, an ubuntu runner suffices. Branch-scoped
+# push + dispatch — a brand-new workflow can't be dispatched by name off
+# the default branch, so the witness refs trigger it by push.
+name: Witness ptopen pair
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [witness-ptopen-pair-red, witness-ptopen-pair-green]
+
+jobs:
+  witness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - name: A lone .ptl opens together with its named PDF
+        run: node --test build-node/test/ptopenPairUnit.js
