@@ -269,6 +269,13 @@ jobs:
           V="${GITHUB_REF#refs/tags/v}"
           awk -v v="$V" '$0 == "## "v {f=1; next} /^## / {f=0} f' CHANGELOG.md > RELEASE_NOTES.md
           test -s RELEASE_NOTES.md
+      # The ptopen CLI ships with the mac release (it is macOS-only:
+      # it drives the app through LaunchServices `open`). Copied to a
+      # bare, space-free asset name.
+      - name: Stage the ptopen CLI as a release asset
+        if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
+        run: cp src/tools/ptopen.py dist-electron/ptopen
+
       - name: Upload to GitHub Release
         if: ${{ !env.ACT && startsWith(github.ref, 'refs/tags/') }}
         uses: softprops/action-gh-release@v3
@@ -279,4 +286,5 @@ jobs:
             dist-electron/*.zip
             dist-electron/*.blockmap
             dist-electron/latest-mac.yml
+            dist-electron/ptopen
           generate_release_notes: true

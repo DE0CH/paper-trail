@@ -3,6 +3,18 @@
 User-facing changes per release. The release workflow copies the
 matching section into the GitHub Release notes.
 
+## 1.1.2
+
+- New command-line helper `ptopen` (macOS), attached to this release as
+  a download: `ptopen session.ptl` opens the session in Paper Trail
+  together with the PDF it names, looked up next to the session file —
+  or pass both files yourself, in either order. Install it anywhere on
+  your PATH and make it executable.
+- `ptopen` targets the installed Paper Trail app precisely (by path or
+  bundle id), so identically named apps — development builds, or
+  Windows apps shared into macOS by a virtual machine — can no longer
+  intercept the files.
+
 ## 1.1.1
 
 - Scanned PDFs now render. Pages compressed with CCITT fax — what most
