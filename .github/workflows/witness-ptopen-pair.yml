@@ -10,7 +10,9 @@ name: Witness ptopen pair
 on:
   workflow_dispatch: {}
   push:
-    branches: [witness-ptopen-pair-red, witness-ptopen-pair-green]
+    branches:
+      [witness-ptopen-pair-red, witness-ptopen-pair-green,
+       witness-ptopen-app-red, witness-ptopen-app-green]
 
 jobs:
   witness:

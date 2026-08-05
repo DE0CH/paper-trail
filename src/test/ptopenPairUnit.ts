@@ -90,6 +90,30 @@ test('an explicit session+PDF pair passes through unchanged', () => {
   assert.equal(r.stderr.trim(), '', 'no warning when names agree');
 });
 
+test('the app is targeted by path or bundle id, never by bare name', () => {
+  // `open -a "Paper Trail"` resolves by NAME, which is ambiguous: dev
+  // builds in the repo and Parallels-shared Windows apps register under
+  // the same name, and LaunchServices once handed the files to the VM
+  // wrapper. The command must pin the app — the canonical install path
+  // if present, else the bundle id — so the files can only land in the
+  // real app.
+  const dir = tmpdir();
+  const ptl = writeSession(dir, 'paper.pdf');
+  fs.writeFileSync(path.join(dir, 'paper.pdf'), '%PDF-1.4\n');
+
+  const r = runPtopen([ptl]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(
+    !/-a Paper Trail(?!\.app)|-a 'Paper Trail'(?!\S)/.test(r.stdout),
+    `no bare-name -a targeting: ${r.stdout}`,
+  );
+  assert.ok(
+    r.stdout.includes('/Applications/Paper Trail.app')
+      || r.stdout.includes('-b local.paper-trail'),
+    `pinned to the canonical path or bundle id: ${r.stdout}`,
+  );
+});
+
 test('an explicit pair with a different name still warns about the mismatch banner', () => {
   const dir = tmpdir();
   const ptl = writeSession(dir, 'named.pdf');
