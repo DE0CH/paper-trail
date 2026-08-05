@@ -21,7 +21,13 @@ import shlex
 import subprocess
 import sys
 
-APP = "Paper Trail"
+# The app is pinned by canonical path (preferred) or bundle id — NEVER by
+# bare name: `open -a "Paper Trail"` name-resolution is ambiguous among
+# the installed app, dev-build copies inside the repo checkout, and
+# Parallels-shared Windows apps registered under the same name, and it
+# once delivered a session into the Parallels VM.
+APP_CANONICAL = pathlib.Path("/Applications/Paper Trail.app")
+APP_BUNDLE_ID = "local.paper-trail"
 
 
 def warn(msg: str) -> None:
@@ -96,11 +102,22 @@ def main() -> None:
                 " — opening the session alone"
             )
 
-    cmd = ["open", "-a", APP, *map(str, paths)]
+    app_args = (
+        ["-a", str(APP_CANONICAL)] if APP_CANONICAL.exists()
+        else ["-b", APP_BUNDLE_ID]
+    )
+    cmd = ["open", *app_args, *map(str, paths)]
     if args.dry_run:
         print(shlex.join(cmd))
         return
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        sys.exit(
+            f"ptopen: could not open Paper Trail"
+            f" (bundle id {APP_BUNDLE_ID}) — is the app installed?"
+            f" [{e}]"
+        )
 
 
 if __name__ == "__main__":
