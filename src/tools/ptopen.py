@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Open a reading session (.ptl) and its PDF together in Paper Trail.
 
-Usage: ptopen SESSION.ptl PAPER.pdf   (either order; one file alone works too)
+Usage: ptopen SESSION.ptl [PAPER.pdf]   (either order; a lone .pdf works too)
 
 Hands the files to the installed app through LaunchServices exactly as a
 Finder open would: the session claims a fresh window, the PDF joins it,
 and the pair appears on screen ready to read.
+
+Given only the session, the PDF comes along automatically: the .ptl
+records its PDF's bare filename (the pdf.name line) and the two live
+side by side by format contract, so ptopen passes both files to the app
+explicitly. The app itself never guesses filesystem paths.
 """
+
+from __future__ import annotations
 
 import argparse
 import pathlib
@@ -19,6 +26,17 @@ APP = "Paper Trail"
 
 def warn(msg: str) -> None:
     print(f"ptopen: {msg}", file=sys.stderr)
+
+
+def session_pdf_name(ptl: pathlib.Path) -> str | None:
+    """The bare filename recorded on the session's pdf.name line, if any."""
+    try:
+        for line in ptl.read_text().splitlines():
+            if line.startswith("pdf.name "):
+                return line[len("pdf.name "):].strip() or None
+    except OSError as e:
+        warn(f"could not read {ptl}: {e}")
+    return None
 
 
 def main() -> None:
@@ -49,18 +67,34 @@ def main() -> None:
     # app's mismatch banner. Warn early, still open — adopting the PDF
     # ("Use this PDF") is a valid path.
     if ptls and pdfs:
-        try:
-            for line in ptls[0].read_text().splitlines():
-                if line.startswith("pdf.name "):
-                    want = line[len("pdf.name "):].strip()
-                    if want and want != pdfs[0].name:
-                        warn(
-                            f"session names '{want}' but got '{pdfs[0].name}'"
-                            " — the app will show its mismatch banner"
-                        )
-                    break
-        except OSError as e:
-            warn(f"could not read {ptls[0]}: {e}")
+        want = session_pdf_name(ptls[0])
+        if want and want != pdfs[0].name:
+            warn(
+                f"session names '{want}' but got '{pdfs[0].name}'"
+                " — the app will show its mismatch banner"
+            )
+
+    # A lone session: supply its recorded PDF from the same folder, so
+    # the pair appears together (the app never guesses paths; the CLI
+    # hands it both files explicitly). If the companion is not there,
+    # still open — pairing a PDF in later via "Use this PDF" is a valid
+    # path — but say why the window will come up without one.
+    if ptls and not pdfs:
+        want = session_pdf_name(ptls[0])
+        companion = ptls[0].parent / want if want else None
+        if companion is not None and companion.is_file():
+            paths.append(companion)
+            warn(f"pairing with {companion}")
+        elif want:
+            warn(
+                f"session names '{want}' but no such file beside {ptls[0]}"
+                " — opening the session alone; pass the PDF explicitly to pair"
+            )
+        else:
+            warn(
+                f"{ptls[0].name} has no pdf.name line"
+                " — opening the session alone"
+            )
 
     cmd = ["open", "-a", APP, *map(str, paths)]
     if args.dry_run:
